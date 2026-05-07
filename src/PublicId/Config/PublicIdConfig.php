@@ -9,6 +9,15 @@ use Progravity\Auth\PublicId\AlphabetRegistry;
 use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
 use Progravity\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
 
+/**
+ * Typed wrapper over the raw `progravity.auth.public_id` config array.
+ *
+ * Validates the array eagerly at construction so that any misconfiguration
+ * surfaces at boot rather than at first ID generation. Exposes typed
+ * accessors and the locked-fingerprint subset of fields.
+ *
+ * Constructed by the service provider from `config('progravity.auth.public_id')`.
+ */
 final class PublicIdConfig
 {
     private const PREFIX_MAX_LENGTH_LIMIT = 64;
@@ -44,7 +53,12 @@ final class PublicIdConfig
     private readonly array $customAlphabetPresets;
 
     /**
-     * @param  array<string, mixed>  $config  the value of the `public_id` config subarray
+     * @param  array<string, mixed>  $config  the `public_id` config subarray
+     *
+     * @throws InvalidPublicIdConfigException on any validation failure;
+     *         message names the offending key and value
+     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException
+     *         when `body.alphabet` resolves to an invalid raw alphabet
      */
     public function __construct(array $config, AlphabetRegistry $alphabetRegistry)
     {
@@ -66,7 +80,11 @@ final class PublicIdConfig
         if ($this->bodyAlphabet->contains($this->separator)) {
             throw InvalidPublicIdConfigException::forKey(
                 'separator',
-                "must not be a member of the body alphabet (separator '{$this->separator}' overlaps the resolved alphabet)"
+                sprintf(
+                    "separator '%s' must not be a member of the body alphabet '%s'",
+                    $this->separator,
+                    $this->bodyAlphabet->toString(),
+                ),
             );
         }
 
@@ -185,12 +203,15 @@ final class PublicIdConfig
         }
         $value = $config['prefix_max_length'];
         if (! is_int($value)) {
-            throw InvalidPublicIdConfigException::forKey('prefix_max_length', 'must be an integer');
+            throw InvalidPublicIdConfigException::forKey(
+                'prefix_max_length',
+                'must be an integer; got '.get_debug_type($value),
+            );
         }
         if ($value < 1 || $value > self::PREFIX_MAX_LENGTH_LIMIT) {
             throw InvalidPublicIdConfigException::forKey(
                 'prefix_max_length',
-                'must be between 1 and '.self::PREFIX_MAX_LENGTH_LIMIT
+                'must be an integer between 1 and '.self::PREFIX_MAX_LENGTH_LIMIT.'; got '.$value,
             );
         }
 
@@ -207,18 +228,21 @@ final class PublicIdConfig
         }
         $value = $config['separator'];
         if (! is_string($value)) {
-            throw InvalidPublicIdConfigException::forKey('separator', 'must be a string');
+            throw InvalidPublicIdConfigException::forKey(
+                'separator',
+                'must be a string; got '.get_debug_type($value),
+            );
         }
         if (strlen($value) !== 1) {
             throw InvalidPublicIdConfigException::forKey(
                 'separator',
-                'must be exactly one ASCII character'
+                "must be exactly one ASCII character; got '{$value}' (".strlen($value).' bytes)',
             );
         }
         if (mb_strlen($value) !== 1) {
             throw InvalidPublicIdConfigException::forKey(
                 'separator',
-                'must be exactly one ASCII character (multi-byte not supported)'
+                "must be exactly one ASCII character (multi-byte not supported); got '{$value}'",
             );
         }
 
@@ -241,12 +265,15 @@ final class PublicIdConfig
         }
         $length = $body['length'];
         if (! is_int($length)) {
-            throw InvalidPublicIdConfigException::forKey('body.length', 'must be an integer');
+            throw InvalidPublicIdConfigException::forKey(
+                'body.length',
+                'must be an integer; got '.get_debug_type($length),
+            );
         }
         if ($length < 1 || $length > self::BODY_LENGTH_LIMIT) {
             throw InvalidPublicIdConfigException::forKey(
                 'body.length',
-                'must be between 1 and '.self::BODY_LENGTH_LIMIT
+                'must be an integer between 1 and '.self::BODY_LENGTH_LIMIT.'; got '.$length,
             );
         }
 
@@ -257,7 +284,7 @@ final class PublicIdConfig
         if (! is_string($alphabet) || $alphabet === '') {
             throw InvalidPublicIdConfigException::forKey(
                 'body.alphabet',
-                'must be a non-empty string (preset name or raw alphabet)'
+                'must be a non-empty string (preset name or raw alphabet); got '.get_debug_type($alphabet),
             );
         }
 
@@ -280,7 +307,10 @@ final class PublicIdConfig
         }
         $enabled = $checksum['enabled'];
         if (! is_bool($enabled)) {
-            throw InvalidPublicIdConfigException::forKey('checksum.enabled', 'must be a boolean');
+            throw InvalidPublicIdConfigException::forKey(
+                'checksum.enabled',
+                'must be a boolean; got '.get_debug_type($enabled),
+            );
         }
 
         if (! array_key_exists('length', $checksum)) {
@@ -288,18 +318,21 @@ final class PublicIdConfig
         }
         $length = $checksum['length'];
         if (! is_int($length)) {
-            throw InvalidPublicIdConfigException::forKey('checksum.length', 'must be an integer');
+            throw InvalidPublicIdConfigException::forKey(
+                'checksum.length',
+                'must be an integer; got '.get_debug_type($length),
+            );
         }
         if ($length < 0 || $length > self::CHECKSUM_LENGTH_LIMIT) {
             throw InvalidPublicIdConfigException::forKey(
                 'checksum.length',
-                'must be between 0 and '.self::CHECKSUM_LENGTH_LIMIT
+                'must be an integer between 0 and '.self::CHECKSUM_LENGTH_LIMIT.'; got '.$length,
             );
         }
         if ($enabled && $length < 1) {
             throw InvalidPublicIdConfigException::forKey(
                 'checksum.length',
-                'must be at least 1 when checksum.enabled is true'
+                'must be at least 1 when checksum.enabled is true; got '.$length,
             );
         }
 
@@ -310,7 +343,7 @@ final class PublicIdConfig
         if (! is_string($strategy) || $strategy === '') {
             throw InvalidPublicIdConfigException::forKey(
                 'checksum.strategy',
-                'must be a non-empty class name'
+                'must be a non-empty class name; got '.get_debug_type($strategy),
             );
         }
         if (! class_exists($strategy)) {

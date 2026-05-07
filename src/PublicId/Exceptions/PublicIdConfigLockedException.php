@@ -6,6 +6,14 @@ namespace Progravity\Auth\PublicId\Exceptions;
 
 use RuntimeException;
 
+/**
+ * Thrown at boot when the locked fingerprint on disk no longer matches
+ * the current configuration. The constructed message includes both
+ * fingerprints, the field-by-field diff, and remediation guidance.
+ *
+ * Resolved by either reverting the config back to match the lock or
+ * running `progravity:public-id:reset` (destructive — invalidates IDs).
+ */
 class PublicIdConfigLockedException extends RuntimeException
 {
     /**

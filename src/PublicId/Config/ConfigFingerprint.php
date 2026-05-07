@@ -4,8 +4,17 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Config;
 
+/**
+ * Computes a deterministic fingerprint over the locked subset of config.
+ *
+ * Output format: `sha256:{64 hex chars}`. The `sha256:` prefix is reserved
+ * so the algorithm could be swapped in the future without ambiguity.
+ */
 final class ConfigFingerprint
 {
+    /**
+     * Hash the locked-subset fields in a deterministic, key-sorted form.
+     */
     public function compute(PublicIdConfig $config): string
     {
         $fields = $config->fingerprintFields();

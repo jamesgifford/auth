@@ -15,6 +15,13 @@ use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
 use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
 use Progravity\Auth\PublicId\Generator;
 
+/**
+ * Interactive wizard run once after install to lock the public_id
+ * configuration. Refuses to proceed if a lock already exists; surfaces
+ * the diff if the lock has drifted from current config.
+ *
+ * Run with: `php artisan progravity:public-id:setup`
+ */
 final class PublicIdSetupCommand extends Command
 {
     protected $signature = 'progravity:public-id:setup';

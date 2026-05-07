@@ -8,6 +8,17 @@ use Illuminate\Console\Command;
 use Progravity\Auth\PublicId\Config\LockFile;
 use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
 
+/**
+ * Destructive command that clears the public_id lock file. Heavily gated:
+ * requires --i-understand-this-breaks-existing-ids, refuses in production
+ * without --force-production, and prompts for interactive confirmation.
+ *
+ * Resetting invalidates all previously generated IDs — they may not
+ * validate or generate consistently after a new lock is written.
+ *
+ * Run with:
+ *   php artisan progravity:public-id:reset --i-understand-this-breaks-existing-ids
+ */
 final class PublicIdResetCommand extends Command
 {
     protected $signature = 'progravity:public-id:reset {--i-understand-this-breaks-existing-ids} {--force-production}';

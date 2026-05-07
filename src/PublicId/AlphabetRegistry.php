@@ -6,6 +6,15 @@ namespace Progravity\Auth\PublicId;
 
 use OutOfBoundsException;
 
+/**
+ * Registry of named alphabet presets. Resolves config values — which
+ * may be a preset name like 'crockford' or a raw alphabet string — into
+ * {@see Alphabet} instances.
+ *
+ * Built-in presets cover common cases (lowercase/uppercase, alphanumeric,
+ * crockford base32, no-lookalikes). Custom presets can be supplied via
+ * the constructor and override built-ins on name collision.
+ */
 final class AlphabetRegistry
 {
     private const PRESETS = [
@@ -29,7 +38,10 @@ final class AlphabetRegistry
     private array $cache = [];
 
     /**
-     * @param  array<string, string>  $customPresets
+     * @param  array<string, string>  $customPresets  name => raw alphabet string
+     *
+     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException when a
+     *         custom preset's value fails Alphabet validation
      */
     public function __construct(array $customPresets = [])
     {
@@ -44,6 +56,13 @@ final class AlphabetRegistry
         $this->presets = $presets;
     }
 
+    /**
+     * Look up `$value` as a preset name; if no match, treat it as a raw
+     * alphabet string and instantiate {@see Alphabet} directly.
+     *
+     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException when
+     *         `$value` is not a preset and is not a valid raw alphabet
+     */
     public function resolve(string $value): Alphabet
     {
         if (array_key_exists($value, $this->presets)) {
@@ -58,6 +77,9 @@ final class AlphabetRegistry
         return array_key_exists($name, $this->presets);
     }
 
+    /**
+     * @throws OutOfBoundsException when `$name` is not a registered preset
+     */
     public function get(string $name): Alphabet
     {
         if (! array_key_exists($name, $this->presets)) {
@@ -70,6 +92,8 @@ final class AlphabetRegistry
     }
 
     /**
+     * Sorted list of all registered preset names.
+     *
      * @return array<int, string>
      */
     public function names(): array

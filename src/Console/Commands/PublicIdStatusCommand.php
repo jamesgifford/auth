@@ -12,6 +12,15 @@ use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
 use Progravity\Auth\PublicId\PrefixRegistry;
 
+/**
+ * Read-only diagnostic showing the current public_id configuration state:
+ * whether a lock file exists, whether it matches current config, the
+ * fingerprint, the resolved configuration, and the registered prefixes.
+ *
+ * Returns success in all states; this command never enforces.
+ *
+ * Run with: `php artisan progravity:public-id:status`
+ */
 final class PublicIdStatusCommand extends Command
 {
     protected $signature = 'progravity:public-id:status';

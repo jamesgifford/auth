@@ -9,16 +9,28 @@ use Progravity\Auth\PublicId\PrefixRegistry;
 use Progravity\Auth\PublicId\PublicId;
 
 /**
- * Apply this trait to Eloquent models that need a public_id. The trait:
- *  - Auto-generates public_id on creating
+ * Apply this trait to Eloquent models that need a public_id.
+ *
+ * The trait:
+ *  - Auto-generates public_id on creating (the trait owns the column;
+ *    do NOT add 'public_id' to $fillable)
  *  - Overrides route-model binding to use public_id
  *  - Provides scopeWherePublicId and scopeWherePublicIdIn query scopes
- *  - Resolves the prefix via PrefixRegistry (config or override publicIdPrefix())
+ *  - Resolves the prefix via PrefixRegistry — either through an override
+ *    of publicIdPrefix() on the model, or via the prefixes map in
+ *    config/progravity/auth.php
  *
- * The model's table must have a public_id column sized to PublicId::maxLength().
+ * The model's table must have a public_id column sized to PublicId::maxLength():
  *
- * Example migration:
  *   $table->string('public_id', PublicId::maxLength())->unique();
+ *
+ * Override publicIdPrefix() on the model to declare the prefix locally:
+ *
+ *   public function publicIdPrefix(): string { return 'usr'; }
+ *
+ * Or leave it to the trait's default and register the model in config:
+ *
+ *   'prefixes' => [App\Models\User::class => 'usr'],
  */
 trait HasPublicId
 {
@@ -33,6 +45,10 @@ trait HasPublicId
         });
     }
 
+    /**
+     * Default prefix lookup via the registry. Override this method on the
+     * model to declare the prefix inline instead of using the config map.
+     */
     public function publicIdPrefix(): string
     {
         return app(PrefixRegistry::class)->prefixFor(static::class);

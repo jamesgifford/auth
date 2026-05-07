@@ -25,11 +25,21 @@ final class ValidPublicId implements ValidationRule
     {
     }
 
+    /**
+     * Readability-oriented alternative to {@see __construct()}. Equivalent
+     * to `new ValidPublicId($prefix)`.
+     */
     public static function withPrefix(string $prefix): self
     {
         return new self($prefix);
     }
 
+    /**
+     * Run the rule. Calls $fail with a translatable message on failure.
+     *
+     * Note: Laravel skips non-implicit ValidationRules for empty/missing
+     * values. Pair this rule with `required` if empty input should fail.
+     */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         if (! is_string($value)) {

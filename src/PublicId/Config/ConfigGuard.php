@@ -6,6 +6,18 @@ namespace Progravity\Auth\PublicId\Config;
 
 use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
 
+/**
+ * Boot-time check that the current public_id config matches the locked
+ * fingerprint on disk.
+ *
+ * The service provider calls {@see assertMatches()} during boot. If the
+ * lock file exists but the fingerprint doesn't match, the boot throws —
+ * preventing the app from running with a configuration that diverges
+ * from the one IDs were generated under.
+ *
+ * Drift causes: any change to body length, body alphabet, separator,
+ * or checksum settings after `progravity:public-id:setup` was run.
+ */
 final class ConfigGuard
 {
     private ?LockFileContents $cachedContents = null;
@@ -21,6 +33,9 @@ final class ConfigGuard
     ) {
     }
 
+    /**
+     * Classify the current state: NotYetLocked, Locked, or Drifted.
+     */
     public function status(): GuardStatus
     {
         $contents = $this->loadContents();
@@ -34,6 +49,12 @@ final class ConfigGuard
         return GuardStatus::Drifted;
     }
 
+    /**
+     * No-op when not yet locked or when the fingerprint matches.
+     *
+     * @throws PublicIdConfigLockedException when the lock file exists but
+     *                                       the current config no longer matches it
+     */
     public function assertMatches(): void
     {
         $contents = $this->loadContents();
@@ -53,6 +74,9 @@ final class ConfigGuard
         );
     }
 
+    /**
+     * Stored fingerprint from the lock file, or null when no lock exists.
+     */
     public function lockedFingerprint(): ?string
     {
         $contents = $this->loadContents();
@@ -60,6 +84,9 @@ final class ConfigGuard
         return $contents?->fingerprint;
     }
 
+    /**
+     * Fingerprint of the in-memory configuration (irrespective of any lock file).
+     */
     public function currentFingerprint(): string
     {
         if ($this->cachedCurrentFingerprint === null) {

@@ -8,6 +8,13 @@ use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
 
+/**
+ * Builds full public IDs of the form `{prefix}{separator}{body}{checksum}`.
+ *
+ * This is the underlying service behind {@see PublicId::generate()}. Inject
+ * it directly via DI when you prefer explicit dependencies; otherwise call
+ * the static facade.
+ */
 final class Generator
 {
     private readonly ChecksumStrategy $checksumStrategy;
@@ -18,6 +25,12 @@ final class Generator
         $this->checksumStrategy = new $strategyClass();
     }
 
+    /**
+     * Generate a complete public ID for the given prefix.
+     *
+     * @throws InvalidPrefixException if the prefix is empty, too long,
+     *                                or contains anything other than lowercase ASCII letters
+     */
     public function generate(string $prefix): string
     {
         $this->assertValidPrefix($prefix);
@@ -28,6 +41,10 @@ final class Generator
         return $prefix.$this->config->separator().$body.$checksum;
     }
 
+    /**
+     * Generate just the random body portion (no prefix, separator, or checksum).
+     * Uses random_int() for cryptographic-quality randomness.
+     */
     public function generateBody(): string
     {
         $alphabet = $this->config->bodyAlphabet();
@@ -42,6 +59,10 @@ final class Generator
         return $body;
     }
 
+    /**
+     * Compute the configured checksum for a given body. Returns an empty
+     * string when checksums are disabled.
+     */
     public function computeChecksum(string $body): string
     {
         return $this->checksumStrategy->compute(

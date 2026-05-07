@@ -7,6 +7,17 @@ namespace Progravity\Auth\PublicId;
 use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
 
+/**
+ * Parses and validates public ID strings.
+ *
+ * Always returns a {@see ValidationResult} — never throws on user input.
+ * The result carries a {@see ValidationFailureReason} for branching on
+ * specific failure modes.
+ *
+ * This is the underlying service behind {@see PublicId::validate()} and
+ * {@see Rules\ValidPublicId}. Inject it directly via DI when you prefer
+ * explicit dependencies.
+ */
 final class Validator
 {
     private readonly ChecksumStrategy $checksumStrategy;
@@ -17,6 +28,9 @@ final class Validator
         $this->checksumStrategy = new $strategyClass();
     }
 
+    /**
+     * Validate a public ID, optionally requiring a specific prefix.
+     */
     public function validate(string $publicId, ?string $expectedPrefix = null): ValidationResult
     {
         if ($publicId === '') {
@@ -108,11 +122,17 @@ final class Validator
         return ValidationResult::valid($prefix, $body, $checksum);
     }
 
+    /**
+     * Convenience boolean wrapper around {@see validate()}.
+     */
     public function isValid(string $publicId, ?string $expectedPrefix = null): bool
     {
         return $this->validate($publicId, $expectedPrefix)->isValid();
     }
 
+    /**
+     * Parse a public ID. Equivalent to {@see validate()} with no expected prefix.
+     */
     public function parse(string $publicId): ValidationResult
     {
         return $this->validate($publicId);

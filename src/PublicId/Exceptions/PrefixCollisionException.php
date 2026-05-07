@@ -6,6 +6,10 @@ namespace Progravity\Auth\PublicId\Exceptions;
 
 use RuntimeException;
 
+/**
+ * Thrown when two or more registered models claim the same public_id prefix.
+ * Detected at boot via {@see \Progravity\Auth\PublicId\PrefixRegistry::assertNoCollisions()}.
+ */
 class PrefixCollisionException extends RuntimeException
 {
     /**
@@ -14,7 +18,9 @@ class PrefixCollisionException extends RuntimeException
     public static function forPrefix(string $prefix, array $modelClasses): self
     {
         return new self(sprintf(
-            "Prefix '%s' is claimed by multiple models: %s. Each public_id prefix must be unique.",
+            "Prefix '%s' is claimed by multiple models: %s. Each public_id prefix must be unique. ".
+            'Resolve by changing the prefix on one of these models, either by updating '.
+            'publicIdPrefix() or the config/progravity/auth.php prefixes map.',
             $prefix,
             implode(', ', $modelClasses),
         ));

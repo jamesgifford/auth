@@ -7,12 +7,24 @@ namespace Progravity\Auth\PublicId\Config;
 use DateTimeImmutable;
 use DateTimeZone;
 use JsonException;
-use Progravity\Auth\PublicId\Exceptions\CorruptLockFileException;
+use Progravity\Auth\PublicId\Exceptions\IncompleteLockFileException;
 use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
+use Progravity\Auth\PublicId\Exceptions\MalformedLockFileException;
+use Progravity\Auth\PublicId\Exceptions\MissingLockFileException;
 
+/**
+ * Reads, writes, and deletes the public_id lock file on disk.
+ *
+ * The lock file is a small JSON document recording the fingerprint of the
+ * configuration at setup time. It is the single source of truth that the
+ * boot guard compares against, so callers should not parse it manually —
+ * use this class.
+ */
 final class LockFile
 {
     private const FORMAT_VERSION = 1;
+
+    private const REQUIRED_KEYS = ['version', 'locked_at', 'fingerprint', 'config'];
 
     public function __construct(private readonly string $path)
     {
@@ -28,63 +40,66 @@ final class LockFile
         return is_file($this->path);
     }
 
+    /**
+     * Read and parse the lock file.
+     *
+     * @throws MissingLockFileException     when the file does not exist
+     * @throws MalformedLockFileException   when the file content is not valid JSON
+     * @throws IncompleteLockFileException  when required keys are missing or wrongly typed
+     */
     public function read(): LockFileContents
     {
         if (! $this->exists()) {
-            throw new CorruptLockFileException(
-                "Lock file does not exist: {$this->path}"
-            );
+            throw MissingLockFileException::forPath($this->path);
         }
 
         $raw = @file_get_contents($this->path);
         if ($raw === false) {
-            throw new CorruptLockFileException(
-                "Unable to read lock file: {$this->path}"
-            );
+            throw MalformedLockFileException::forPath($this->path, 'unable to read file contents');
         }
 
         try {
             $data = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            throw new CorruptLockFileException(
-                "Lock file contains invalid JSON: {$this->path}",
-                0,
-                $e
-            );
+            throw MalformedLockFileException::forPath($this->path, $e->getMessage());
         }
 
         if (! is_array($data)) {
-            throw new CorruptLockFileException(
-                "Lock file does not contain a JSON object: {$this->path}"
+            throw MalformedLockFileException::forPath(
+                $this->path,
+                'top-level value is not a JSON object',
             );
         }
 
-        foreach (['version', 'locked_at', 'fingerprint', 'config'] as $key) {
+        $missing = [];
+        foreach (self::REQUIRED_KEYS as $key) {
             if (! array_key_exists($key, $data)) {
-                throw new CorruptLockFileException(
-                    "Lock file missing required key '{$key}': {$this->path}"
-                );
+                $missing[] = $key;
             }
         }
 
-        if (! is_int($data['version'])) {
-            throw new CorruptLockFileException(
-                "Lock file 'version' must be an integer: {$this->path}"
-            );
+        $typed = [];
+        foreach (self::REQUIRED_KEYS as $key) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+            $expectsInt = $key === 'version';
+            $expectsArray = $key === 'config';
+            $value = $data[$key];
+
+            $valid = $expectsInt
+                ? is_int($value)
+                : ($expectsArray ? is_array($value) : is_string($value));
+
+            if (! $valid) {
+                $typed[] = $key;
+            }
         }
-        if (! is_string($data['locked_at'])) {
-            throw new CorruptLockFileException(
-                "Lock file 'locked_at' must be a string: {$this->path}"
-            );
-        }
-        if (! is_string($data['fingerprint'])) {
-            throw new CorruptLockFileException(
-                "Lock file 'fingerprint' must be a string: {$this->path}"
-            );
-        }
-        if (! is_array($data['config'])) {
-            throw new CorruptLockFileException(
-                "Lock file 'config' must be an object: {$this->path}"
+
+        if ($missing !== [] || $typed !== []) {
+            throw IncompleteLockFileException::forPath(
+                $this->path,
+                array_values(array_unique(array_merge($missing, $typed))),
             );
         }
 
@@ -96,13 +111,19 @@ final class LockFile
         );
     }
 
+    /**
+     * Write the lock file with the given config snapshot and fingerprint.
+     *
+     * @throws LockFileWriteException on directory creation, JSON encoding, or write failure
+     */
     public function write(PublicIdConfig $config, string $fingerprint): void
     {
         $directory = dirname($this->path);
         if (! is_dir($directory)) {
             if (! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
-                throw new LockFileWriteException(
-                    "Unable to create lock file directory: {$directory}"
+                throw LockFileWriteException::forPath(
+                    $this->path,
+                    "unable to create directory '{$directory}'",
                 );
             }
         }
@@ -128,33 +149,34 @@ final class LockFile
         try {
             $json = json_encode(
                 $payload,
-                JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES
+                JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
             );
         } catch (JsonException $e) {
-            throw new LockFileWriteException(
-                "Failed to encode lock file payload: {$this->path}",
-                0,
-                $e
+            throw LockFileWriteException::forPath(
+                $this->path,
+                'failed to encode payload as JSON: '.$e->getMessage(),
+                $e,
             );
         }
 
         $bytes = @file_put_contents($this->path, $json.PHP_EOL);
         if ($bytes === false) {
-            throw new LockFileWriteException(
-                "Failed to write lock file: {$this->path}"
-            );
+            throw LockFileWriteException::forPath($this->path, 'file_put_contents returned false');
         }
     }
 
+    /**
+     * Delete the lock file. No-op when the file does not exist.
+     *
+     * @throws LockFileWriteException when an existing file cannot be unlinked
+     */
     public function delete(): void
     {
         if (! $this->exists()) {
             return;
         }
         if (! @unlink($this->path)) {
-            throw new LockFileWriteException(
-                "Failed to delete lock file: {$this->path}"
-            );
+            throw LockFileWriteException::forPath($this->path, 'unlink failed');
         }
     }
 

@@ -10,6 +10,16 @@ use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
 use Progravity\Auth\PublicId\PrefixRegistry;
 use Throwable;
 
+/**
+ * Verifies prefix registry integrity. Three checks:
+ *  1. config-listed model classes actually autoload (typo detection)
+ *  2. no two registered models claim the same prefix
+ *  3. each registered prefix is well-formed
+ *
+ * Exits non-zero on any failure, making it suitable as a CI step.
+ *
+ * Run with: `php artisan progravity:public-id:check`
+ */
 final class PublicIdCheckCommand extends Command
 {
     protected $signature = 'progravity:public-id:check';

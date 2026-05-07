@@ -12,6 +12,18 @@ use Progravity\Auth\PublicId\Exceptions\UnregisteredModelException;
 use ReflectionClass;
 use ReflectionMethod;
 
+/**
+ * Tracks which model classes claim which public_id prefixes.
+ *
+ * Resolution order for a given model:
+ *   1. If the model overrides publicIdPrefix(), call it (NOT the trait's
+ *      default — that would recurse back into the registry)
+ *   2. Otherwise, look the model up in config('progravity.auth.public_id.prefixes')
+ *   3. Otherwise, throw {@see UnregisteredModelException}
+ *
+ * Resolution is lazy and cached — first call resolves and stores; subsequent
+ * calls return the cached prefix.
+ */
 final class PrefixRegistry
 {
     /**
@@ -23,6 +35,14 @@ final class PrefixRegistry
     {
     }
 
+    /**
+     * Return the prefix claimed by the given model class.
+     *
+     * @throws InvalidPrefixException     if the model's publicIdPrefix() returns
+     *                                    a value that isn't 1+ lowercase ASCII letters
+     *                                    within prefix_max_length
+     * @throws UnregisteredModelException if the model has no override and no config entry
+     */
     public function prefixFor(string $modelClass): string
     {
         if (isset($this->registered[$modelClass])) {
@@ -35,6 +55,10 @@ final class PrefixRegistry
         return $prefix;
     }
 
+    /**
+     * Reverse lookup: which model class (if any) claims this prefix.
+     * Walks only the already-registered set; will not lazily resolve.
+     */
     public function modelFor(string $prefix): ?string
     {
         foreach ($this->registered as $modelClass => $registeredPrefix) {
@@ -46,6 +70,12 @@ final class PrefixRegistry
         return null;
     }
 
+    /**
+     * Eagerly register a model and cache its resolved prefix. Idempotent.
+     *
+     * @throws InvalidPrefixException     see {@see prefixFor()}
+     * @throws UnregisteredModelException see {@see prefixFor()}
+     */
     public function register(string $modelClass): void
     {
         if (isset($this->registered[$modelClass])) {
@@ -56,6 +86,8 @@ final class PrefixRegistry
     }
 
     /**
+     * All registered prefixes as `[modelClass => prefix]`.
+     *
      * @return array<string, string>
      */
     public function all(): array
@@ -63,6 +95,11 @@ final class PrefixRegistry
         return $this->registered;
     }
 
+    /**
+     * Throws if two registered models claim the same prefix.
+     *
+     * @throws PrefixCollisionException
+     */
     public function assertNoCollisions(): void
     {
         $byPrefix = [];
@@ -89,12 +126,11 @@ final class PrefixRegistry
 
                 if (! is_string($prefix) || preg_match('/^[a-z]+$/', $prefix) !== 1
                     || strlen($prefix) > $this->config->prefixMaxLength()) {
-                    throw new InvalidPrefixException(sprintf(
-                        "Invalid public_id prefix returned by %s::publicIdPrefix(): must be 1 to %d lowercase ASCII letters, got %s.",
+                    throw InvalidPrefixException::forModelMethod(
                         $modelClass,
+                        $prefix,
                         $this->config->prefixMaxLength(),
-                        is_string($prefix) ? "'{$prefix}'" : gettype($prefix),
-                    ));
+                    );
                 }
 
                 return $prefix;
@@ -106,10 +142,7 @@ final class PrefixRegistry
             return $configPrefixes[$modelClass];
         }
 
-        throw new UnregisteredModelException(sprintf(
-            "Model '%s' has no public_id prefix. Either implement publicIdPrefix() on the model or add it to config('progravity.auth.public_id.prefixes').",
-            $modelClass,
-        ));
+        throw UnregisteredModelException::forModel($modelClass);
     }
 
     private function isTraitDefault(ReflectionMethod $method): bool

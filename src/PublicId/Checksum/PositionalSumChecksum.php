@@ -6,8 +6,21 @@ namespace Progravity\Auth\PublicId\Checksum;
 
 use Progravity\Auth\PublicId\Alphabet;
 
+/**
+ * Default checksum strategy. For each character in the body, multiplies
+ * its zero-based alphabet index by its 1-indexed position in the body,
+ * sums the products, takes the result modulo `alphabet_size ^ length`,
+ * and renders that integer in the alphabet's base.
+ *
+ * Detects single-character substitutions and (with two-character
+ * checksums) most adjacent transpositions.
+ */
 final class PositionalSumChecksum implements ChecksumStrategy
 {
+    /**
+     * @throws \OutOfBoundsException when `$body` contains a character
+     *                               not present in `$alphabet`
+     */
     public function compute(string $body, Alphabet $alphabet, int $length): string
     {
         if ($length === 0) {

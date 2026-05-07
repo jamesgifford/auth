@@ -8,6 +8,12 @@ use InvalidArgumentException;
 use OutOfBoundsException;
 use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
 
+/**
+ * Immutable value object representing a resolved alphabet — the set of
+ * characters available for body and checksum generation.
+ *
+ * Validated on construction: at least 2 characters, no duplicates.
+ */
 final class Alphabet
 {
     private readonly string $characters;
@@ -19,25 +25,35 @@ final class Alphabet
      */
     private readonly array $index;
 
+    /**
+     * @throws InvalidAlphabetException when the input is shorter than 2
+     *                                  characters or contains duplicates
+     */
     public function __construct(string $characters)
     {
         $chars = mb_str_split($characters);
         $size = count($chars);
 
         if ($size < 2) {
-            throw new InvalidAlphabetException(
-                "Alphabet must contain at least 2 characters, got {$size}."
-            );
+            throw InvalidAlphabetException::forTooShort($characters);
         }
 
         $map = [];
+        $duplicates = [];
         foreach ($chars as $position => $char) {
             if (array_key_exists($char, $map)) {
-                throw new InvalidAlphabetException(
-                    "Alphabet contains duplicate character '{$char}'."
-                );
+                $duplicates[$char] = true;
+
+                continue;
             }
             $map[$char] = $position;
+        }
+
+        if ($duplicates !== []) {
+            throw InvalidAlphabetException::forDuplicates(
+                $characters,
+                array_keys($duplicates),
+            );
         }
 
         $this->characters = $characters;
@@ -50,6 +66,9 @@ final class Alphabet
         return $this->size;
     }
 
+    /**
+     * @throws InvalidArgumentException when $char is not exactly one character
+     */
     public function contains(string $char): bool
     {
         $this->assertSingleCharacter($char);
@@ -57,6 +76,10 @@ final class Alphabet
         return array_key_exists($char, $this->index);
     }
 
+    /**
+     * @throws InvalidArgumentException when $char is not exactly one character
+     * @throws OutOfBoundsException     when $char is not a member of the alphabet
+     */
     public function indexOf(string $char): int
     {
         $this->assertSingleCharacter($char);
@@ -70,6 +93,9 @@ final class Alphabet
         return $this->index[$char];
     }
 
+    /**
+     * @throws OutOfBoundsException when $index is outside [0, size)
+     */
     public function charAt(int $index): string
     {
         if ($index < 0 || $index >= $this->size) {

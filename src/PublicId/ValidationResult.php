@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId;
 
+/**
+ * Result of a public ID validation run. Use {@see isValid()} to branch;
+ * on success, the parsed prefix/body/checksum are populated; on failure,
+ * `failureReason` and `failureDetail` describe why.
+ *
+ * Construct via the static factories — never directly.
+ */
 final class ValidationResult
 {
     private function __construct(

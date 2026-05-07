@@ -9,7 +9,9 @@ use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
 use Progravity\Auth\PublicId\Config\LockFile;
 use Progravity\Auth\PublicId\Config\LockFileContents;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\CorruptLockFileException;
+use Progravity\Auth\PublicId\Exceptions\IncompleteLockFileException;
+use Progravity\Auth\PublicId\Exceptions\MalformedLockFileException;
+use Progravity\Auth\PublicId\Exceptions\MissingLockFileException;
 use Progravity\Auth\Tests\TestCase;
 
 class LockFileTest extends TestCase
@@ -80,7 +82,7 @@ class LockFileTest extends TestCase
     {
         $lockFile = new LockFile($this->tmpDir.'/missing.lock.json');
 
-        $this->expectException(CorruptLockFileException::class);
+        $this->expectException(MissingLockFileException::class);
         $lockFile->read();
     }
 
@@ -154,7 +156,7 @@ class LockFileTest extends TestCase
 
         $lockFile = new LockFile($path);
 
-        $this->expectException(CorruptLockFileException::class);
+        $this->expectException(MalformedLockFileException::class);
         $lockFile->read();
     }
 
@@ -171,9 +173,30 @@ class LockFileTest extends TestCase
 
         $lockFile = new LockFile($path);
 
-        $this->expectException(CorruptLockFileException::class);
+        $this->expectException(IncompleteLockFileException::class);
         $this->expectExceptionMessage('fingerprint');
         $lockFile->read();
+    }
+
+    public function test_incomplete_lock_file_lists_all_missing_keys(): void
+    {
+        $path = $this->tmpDir.'/auth.lock.json';
+        mkdir($this->tmpDir, 0755, true);
+        file_put_contents($path, json_encode([
+            'version' => 1,
+            // 'locked_at', 'fingerprint', 'config' all missing
+        ]));
+
+        $lockFile = new LockFile($path);
+
+        try {
+            $lockFile->read();
+            $this->fail('Expected IncompleteLockFileException');
+        } catch (IncompleteLockFileException $e) {
+            $this->assertStringContainsString('locked_at', $e->getMessage());
+            $this->assertStringContainsString('fingerprint', $e->getMessage());
+            $this->assertStringContainsString('config', $e->getMessage());
+        }
     }
 
     public function test_delete_removes_existing_file(): void
