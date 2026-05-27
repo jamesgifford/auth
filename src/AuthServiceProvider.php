@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Progravity\Auth;
 
 use Illuminate\Support\ServiceProvider;
+use PhpParser\Parser;
+use PhpParser\ParserFactory;
+use PhpParser\PrettyPrinter\Standard as PhpParserPrinter;
 use Progravity\Auth\Accounts\Services\AccountIntegrityService;
 use Progravity\Auth\Accounts\Services\AccountService;
+use Progravity\Auth\Console\Commands\AuthInstallCommand;
 use Progravity\Auth\Console\Commands\PublicIdCheckCommand;
 use Progravity\Auth\Console\Commands\PublicIdResetCommand;
 use Progravity\Auth\Console\Commands\PublicIdSetupCommand;
@@ -18,6 +22,7 @@ use Progravity\Auth\PublicId\Config\LockFile;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Generator;
 use Progravity\Auth\PublicId\PrefixRegistry;
+use Progravity\Auth\Installer\UserModelModifier;
 use Progravity\Auth\PublicId\Validator;
 use Progravity\Auth\Roles\RolesConfig;
 
@@ -88,6 +93,14 @@ class AuthServiceProvider extends ServiceProvider
         $this->app->singleton(AccountService::class);
 
         $this->app->singleton(AccountIntegrityService::class);
+
+        $this->app->singleton(Parser::class, function () {
+            return (new ParserFactory)->createForNewestSupportedVersion();
+        });
+
+        $this->app->singleton(PhpParserPrinter::class);
+
+        $this->app->singleton(UserModelModifier::class);
     }
 
     public function boot(): void
@@ -119,6 +132,7 @@ class AuthServiceProvider extends ServiceProvider
                 PublicIdStatusCommand::class,
                 PublicIdResetCommand::class,
                 PublicIdCheckCommand::class,
+                AuthInstallCommand::class,
             ]);
         }
     }
