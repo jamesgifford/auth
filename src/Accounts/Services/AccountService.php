@@ -7,6 +7,10 @@ namespace Progravity\Auth\Accounts\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Progravity\Auth\Events\AccountCreated;
+use Progravity\Auth\Events\AccountDeleted;
+use Progravity\Auth\Events\AccountForceDeleted;
+use Progravity\Auth\Events\AccountOwnershipTransferred;
+use Progravity\Auth\Events\AccountRestored;
 use Progravity\Auth\Events\AccountRoleChanged;
 use Progravity\Auth\Events\UserAttachedToAccount;
 use Progravity\Auth\Events\UserDetachedFromAccount;
@@ -16,6 +20,8 @@ use Progravity\Auth\Exceptions\CannotDetachOwnerException;
 use Progravity\Auth\Exceptions\CannotModifyOwnerRoleException;
 use Progravity\Auth\Exceptions\InvalidRoleException;
 use Progravity\Auth\Exceptions\NotAMemberException;
+use Progravity\Auth\Exceptions\OwnerlessAccountException;
+use Progravity\Auth\Exceptions\SelfOwnershipTransferException;
 use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountRole;
 use Progravity\Auth\Models\AccountUser;
@@ -267,6 +273,186 @@ final class AccountService
             });
 
             return $membership;
+        });
+    }
+
+    /**
+     * Atomically transfer ownership of an account from its current owner to
+     * another existing member.
+     *
+     * The three updates (previous owner's role, new owner's role, and
+     * accounts.owner_id) all run in a single transaction; no intermediate
+     * "two owners" or "zero owners" state is ever visible to readers outside
+     * the transaction.
+     *
+     * @param  string  $previousOwnerNewRoleKey  Role the previous owner is
+     *                                           demoted to. Defaults to Admin.
+     *
+     * Side effects:
+     *  - Updates both memberships' account_role_id and the accounts.owner_id column.
+     *  - Dispatches {@see AccountOwnershipTransferred} after commit.
+     *
+     * @throws CannotAssignOwnerRoleException When $previousOwnerNewRoleKey is 'owner'.
+     * @throws InvalidRoleException When $previousOwnerNewRoleKey is not configured.
+     * @throws SelfOwnershipTransferException When $newOwner is already the owner.
+     * @throws NotAMemberException When $newOwner is not already a member.
+     * @throws OwnerlessAccountException When the account has no Owner membership
+     *                                   for its current owner_id (data corruption).
+     */
+    public function transferOwnership(
+        Account $account,
+        Model $newOwner,
+        string $previousOwnerNewRoleKey = SystemRole::ADMIN,
+    ): void {
+        if ($previousOwnerNewRoleKey === SystemRole::OWNER) {
+            throw CannotAssignOwnerRoleException::forContext('transferOwnership');
+        }
+
+        $previousOwnerNewRole = $this->requireRole($previousOwnerNewRoleKey);
+        $ownerRole = $this->requireRole(SystemRole::OWNER);
+
+        // Refresh against current DB state — the caller may be holding a
+        // model that was loaded before another transferOwnership ran.
+        $account = $account->fresh();
+
+        if ($newOwner->id === $account->owner_id) {
+            throw SelfOwnershipTransferException::forAccount($account->public_id);
+        }
+
+        $previousOwnerMembership = AccountUser::query()
+            ->where('account_id', $account->id)
+            ->where('user_id', $account->owner_id)
+            ->first();
+
+        if ($previousOwnerMembership === null) {
+            throw OwnerlessAccountException::forAccount($account->public_id);
+        }
+
+        $newOwnerMembership = AccountUser::query()
+            ->where('account_id', $account->id)
+            ->where('user_id', $newOwner->id)
+            ->first();
+
+        if ($newOwnerMembership === null) {
+            throw NotAMemberException::forUserAndAccount(
+                $this->userIdentifier($newOwner),
+                $account->public_id,
+            );
+        }
+
+        /** @var class-string<Model> $userClass */
+        $userClass = config('progravity.auth.models.user');
+        /** @var Model $previousOwner */
+        $previousOwner = $userClass::query()->findOrFail($account->owner_id);
+
+        DB::transaction(function () use (
+            $account,
+            $previousOwner,
+            $newOwner,
+            $previousOwnerMembership,
+            $newOwnerMembership,
+            $previousOwnerNewRole,
+            $ownerRole,
+        ): void {
+            $previousOwnerMembership->update(['account_role_id' => $previousOwnerNewRole->id]);
+            $newOwnerMembership->update(['account_role_id' => $ownerRole->id]);
+            $account->update(['owner_id' => $newOwner->id]);
+
+            DB::afterCommit(function () use ($account, $previousOwner, $newOwner, $previousOwnerNewRole): void {
+                AccountOwnershipTransferred::dispatch(
+                    AccountTransfer::fromModel($account),
+                    UserTransfer::fromModel($previousOwner),
+                    UserTransfer::fromModel($newOwner),
+                    AccountRoleTransfer::fromModel($previousOwnerNewRole),
+                );
+            });
+        });
+    }
+
+    /**
+     * Soft-delete an account. Membership rows are preserved so the account
+     * remains restorable.
+     *
+     * Side effects:
+     *  - Sets accounts.deleted_at.
+     *  - Nulls current_account_id on every user pointing at this account
+     *    (bulk update, no per-user model events).
+     *  - Dispatches {@see AccountDeleted} after commit.
+     */
+    public function delete(Account $account): void
+    {
+        $transfer = AccountTransfer::fromModel($account);
+
+        /** @var class-string<Model> $userClass */
+        $userClass = config('progravity.auth.models.user');
+
+        DB::transaction(function () use ($account, $userClass, $transfer): void {
+            $account->delete();
+
+            $userClass::query()
+                ->where('current_account_id', $account->id)
+                ->update(['current_account_id' => null]);
+
+            DB::afterCommit(function () use ($transfer): void {
+                AccountDeleted::dispatch($transfer);
+            });
+        });
+    }
+
+    /**
+     * Restore a soft-deleted account.
+     *
+     * No-op (and no event) when the account is not currently soft-deleted —
+     * matches Laravel's own SoftDeletes::restore() semantics and lets
+     * callers express intent ("ensure restored") rather than starting state.
+     *
+     * Does NOT re-point current_account_id for previous holders: restoring
+     * an account doesn't recover the user's prior preference.
+     *
+     * Side effects:
+     *  - Clears accounts.deleted_at.
+     *  - Dispatches {@see AccountRestored} after commit (only on real restore).
+     */
+    public function restore(Account $account): void
+    {
+        if (! $account->trashed()) {
+            return;
+        }
+
+        DB::transaction(function () use ($account): void {
+            $account->restore();
+
+            DB::afterCommit(function () use ($account): void {
+                AccountRestored::dispatch(AccountTransfer::fromModel($account));
+            });
+        });
+    }
+
+    /**
+     * Permanently delete an account. Cannot be undone.
+     *
+     * Side effects:
+     *  - Removes the accounts row.
+     *  - FK cascadeOnDelete removes all account_user rows for this account.
+     *  - FK nullOnDelete clears current_account_id on users that pointed here.
+     *  - Dispatches {@see AccountForceDeleted} (with a pre-delete snapshot)
+     *    after commit.
+     *
+     * AccountUser model events do NOT fire because the cleanup runs at the
+     * FK layer, not through Eloquent.
+     */
+    public function forceDelete(Account $account): void
+    {
+        // Snapshot before delete; after forceDelete the model is gone and
+        // fromModel() would read stale or null attributes.
+        $transfer = AccountTransfer::fromModel($account);
+
+        DB::transaction(function () use ($account, $transfer): void {
+            $account->forceDelete();
+
+            DB::afterCommit(function () use ($transfer): void {
+                AccountForceDeleted::dispatch($transfer);
+            });
         });
     }
 
