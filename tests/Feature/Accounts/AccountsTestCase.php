@@ -6,6 +6,9 @@ namespace Progravity\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Database\Eloquent\Model;
 use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
+use Progravity\Auth\Models\Account;
+use Progravity\Auth\Models\AccountRole;
+use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Tests\TestCase;
 
@@ -58,5 +61,29 @@ abstract class AccountsTestCase extends TestCase
     protected function seedRoles(): void
     {
         $this->seed(AccountRoleSeeder::class);
+    }
+
+    /**
+     * Create a user, an account they own, and an AccountUser membership row.
+     * Saves boilerplate in trait/service tests where a fully-formed account
+     * member is the starting point. Requires seedRoles() to have run.
+     *
+     * @return array{user: User, account: Account, membership: AccountUser}
+     */
+    protected function createUserWithAccount(
+        ?string $name = null,
+        string $role = 'owner',
+    ): array {
+        $user = User::factory()->create(['name' => $name ?? fake()->name()]);
+
+        $account = Account::factory()->ownedBy($user)->create();
+
+        $membership = AccountUser::factory()
+            ->for($account)
+            ->for($user)
+            ->state(['account_role_id' => AccountRole::findByKey($role)->id])
+            ->create();
+
+        return ['user' => $user, 'account' => $account, 'membership' => $membership];
     }
 }

@@ -6,10 +6,12 @@ namespace Progravity\Auth\Tests\Support\Fixtures;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Progravity\Auth\Concerns\HasAccounts;
 use Progravity\Auth\PublicId\Concerns\HasPublicId;
 
 class User extends Authenticatable
 {
+    use HasAccounts;
     use HasFactory;
     use HasPublicId;
 
