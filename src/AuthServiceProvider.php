@@ -15,6 +15,7 @@ use Progravity\Auth\Console\Commands\PublicIdCheckCommand;
 use Progravity\Auth\Console\Commands\PublicIdResetCommand;
 use Progravity\Auth\Console\Commands\PublicIdSetupCommand;
 use Progravity\Auth\Console\Commands\PublicIdStatusCommand;
+use Progravity\Auth\Installer\UserModelModifier;
 use Progravity\Auth\PublicId\AlphabetRegistry;
 use Progravity\Auth\PublicId\Config\ConfigFingerprint;
 use Progravity\Auth\PublicId\Config\ConfigGuard;
@@ -22,7 +23,6 @@ use Progravity\Auth\PublicId\Config\LockFile;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Generator;
 use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\Installer\UserModelModifier;
 use Progravity\Auth\PublicId\Validator;
 use Progravity\Auth\Roles\RolesConfig;
 

@@ -15,34 +15,6 @@ use stdClass;
 
 class PublicIdConfigTest extends TestCase
 {
-    private function registry(): AlphabetRegistry
-    {
-        return new AlphabetRegistry;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function baseConfig(): array
-    {
-        return [
-            'prefix_max_length' => 7,
-            'separator' => '_',
-            'body' => [
-                'length' => 18,
-                'alphabet' => 'lowercase_alphanumeric',
-            ],
-            'checksum' => [
-                'enabled' => true,
-                'length' => 2,
-                'strategy' => PositionalSumChecksum::class,
-            ],
-            'lock_file_path' => null,
-            'prefixes' => [],
-            'custom_alphabet_presets' => [],
-        ];
-    }
-
     public function test_constructs_with_full_valid_config(): void
     {
         $config = new PublicIdConfig($this->baseConfig(), $this->registry());
@@ -372,5 +344,33 @@ class PublicIdConfigTest extends TestCase
         $this->assertArrayNotHasKey('prefixes', $fields);
         $this->assertArrayNotHasKey('lock_file_path', $fields);
         $this->assertArrayNotHasKey('custom_alphabet_presets', $fields);
+    }
+
+    private function registry(): AlphabetRegistry
+    {
+        return new AlphabetRegistry;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function baseConfig(): array
+    {
+        return [
+            'prefix_max_length' => 7,
+            'separator' => '_',
+            'body' => [
+                'length' => 18,
+                'alphabet' => 'lowercase_alphanumeric',
+            ],
+            'checksum' => [
+                'enabled' => true,
+                'length' => 2,
+                'strategy' => PositionalSumChecksum::class,
+            ],
+            'lock_file_path' => null,
+            'prefixes' => [],
+            'custom_alphabet_presets' => [],
+        ];
     }
 }

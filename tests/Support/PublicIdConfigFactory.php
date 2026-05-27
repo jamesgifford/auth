@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Tests\Support;
 
+use LogicException;
 use Progravity\Auth\PublicId\AlphabetRegistry;
 use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
 use Progravity\Auth\PublicId\Config\PublicIdConfig;
@@ -50,14 +51,14 @@ final class PublicIdConfigFactory
             return;
         }
 
-        throw new \LogicException(sprintf(
+        throw new LogicException(sprintf(
             "PublicIdConfigFactory: separator '%s' is a member of the resolved body alphabet '%s'. ".
             "Override the 'separator' key alongside 'body.alphabet'.\n\n".
             "Example:\n".
             "    PublicIdConfigFactory::default([\n".
             "        'separator' => '|',\n".
             "        'body' => ['alphabet' => '%s'],\n".
-            "    ])",
+            '    ])',
             $separator,
             $alphabetValue,
             $alphabetValue,

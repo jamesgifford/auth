@@ -29,6 +29,11 @@ final class SystemRole
 
     public const VIEWER = 'viewer';
 
+    private function __construct()
+    {
+        // Prevent instantiation
+    }
+
     /**
      * Returns all system role keys.
      *
@@ -42,10 +47,5 @@ final class SystemRole
             self::MEMBER,
             self::VIEWER,
         ];
-    }
-
-    private function __construct()
-    {
-        // Prevent instantiation
     }
 }

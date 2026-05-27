@@ -12,13 +12,16 @@ use Progravity\Auth\Exceptions\InvalidRoleException;
 use Progravity\Auth\Exceptions\NotAMemberException;
 use Progravity\Auth\Exceptions\OwnerlessAccountException;
 use Progravity\Auth\Exceptions\SelfOwnershipTransferException;
+use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountRole;
 use Progravity\Auth\Models\AccountUser;
+use Progravity\Auth\Roles\RolesConfig;
 use Progravity\Auth\SystemRole;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Transfers\AccountRoleTransfer;
 use Progravity\Auth\Transfers\AccountTransfer;
 use Progravity\Auth\Transfers\UserTransfer;
+use RuntimeException;
 
 class AccountServiceTransferOwnershipTest extends AccountsTestCase
 {
@@ -162,7 +165,7 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         ]]);
 
         // Rebuild the RolesConfig and the service against the updated config.
-        $this->app->forgetInstance(\Progravity\Auth\Roles\RolesConfig::class);
+        $this->app->forgetInstance(RolesConfig::class);
         $this->app->forgetInstance(AccountService::class);
         $service = $this->app->make(AccountService::class);
 
@@ -303,14 +306,14 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         // transaction. Listening for the Account 'updated' model event gives
         // us a hook fired after $account->update() — which is the last of
         // the three writes — without interfering with the AccountUser updates.
-        \Progravity\Auth\Models\Account::updated(function (): void {
-            throw new \RuntimeException('Forced rollback after final update');
+        Account::updated(function (): void {
+            throw new RuntimeException('Forced rollback after final update');
         });
 
         try {
             $this->service->transferOwnership($account, $newOwner);
             $this->fail('Expected forced rollback was not raised.');
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->assertSame('Forced rollback after final update', $e->getMessage());
         }
 

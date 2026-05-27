@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Tests\Feature\PublicId;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Support\Facades\Validator as ValidatorFacade;
 use Progravity\Auth\PublicId\PublicId;
 use Progravity\Auth\PublicId\Rules\ValidPublicId;
@@ -11,14 +12,6 @@ use Progravity\Auth\Tests\TestCase;
 
 class ValidPublicIdRuleTest extends TestCase
 {
-    private function check(mixed $value, ?string $expectedPrefix = null): \Illuminate\Contracts\Validation\Validator
-    {
-        return ValidatorFacade::make(
-            ['id' => $value],
-            ['id' => [$expectedPrefix === null ? new ValidPublicId : new ValidPublicId($expectedPrefix)]],
-        );
-    }
-
     public function test_valid_generated_public_id_passes(): void
     {
         $id = PublicId::generate('usr');
@@ -139,6 +132,14 @@ class ValidPublicIdRuleTest extends TestCase
         $this->assertSame(
             implode(' ', $factoryValidator->errors()->all()),
             implode(' ', $constructorValidator->errors()->all()),
+        );
+    }
+
+    private function check(mixed $value, ?string $expectedPrefix = null): Validator
+    {
+        return ValidatorFacade::make(
+            ['id' => $value],
+            ['id' => [$expectedPrefix === null ? new ValidPublicId : new ValidPublicId($expectedPrefix)]],
         );
     }
 }

@@ -11,6 +11,7 @@ use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Transfers\AccountTransfer;
+use RuntimeException;
 
 class AccountServiceDeleteTest extends AccountsTestCase
 {
@@ -125,12 +126,12 @@ class AccountServiceDeleteTest extends AccountsTestCase
         // Force rollback after soft delete by hooking the Account 'deleted'
         // model event.
         Account::deleted(function (): void {
-            throw new \RuntimeException('Forced rollback after delete');
+            throw new RuntimeException('Forced rollback after delete');
         });
 
         try {
             $this->service->delete($account);
-        } catch (\RuntimeException) {
+        } catch (RuntimeException) {
             // expected
         }
 

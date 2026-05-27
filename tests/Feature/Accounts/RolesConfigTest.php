@@ -4,24 +4,13 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Tests\Feature\Accounts;
 
+use InvalidArgumentException;
 use Progravity\Auth\Exceptions\InvalidRolesConfigException;
 use Progravity\Auth\Roles\RolesConfig;
 use Progravity\Auth\Tests\TestCase;
 
 class RolesConfigTest extends TestCase
 {
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function validRoles(): array
-    {
-        return [
-            'owner' => ['name' => 'Owner', 'description' => 'Owns it.', 'system' => true, 'sort_order' => 1],
-            'admin' => ['name' => 'Administrator', 'system' => true, 'sort_order' => 2],
-            'auditor' => ['name' => 'Auditor', 'system' => false, 'sort_order' => 10],
-        ];
-    }
-
     public function test_default_config_constructs_successfully(): void
     {
         $config = new RolesConfig(config('progravity.auth.roles'));
@@ -97,8 +86,20 @@ class RolesConfigTest extends TestCase
     {
         $config = new RolesConfig($this->validRoles());
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         $config->get('missing');
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function validRoles(): array
+    {
+        return [
+            'owner' => ['name' => 'Owner', 'description' => 'Owns it.', 'system' => true, 'sort_order' => 1],
+            'admin' => ['name' => 'Administrator', 'system' => true, 'sort_order' => 2],
+            'auditor' => ['name' => 'Auditor', 'system' => false, 'sort_order' => 10],
+        ];
     }
 }

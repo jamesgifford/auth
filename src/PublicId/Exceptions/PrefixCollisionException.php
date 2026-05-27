@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Exceptions;
 
+use Progravity\Auth\PublicId\PrefixRegistry;
 use RuntimeException;
 
 /**
  * Thrown when two or more registered models claim the same public_id prefix.
- * Detected at boot via {@see \Progravity\Auth\PublicId\PrefixRegistry::assertNoCollisions()}.
+ * Detected at boot via {@see PrefixRegistry::assertNoCollisions()}.
  */
 class PrefixCollisionException extends RuntimeException
 {

@@ -61,6 +61,11 @@ final class Alphabet
         $this->index = $map;
     }
 
+    public function __toString(): string
+    {
+        return $this->toString();
+    }
+
     public function size(): int
     {
         return $this->size;
@@ -78,7 +83,7 @@ final class Alphabet
 
     /**
      * @throws InvalidArgumentException when $char is not exactly one character
-     * @throws OutOfBoundsException     when $char is not a member of the alphabet
+     * @throws OutOfBoundsException when $char is not a member of the alphabet
      */
     public function indexOf(string $char): int
     {
@@ -110,11 +115,6 @@ final class Alphabet
     public function toString(): string
     {
         return $this->characters;
-    }
-
-    public function __toString(): string
-    {
-        return $this->toString();
     }
 
     public function equals(Alphabet $other): bool

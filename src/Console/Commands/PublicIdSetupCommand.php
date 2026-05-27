@@ -14,6 +14,7 @@ use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
 use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
 use Progravity\Auth\PublicId\Generator;
+use Throwable;
 
 /**
  * Interactive wizard run once after install to lock the public_id
@@ -47,7 +48,7 @@ final class PublicIdSetupCommand extends Command
             try {
                 $contents = $this->lockFile->read();
                 $this->line('  Locked at:          '.$contents->lockedAt);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // best-effort: skip the timestamp line if read fails
             }
             $this->newLine();

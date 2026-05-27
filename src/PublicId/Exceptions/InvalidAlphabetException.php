@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Progravity\Auth\PublicId\Exceptions;
 
 use InvalidArgumentException;
+use Progravity\Auth\PublicId\Alphabet;
 
 /**
- * Thrown when an alphabet string fails {@see \Progravity\Auth\PublicId\Alphabet}
+ * Thrown when an alphabet string fails {@see Alphabet}
  * validation: too short, or contains duplicate characters.
  */
 class InvalidAlphabetException extends InvalidArgumentException

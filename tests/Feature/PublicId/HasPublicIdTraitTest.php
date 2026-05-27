@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Tests\Feature\PublicId;
 
+use Illuminate\Database\Eloquent\Model;
 use Progravity\Auth\PublicId\PrefixRegistry;
 use Progravity\Auth\PublicId\PublicId;
 use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
@@ -14,12 +15,7 @@ class HasPublicIdTraitTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        \Illuminate\Database\Eloquent\Model::clearBootedModels();
-    }
-
-    protected function defineDatabaseMigrations(): void
-    {
-        $this->loadMigrationsFrom(__DIR__.'/../../Support/migrations');
+        Model::clearBootedModels();
     }
 
     public function test_creating_model_auto_generates_public_id(): void
@@ -101,5 +97,10 @@ class HasPublicIdTraitTest extends TestCase
 
         $this->assertArrayHasKey(FixtureModel::class, $registry->all());
         $this->assertSame('fix', $registry->all()[FixtureModel::class]);
+    }
+
+    protected function defineDatabaseMigrations(): void
+    {
+        $this->loadMigrationsFrom(__DIR__.'/../../Support/migrations');
     }
 }

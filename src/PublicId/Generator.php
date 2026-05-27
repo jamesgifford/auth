@@ -22,7 +22,7 @@ final class Generator
     public function __construct(private readonly PublicIdConfig $config)
     {
         $strategyClass = $config->checksumStrategy();
-        $this->checksumStrategy = new $strategyClass();
+        $this->checksumStrategy = new $strategyClass;
     }
 
     /**

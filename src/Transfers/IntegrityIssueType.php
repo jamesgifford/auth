@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Transfers;
 
+use Progravity\Auth\Accounts\Services\AccountIntegrityService;
+
 /**
  * Categories of Owner-invariant violations detected by
- * {@see \Progravity\Auth\Accounts\Services\AccountIntegrityService}.
+ * {@see AccountIntegrityService}.
  *
  * The three cases cover the practical failure modes for the
  * "every account has exactly one Owner" invariant:

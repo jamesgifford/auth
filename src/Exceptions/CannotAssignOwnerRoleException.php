@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Exceptions;
 
+use Progravity\Auth\Accounts\Services\AccountService;
 use RuntimeException;
 
 /**
  * Thrown when a caller tries to assign the 'owner' role through any path
- * other than {@see \Progravity\Auth\Accounts\Services\AccountService::create()}
+ * other than {@see AccountService::create()}
  * or transferOwnership(). The Owner role is bound to a specific user per
  * account; assigning it via attachUser/changeRole would create the
  * possibility of two owners.

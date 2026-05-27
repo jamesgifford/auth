@@ -13,11 +13,6 @@ use Progravity\Auth\Tests\TestCase;
 
 class ValidatorTest extends TestCase
 {
-    private function validator(array $overrides = []): Validator
-    {
-        return new Validator(PublicIdConfigFactory::default($overrides));
-    }
-
     public function test_empty_input_returns_empty_reason(): void
     {
         $result = $this->validator()->validate('');
@@ -258,8 +253,13 @@ class ValidatorTest extends TestCase
             $result = $validator->validate($input);
             $this->assertFalse(
                 $result->isValid(),
-                "expected invalid result for input ".var_export($input, true),
+                'expected invalid result for input '.var_export($input, true),
             );
         }
+    }
+
+    private function validator(array $overrides = []): Validator
+    {
+        return new Validator(PublicIdConfigFactory::default($overrides));
     }
 }

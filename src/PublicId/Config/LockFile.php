@@ -26,9 +26,7 @@ final class LockFile
 
     private const REQUIRED_KEYS = ['version', 'locked_at', 'fingerprint', 'config'];
 
-    public function __construct(private readonly string $path)
-    {
-    }
+    public function __construct(private readonly string $path) {}
 
     public function path(): string
     {
@@ -43,9 +41,9 @@ final class LockFile
     /**
      * Read and parse the lock file.
      *
-     * @throws MissingLockFileException     when the file does not exist
-     * @throws MalformedLockFileException   when the file content is not valid JSON
-     * @throws IncompleteLockFileException  when required keys are missing or wrongly typed
+     * @throws MissingLockFileException when the file does not exist
+     * @throws MalformedLockFileException when the file content is not valid JSON
+     * @throws IncompleteLockFileException when required keys are missing or wrongly typed
      */
     public function read(): LockFileContents
     {

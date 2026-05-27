@@ -21,9 +21,7 @@ use Progravity\Auth\PublicId\Validator;
  */
 final class ValidPublicId implements ValidationRule
 {
-    public function __construct(private readonly ?string $expectedPrefix = null)
-    {
-    }
+    public function __construct(private readonly ?string $expectedPrefix = null) {}
 
     /**
      * Readability-oriented alternative to {@see __construct()}. Equivalent

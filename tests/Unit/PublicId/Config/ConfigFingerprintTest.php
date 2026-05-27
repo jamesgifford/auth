@@ -13,41 +13,6 @@ use Progravity\Auth\Tests\TestCase;
 
 class ConfigFingerprintTest extends TestCase
 {
-    private function registry(): AlphabetRegistry
-    {
-        return new AlphabetRegistry;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function baseConfig(): array
-    {
-        return [
-            'prefix_max_length' => 7,
-            'separator' => '_',
-            'body' => [
-                'length' => 18,
-                'alphabet' => 'lowercase_alphanumeric',
-            ],
-            'checksum' => [
-                'enabled' => true,
-                'length' => 2,
-                'strategy' => PositionalSumChecksum::class,
-            ],
-            'lock_file_path' => null,
-            'prefixes' => [],
-            'custom_alphabet_presets' => [],
-        ];
-    }
-
-    private function fingerprint(array $configArray): string
-    {
-        $config = new PublicIdConfig($configArray, $this->registry());
-
-        return (new ConfigFingerprint)->compute($config);
-    }
-
     public function test_identical_configs_produce_identical_fingerprints(): void
     {
         $a = $this->fingerprint($this->baseConfig());
@@ -152,5 +117,40 @@ class ConfigFingerprintTest extends TestCase
         $hex = substr($fingerprint, 7);
         $this->assertSame(64, strlen($hex));
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $hex);
+    }
+
+    private function registry(): AlphabetRegistry
+    {
+        return new AlphabetRegistry;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function baseConfig(): array
+    {
+        return [
+            'prefix_max_length' => 7,
+            'separator' => '_',
+            'body' => [
+                'length' => 18,
+                'alphabet' => 'lowercase_alphanumeric',
+            ],
+            'checksum' => [
+                'enabled' => true,
+                'length' => 2,
+                'strategy' => PositionalSumChecksum::class,
+            ],
+            'lock_file_path' => null,
+            'prefixes' => [],
+            'custom_alphabet_presets' => [],
+        ];
+    }
+
+    private function fingerprint(array $configArray): string
+    {
+        $config = new PublicIdConfig($configArray, $this->registry());
+
+        return (new ConfigFingerprint)->compute($config);
     }
 }

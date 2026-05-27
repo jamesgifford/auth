@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Exceptions;
 
+use Progravity\Auth\PublicId\Config\LockFile;
 use RuntimeException;
 use Throwable;
 
 /**
- * Thrown by {@see \Progravity\Auth\PublicId\Config\LockFile::write()} and
+ * Thrown by {@see LockFile::write()} and
  * `delete()` on directory-creation, JSON-encoding, or file-system failures.
  */
 class LockFileWriteException extends RuntimeException

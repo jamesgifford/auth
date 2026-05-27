@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Progravity\Auth\PublicId;
 
 use OutOfBoundsException;
+use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
 
 /**
  * Registry of named alphabet presets. Resolves config values — which
@@ -40,8 +41,8 @@ final class AlphabetRegistry
     /**
      * @param  array<string, string>  $customPresets  name => raw alphabet string
      *
-     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException when a
-     *         custom preset's value fails Alphabet validation
+     * @throws InvalidAlphabetException when a
+     *                                  custom preset's value fails Alphabet validation
      */
     public function __construct(array $customPresets = [])
     {
@@ -60,8 +61,8 @@ final class AlphabetRegistry
      * Look up `$value` as a preset name; if no match, treat it as a raw
      * alphabet string and instantiate {@see Alphabet} directly.
      *
-     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException when
-     *         `$value` is not a preset and is not a valid raw alphabet
+     * @throws InvalidAlphabetException when
+     *                                  `$value` is not a preset and is not a valid raw alphabet
      */
     public function resolve(string $value): Alphabet
     {

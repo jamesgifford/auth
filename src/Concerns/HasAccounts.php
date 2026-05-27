@@ -12,6 +12,7 @@ use Progravity\Auth\Exceptions\NotAMemberException;
 use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountRole;
 use Progravity\Auth\Models\AccountUser;
+use Progravity\Auth\PublicId\Concerns\HasPublicId;
 use Progravity\Auth\SystemRole;
 
 /**
@@ -24,7 +25,7 @@ use Progravity\Auth\SystemRole;
  * is {@see switchToAccount()}, which updates the user's current_account_id
  * after verifying membership.
  *
- * Composes independently with {@see \Progravity\Auth\PublicId\Concerns\HasPublicId}:
+ * Composes independently with {@see HasPublicId}:
  *
  *     use HasPublicId, HasAccounts;
  */

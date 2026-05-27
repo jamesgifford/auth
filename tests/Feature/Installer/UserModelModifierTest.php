@@ -8,6 +8,7 @@ use PhpParser\Parser;
 use PhpParser\PrettyPrinter\Standard;
 use Progravity\Auth\Installer\UserModelModifier;
 use Progravity\Auth\Tests\TestCase;
+use RuntimeException;
 
 class UserModelModifierTest extends TestCase
 {
@@ -37,21 +38,6 @@ class UserModelModifierTest extends TestCase
         }
         @rmdir($this->tmpDir);
         parent::tearDown();
-    }
-
-    private function fixturePath(string $name): string
-    {
-        return __DIR__.'/../../Support/Fixtures/UserModels/'.$name.'.php';
-    }
-
-    private function copyFixtureToTmp(string $name): string
-    {
-        $source = $this->fixturePath($name);
-        $dest = $this->tmpDir.DIRECTORY_SEPARATOR.$name.'.php';
-        copy($source, $dest);
-        $this->createdFiles[] = $dest;
-
-        return $dest;
     }
 
     // ---- analyze() ----
@@ -134,7 +120,7 @@ class UserModelModifierTest extends TestCase
         $this->assertFalse($analysis->isModifiable());
     }
 
-    public function test_analyze_detects_existing_publicIdPrefix_method(): void
+    public function test_analyze_detects_existing_public_id_prefix_method(): void
     {
         $analysis = $this->modifier->analyze($this->fixturePath('UserWithCustomPrefix'));
 
@@ -177,7 +163,7 @@ class UserModelModifierTest extends TestCase
         $this->assertContains('HasAccounts', $mod->addedTraits);
     }
 
-    public function test_modify_adds_publicIdPrefix_method(): void
+    public function test_modify_adds_public_id_prefix_method(): void
     {
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
         $analysis = $this->modifier->analyze($file);
@@ -189,7 +175,7 @@ class UserModelModifierTest extends TestCase
         $this->assertTrue($mod->addedPublicIdPrefixMethod);
     }
 
-    public function test_modify_does_not_overwrite_existing_publicIdPrefix(): void
+    public function test_modify_does_not_overwrite_existing_public_id_prefix(): void
     {
         $file = $this->copyFixtureToTmp('UserWithCustomPrefix');
         $analysis = $this->modifier->analyze($file);
@@ -241,8 +227,8 @@ class UserModelModifierTest extends TestCase
         $this->assertStringContainsString('use Illuminate\\Database\\Eloquent\\Factories\\HasFactory;', $mod->modifiedCode);
         $this->assertStringContainsString('use Illuminate\\Notifications\\Notifiable;', $mod->modifiedCode);
         // Existing class members must still be present.
-        $this->assertStringContainsString("protected \$fillable", $mod->modifiedCode);
-        $this->assertStringContainsString("protected \$hidden", $mod->modifiedCode);
+        $this->assertStringContainsString('protected $fillable', $mod->modifiedCode);
+        $this->assertStringContainsString('protected $hidden', $mod->modifiedCode);
         $this->assertStringContainsString('casts()', $mod->modifiedCode);
         // Existing trait usage preserved.
         $this->assertStringContainsString('use HasFactory, Notifiable;', $mod->modifiedCode);
@@ -265,7 +251,7 @@ class UserModelModifierTest extends TestCase
     {
         $analysis = $this->modifier->analyze($this->fixturePath('UserWithCustomBase'));
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Cannot modify User model');
 
         $this->modifier->modify($this->fixturePath('UserWithCustomBase'), $analysis);
@@ -357,9 +343,24 @@ class UserModelModifierTest extends TestCase
     {
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('No backup file found');
 
         $this->modifier->restore($file);
+    }
+
+    private function fixturePath(string $name): string
+    {
+        return __DIR__.'/../../Support/Fixtures/UserModels/'.$name.'.php';
+    }
+
+    private function copyFixtureToTmp(string $name): string
+    {
+        $source = $this->fixturePath($name);
+        $dest = $this->tmpDir.DIRECTORY_SEPARATOR.$name.'.php';
+        copy($source, $dest);
+        $this->createdFiles[] = $dest;
+
+        return $dest;
     }
 }

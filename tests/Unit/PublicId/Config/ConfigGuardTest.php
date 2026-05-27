@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Progravity\Auth\Tests\Unit\PublicId\Config;
 
 use Progravity\Auth\PublicId\AlphabetRegistry;
+use Progravity\Auth\PublicId\Checksum\NullChecksum;
 use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
 use Progravity\Auth\PublicId\Config\ConfigFingerprint;
 use Progravity\Auth\PublicId\Config\ConfigGuard;
@@ -28,74 +29,6 @@ class ConfigGuardTest extends TestCase
     {
         $this->rmTree($this->tmpDir);
         parent::tearDown();
-    }
-
-    private function rmTree(string $dir): void
-    {
-        if (! is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir.DIRECTORY_SEPARATOR.$entry;
-            if (is_dir($path)) {
-                $this->rmTree($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function baseConfig(): array
-    {
-        return [
-            'prefix_max_length' => 7,
-            'separator' => '_',
-            'body' => [
-                'length' => 18,
-                'alphabet' => 'lowercase_alphanumeric',
-            ],
-            'checksum' => [
-                'enabled' => true,
-                'length' => 2,
-                'strategy' => PositionalSumChecksum::class,
-            ],
-            'lock_file_path' => null,
-            'prefixes' => [],
-            'custom_alphabet_presets' => [],
-        ];
-    }
-
-    private function makeConfig(array $overrides = []): PublicIdConfig
-    {
-        $base = $this->baseConfig();
-        foreach ($overrides as $path => $value) {
-            $segments = explode('.', $path);
-            $cursor = &$base;
-            foreach ($segments as $i => $segment) {
-                if ($i === count($segments) - 1) {
-                    $cursor[$segment] = $value;
-                } else {
-                    $cursor = &$cursor[$segment];
-                }
-            }
-            unset($cursor);
-        }
-
-        return new PublicIdConfig($base, new AlphabetRegistry);
-    }
-
-    private function makeGuard(PublicIdConfig $config, ?string $lockPath = null): ConfigGuard
-    {
-        $lockPath ??= $this->tmpDir.'/auth.lock.json';
-
-        return new ConfigGuard($config, new LockFile($lockPath), new ConfigFingerprint);
     }
 
     public function test_status_not_yet_locked_when_no_file(): void
@@ -179,7 +112,7 @@ class ConfigGuardTest extends TestCase
             'body.length' => 16,
             'checksum.enabled' => false,
             'checksum.length' => 0,
-            'checksum.strategy' => \Progravity\Auth\PublicId\Checksum\NullChecksum::class,
+            'checksum.strategy' => NullChecksum::class,
         ]);
         $currentFingerprint = $fingerprintCalc->compute($changed);
 
@@ -228,5 +161,73 @@ class ConfigGuardTest extends TestCase
             (new ConfigFingerprint)->compute($config),
             $guard->currentFingerprint()
         );
+    }
+
+    private function rmTree(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.DIRECTORY_SEPARATOR.$entry;
+            if (is_dir($path)) {
+                $this->rmTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function baseConfig(): array
+    {
+        return [
+            'prefix_max_length' => 7,
+            'separator' => '_',
+            'body' => [
+                'length' => 18,
+                'alphabet' => 'lowercase_alphanumeric',
+            ],
+            'checksum' => [
+                'enabled' => true,
+                'length' => 2,
+                'strategy' => PositionalSumChecksum::class,
+            ],
+            'lock_file_path' => null,
+            'prefixes' => [],
+            'custom_alphabet_presets' => [],
+        ];
+    }
+
+    private function makeConfig(array $overrides = []): PublicIdConfig
+    {
+        $base = $this->baseConfig();
+        foreach ($overrides as $path => $value) {
+            $segments = explode('.', $path);
+            $cursor = &$base;
+            foreach ($segments as $i => $segment) {
+                if ($i === count($segments) - 1) {
+                    $cursor[$segment] = $value;
+                } else {
+                    $cursor = &$cursor[$segment];
+                }
+            }
+            unset($cursor);
+        }
+
+        return new PublicIdConfig($base, new AlphabetRegistry);
+    }
+
+    private function makeGuard(PublicIdConfig $config, ?string $lockPath = null): ConfigGuard
+    {
+        $lockPath ??= $this->tmpDir.'/auth.lock.json';
+
+        return new ConfigGuard($config, new LockFile($lockPath), new ConfigFingerprint);
     }
 }

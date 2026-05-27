@@ -27,20 +27,18 @@ use ReflectionMethod;
 final class PrefixRegistry
 {
     /**
-     * @var array<string, string>  modelClass => prefix
+     * @var array<string, string> modelClass => prefix
      */
     private array $registered = [];
 
-    public function __construct(private readonly PublicIdConfig $config)
-    {
-    }
+    public function __construct(private readonly PublicIdConfig $config) {}
 
     /**
      * Return the prefix claimed by the given model class.
      *
-     * @throws InvalidPrefixException     if the model's publicIdPrefix() returns
-     *                                    a value that isn't 1+ lowercase ASCII letters
-     *                                    within prefix_max_length
+     * @throws InvalidPrefixException if the model's publicIdPrefix() returns
+     *                                a value that isn't 1+ lowercase ASCII letters
+     *                                within prefix_max_length
      * @throws UnregisteredModelException if the model has no override and no config entry
      */
     public function prefixFor(string $modelClass): string
@@ -73,7 +71,7 @@ final class PrefixRegistry
     /**
      * Eagerly register a model and cache its resolved prefix. Idempotent.
      *
-     * @throws InvalidPrefixException     see {@see prefixFor()}
+     * @throws InvalidPrefixException see {@see prefixFor()}
      * @throws UnregisteredModelException see {@see prefixFor()}
      */
     public function register(string $modelClass): void

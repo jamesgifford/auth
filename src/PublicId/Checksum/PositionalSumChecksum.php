@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Checksum;
 
+use OutOfBoundsException;
 use Progravity\Auth\PublicId\Alphabet;
 
 /**
@@ -18,8 +19,8 @@ use Progravity\Auth\PublicId\Alphabet;
 final class PositionalSumChecksum implements ChecksumStrategy
 {
     /**
-     * @throws \OutOfBoundsException when `$body` contains a character
-     *                               not present in `$alphabet`
+     * @throws OutOfBoundsException when `$body` contains a character
+     *                              not present in `$alphabet`
      */
     public function compute(string $body, Alphabet $alphabet, int $length): string
     {

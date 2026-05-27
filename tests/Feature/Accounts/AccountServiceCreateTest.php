@@ -8,12 +8,15 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Progravity\Auth\Accounts\Services\AccountService;
 use Progravity\Auth\Events\AccountCreated;
+use Progravity\Auth\Exceptions\InvalidRoleException;
 use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountRole;
+use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Transfers\AccountTransfer;
 use Progravity\Auth\Transfers\MembershipTransfer;
 use Progravity\Auth\Transfers\UserTransfer;
+use RuntimeException;
 
 class AccountServiceCreateTest extends AccountsTestCase
 {
@@ -190,7 +193,7 @@ class AccountServiceCreateTest extends AccountsTestCase
 
         $owner = User::factory()->create();
 
-        $this->expectException(\Progravity\Auth\Exceptions\InvalidRoleException::class);
+        $this->expectException(InvalidRoleException::class);
 
         $this->service->create($owner);
     }
@@ -212,20 +215,20 @@ class AccountServiceCreateTest extends AccountsTestCase
         $owner = User::factory()->create();
 
         $accountsBefore = Account::count();
-        $membershipsBefore = \Progravity\Auth\Models\AccountUser::count();
+        $membershipsBefore = AccountUser::count();
 
         Account::creating(function () {
-            throw new \RuntimeException('Forced failure inside transaction');
+            throw new RuntimeException('Forced failure inside transaction');
         });
 
         try {
             $this->service->create($owner);
             $this->fail('Expected forced failure was not raised.');
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->assertSame('Forced failure inside transaction', $e->getMessage());
         }
 
         $this->assertSame($accountsBefore, Account::count(), 'No account row should persist after rollback.');
-        $this->assertSame($membershipsBefore, \Progravity\Auth\Models\AccountUser::count(), 'No membership row should persist after rollback.');
+        $this->assertSame($membershipsBefore, AccountUser::count(), 'No membership row should persist after rollback.');
     }
 }

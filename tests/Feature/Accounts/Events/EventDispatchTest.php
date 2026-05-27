@@ -19,6 +19,7 @@ use Progravity\Auth\Transfers\AccountRoleTransfer;
 use Progravity\Auth\Transfers\AccountTransfer;
 use Progravity\Auth\Transfers\MembershipTransfer;
 use Progravity\Auth\Transfers\UserTransfer;
+use RuntimeException;
 
 class EventDispatchTest extends AccountsTestCase
 {
@@ -78,9 +79,9 @@ class EventDispatchTest extends AccountsTestCase
                 // afterCommit hook is scheduled against this outer transaction
                 // (since the service's DB::transaction is nested), so it
                 // should NOT fire when this rollback runs.
-                throw new \RuntimeException('Outer rollback');
+                throw new RuntimeException('Outer rollback');
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->assertSame('Outer rollback', $e->getMessage());
         }
 

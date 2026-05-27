@@ -13,6 +13,7 @@ use Progravity\Auth\Models\Account;
 use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Transfers\AccountRoleTransfer;
+use RuntimeException;
 
 class AccountServiceDetachUserTest extends AccountsTestCase
 {
@@ -181,12 +182,12 @@ class AccountServiceDetachUserTest extends AccountsTestCase
         AccountUser::factory()->for($account)->for($member)->memberRole()->create();
 
         AccountUser::deleted(function (): void {
-            throw new \RuntimeException('Forced failure after delete');
+            throw new RuntimeException('Forced failure after delete');
         });
 
         try {
             $this->service->detachUser($account, $member);
-        } catch (\RuntimeException) {
+        } catch (RuntimeException) {
             // expected
         }
 

@@ -18,6 +18,5 @@ final class LockFileContents
         public readonly string $lockedAt,
         public readonly string $fingerprint,
         public readonly array $config,
-    ) {
-    }
+    ) {}
 }

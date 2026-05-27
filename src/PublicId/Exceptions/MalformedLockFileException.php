@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Exceptions;
 
+use Progravity\Auth\PublicId\Config\LockFile;
 use RuntimeException;
 
 /**
- * Thrown by {@see \Progravity\Auth\PublicId\Config\LockFile::read()} when the
+ * Thrown by {@see LockFile::read()} when the
  * lock file content is unreadable or not valid JSON.
  */
 class MalformedLockFileException extends RuntimeException

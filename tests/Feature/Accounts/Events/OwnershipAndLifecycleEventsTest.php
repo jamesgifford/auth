@@ -17,6 +17,7 @@ use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Transfers\AccountTransfer;
+use RuntimeException;
 
 class OwnershipAndLifecycleEventsTest extends AccountsTestCase
 {
@@ -121,9 +122,9 @@ class OwnershipAndLifecycleEventsTest extends AccountsTestCase
                 // Force outer rollback. The service's afterCommit hook is
                 // scheduled against the outer transaction, so the event must
                 // not fire.
-                throw new \RuntimeException('Outer rollback');
+                throw new RuntimeException('Outer rollback');
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->assertSame('Outer rollback', $e->getMessage());
         }
 

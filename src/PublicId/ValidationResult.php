@@ -20,8 +20,7 @@ final class ValidationResult
         public readonly ?string $checksum,
         public readonly ?ValidationFailureReason $failureReason,
         public readonly ?string $failureDetail,
-    ) {
-    }
+    ) {}
 
     public static function valid(string $prefix, string $body, string $checksum): self
     {

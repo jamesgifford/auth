@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Exceptions;
 
+use Progravity\Auth\PublicId\Config\LockFile;
 use RuntimeException;
 
 /**
- * Thrown by {@see \Progravity\Auth\PublicId\Config\LockFile::read()} when the
+ * Thrown by {@see LockFile::read()} when the
  * lock file parses as JSON but is missing required keys or has wrongly
  * typed values. The factory message lists every missing/typed key so the
  * caller doesn't need to fix them one at a time.

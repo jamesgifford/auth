@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Progravity\Auth\Database\Factories\AccountRoleFactory;
+use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
 use Progravity\Auth\Exceptions\CannotDeleteSystemRoleException;
 
 /**
@@ -15,7 +16,7 @@ use Progravity\Auth\Exceptions\CannotDeleteSystemRoleException;
  *
  * Roles are reference data. They are configured in
  * config('progravity.auth.roles') (the source of truth) and seeded into the
- * account_roles table via {@see \Progravity\Auth\Database\Seeders\AccountRoleSeeder}.
+ * account_roles table via {@see AccountRoleSeeder}.
  *
  * System roles (system => true) ship with the package and cannot be deleted
  * via Eloquent — see {@see booted()}. Consumers may extend this class and

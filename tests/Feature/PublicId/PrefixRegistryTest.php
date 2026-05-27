@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\Tests\Feature\PublicId;
 
+use Illuminate\Database\Eloquent\Model;
 use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
 use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
 use Progravity\Auth\PublicId\Exceptions\UnregisteredModelException;
@@ -22,7 +23,7 @@ class PrefixRegistryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        \Illuminate\Database\Eloquent\Model::clearBootedModels();
+        Model::clearBootedModels();
     }
 
     public function test_prefix_for_returns_value_from_trait_override(): void

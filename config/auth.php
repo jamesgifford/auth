@@ -1,5 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Models\User;
+use Progravity\Auth\Models\Account;
+use Progravity\Auth\Models\AccountRole;
+use Progravity\Auth\Models\AccountUser;
+use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
+
 return [
 
     /*
@@ -51,7 +59,7 @@ return [
             // Must implement
             // Progravity\Auth\PublicId\Checksum\ChecksumStrategy.
             // Locked at setup.
-            'strategy' => \Progravity\Auth\PublicId\Checksum\PositionalSumChecksum::class,
+            'strategy' => PositionalSumChecksum::class,
         ],
 
         // Path to the lock file. Null uses the default location at
@@ -92,10 +100,10 @@ return [
     */
 
     'models' => [
-        'user' => \App\Models\User::class,
-        'account' => \Progravity\Auth\Models\Account::class,
-        'account_role' => \Progravity\Auth\Models\AccountRole::class,
-        'account_user' => \Progravity\Auth\Models\AccountUser::class,
+        'user' => User::class,
+        'account' => Account::class,
+        'account_role' => AccountRole::class,
+        'account_user' => AccountUser::class,
     ],
 
     /*

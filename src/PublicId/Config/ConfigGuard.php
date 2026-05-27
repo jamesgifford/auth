@@ -30,8 +30,7 @@ final class ConfigGuard
         private readonly PublicIdConfig $config,
         private readonly LockFile $lockFile,
         private readonly ConfigFingerprint $fingerprintCalculator,
-    ) {
-    }
+    ) {}
 
     /**
      * Classify the current state: NotYetLocked, Locked, or Drifted.

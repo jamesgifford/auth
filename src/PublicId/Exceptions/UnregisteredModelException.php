@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Progravity\Auth\PublicId\Exceptions;
 
+use Progravity\Auth\PublicId\PrefixRegistry;
 use RuntimeException;
 
 /**
- * Thrown when {@see \Progravity\Auth\PublicId\PrefixRegistry} is asked for a
+ * Thrown when {@see PrefixRegistry} is asked for a
  * model's prefix but the model neither overrides `publicIdPrefix()` nor
  * appears in the config prefixes map.
  */

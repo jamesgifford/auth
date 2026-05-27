@@ -7,6 +7,7 @@ namespace Progravity\Auth\PublicId\Config;
 use Progravity\Auth\PublicId\Alphabet;
 use Progravity\Auth\PublicId\AlphabetRegistry;
 use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
+use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use Progravity\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
 
 /**
@@ -56,9 +57,9 @@ final class PublicIdConfig
      * @param  array<string, mixed>  $config  the `public_id` config subarray
      *
      * @throws InvalidPublicIdConfigException on any validation failure;
-     *         message names the offending key and value
-     * @throws \Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException
-     *         when `body.alphabet` resolves to an invalid raw alphabet
+     *                                        message names the offending key and value
+     * @throws InvalidAlphabetException
+     *                                  when `body.alphabet` resolves to an invalid raw alphabet
      */
     public function __construct(array $config, AlphabetRegistry $alphabetRegistry)
     {

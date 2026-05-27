@@ -26,9 +26,7 @@ use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
  */
 final class PublicId
 {
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 
     /**
      * Generate a new public ID for the given prefix.

@@ -25,9 +25,9 @@ class AccountUser extends Pivot
 {
     use HasFactory;
 
-    protected $table = 'account_user';
-
     public $incrementing = true;
+
+    protected $table = 'account_user';
 
     protected $fillable = ['account_id', 'user_id', 'account_role_id', 'joined_at'];
 

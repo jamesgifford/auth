@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Progravity\Auth\Tests\Feature\Installer;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Artisan;
 use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\Models\AccountRole;
+use Progravity\Auth\PublicId\Config\ConfigFingerprint;
 use Progravity\Auth\PublicId\Config\ConfigGuard;
 use Progravity\Auth\PublicId\Config\LockFile;
+use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\Tests\Support\Fixtures\User;
 use Progravity\Auth\Tests\TestCase;
 
@@ -38,21 +39,6 @@ class AuthInstallCommandTest extends TestCase
         Model::clearBootedModels();
     }
 
-    protected function defineEnvironment($app): void
-    {
-        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'progravity-install-'.uniqid('', true);
-        mkdir($this->tmpDir, 0777, true);
-        $this->lockFilePath = $this->tmpDir.DIRECTORY_SEPARATOR.'auth.lock.json';
-        $this->migrationsDir = $app->databasePath('migrations');
-
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->lockFilePath);
-        $app['config']->set('progravity.auth.models.user', User::class);
-
-        // Sqlite + foreign keys for the full-install path.
-        $connection = $app['config']->get('database.default');
-        $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
-    }
-
     protected function tearDown(): void
     {
         $this->rmTree($this->tmpDir);
@@ -75,53 +61,6 @@ class AuthInstallCommandTest extends TestCase
             }
         }
         parent::tearDown();
-    }
-
-    private function rmTree(string $dir): void
-    {
-        if (! is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir.DIRECTORY_SEPARATOR.$entry;
-            if (is_dir($path)) {
-                $this->rmTree($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
-    }
-
-    private function writeLockFile(): void
-    {
-        $this->app->forgetInstance(ConfigGuard::class);
-        $config = $this->app->make(\Progravity\Auth\PublicId\Config\PublicIdConfig::class);
-        $fingerprint = $this->app->make(\Progravity\Auth\PublicId\Config\ConfigFingerprint::class);
-        $this->app->make(LockFile::class)->write($config, $fingerprint->compute($config));
-        // Clear the cached guard state.
-        $this->app->forgetInstance(ConfigGuard::class);
-    }
-
-    private function copyPackageMigrationsToTestbenchPath(): void
-    {
-        if (! is_dir($this->migrationsDir)) {
-            mkdir($this->migrationsDir, 0777, true);
-        }
-        $source = __DIR__.'/../../../database/migrations';
-        foreach ((array) glob($source.DIRECTORY_SEPARATOR.'*.php') as $file) {
-            copy((string) $file, $this->migrationsDir.DIRECTORY_SEPARATOR.basename((string) $file));
-        }
-    }
-
-    private function runPackageMigrations(): void
-    {
-        $this->loadLaravelMigrations();
-        $this->artisan('migrate', ['--path' => 'database/migrations', '--realpath' => true])
-            ->run();
     }
 
     // ---- Verify mode ----
@@ -259,11 +198,11 @@ class AuthInstallCommandTest extends TestCase
         // PendingCommand's expectsOutputToContain matches line-by-line and
         // would consume the same line twice if we used both expectations.
         // Run via Artisan facade and inspect the full output string.
-        \Illuminate\Support\Facades\Artisan::call('progravity:auth:install', [
+        Artisan::call('progravity:auth:install', [
             '--force' => true,
             '--skip-user-model' => true,
         ]);
-        $output = \Illuminate\Support\Facades\Artisan::output();
+        $output = Artisan::output();
 
         $this->assertStringContainsString('Modify your User model', $output);
         $this->assertStringContainsString('skipped via flag', $output);
@@ -279,5 +218,67 @@ class AuthInstallCommandTest extends TestCase
         $this->artisan('progravity:auth:install', ['--force' => true, '--no-modify-user' => true])
             ->expectsOutputToContain('skipped via flag')
             ->assertSuccessful();
+    }
+
+    protected function defineEnvironment($app): void
+    {
+        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'progravity-install-'.uniqid('', true);
+        mkdir($this->tmpDir, 0777, true);
+        $this->lockFilePath = $this->tmpDir.DIRECTORY_SEPARATOR.'auth.lock.json';
+        $this->migrationsDir = $app->databasePath('migrations');
+
+        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->lockFilePath);
+        $app['config']->set('progravity.auth.models.user', User::class);
+
+        // Sqlite + foreign keys for the full-install path.
+        $connection = $app['config']->get('database.default');
+        $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
+    }
+
+    private function rmTree(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.DIRECTORY_SEPARATOR.$entry;
+            if (is_dir($path)) {
+                $this->rmTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    private function writeLockFile(): void
+    {
+        $this->app->forgetInstance(ConfigGuard::class);
+        $config = $this->app->make(PublicIdConfig::class);
+        $fingerprint = $this->app->make(ConfigFingerprint::class);
+        $this->app->make(LockFile::class)->write($config, $fingerprint->compute($config));
+        // Clear the cached guard state.
+        $this->app->forgetInstance(ConfigGuard::class);
+    }
+
+    private function copyPackageMigrationsToTestbenchPath(): void
+    {
+        if (! is_dir($this->migrationsDir)) {
+            mkdir($this->migrationsDir, 0777, true);
+        }
+        $source = __DIR__.'/../../../database/migrations';
+        foreach ((array) glob($source.DIRECTORY_SEPARATOR.'*.php') as $file) {
+            copy((string) $file, $this->migrationsDir.DIRECTORY_SEPARATOR.basename((string) $file));
+        }
+    }
+
+    private function runPackageMigrations(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->artisan('migrate', ['--path' => 'database/migrations', '--realpath' => true])
+            ->run();
     }
 }

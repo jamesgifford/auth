@@ -10,11 +10,6 @@ use Progravity\Auth\Tests\TestCase;
 
 class NullChecksumTest extends TestCase
 {
-    private function alphabet(): Alphabet
-    {
-        return new Alphabet('abcdefghijklmnopqrstuvwxyz0123456789');
-    }
-
     public function test_compute_returns_empty_string_for_length_zero(): void
     {
         $checksum = new NullChecksum;
@@ -62,5 +57,10 @@ class NullChecksumTest extends TestCase
         $checksum = new NullChecksum;
 
         $this->assertTrue($checksum->verify('', 'whatever', $this->alphabet(), 99));
+    }
+
+    private function alphabet(): Alphabet
+    {
+        return new Alphabet('abcdefghijklmnopqrstuvwxyz0123456789');
     }
 }

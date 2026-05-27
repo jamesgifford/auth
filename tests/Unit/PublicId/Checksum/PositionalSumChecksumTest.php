@@ -11,11 +11,6 @@ use Progravity\Auth\Tests\TestCase;
 
 class PositionalSumChecksumTest extends TestCase
 {
-    private function alphanumeric(): Alphabet
-    {
-        return new Alphabet('abcdefghijklmnopqrstuvwxyz0123456789');
-    }
-
     public function test_compute_returns_empty_string_when_length_is_zero(): void
     {
         $checksum = new PositionalSumChecksum;
@@ -139,5 +134,10 @@ class PositionalSumChecksumTest extends TestCase
 
         $this->expectException(OutOfBoundsException::class);
         $strategy->compute('abz', $alphabet, 2);
+    }
+
+    private function alphanumeric(): Alphabet
+    {
+        return new Alphabet('abcdefghijklmnopqrstuvwxyz0123456789');
     }
 }

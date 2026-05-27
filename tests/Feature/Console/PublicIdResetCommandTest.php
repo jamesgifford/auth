@@ -15,43 +15,10 @@ class PublicIdResetCommandTest extends TestCase
 
     private string $tmpLockPath;
 
-    protected function defineEnvironment($app): void
-    {
-        $this->tmpDir = sys_get_temp_dir().'/progravity-reset-cmd-'.uniqid('', true);
-        $this->tmpLockPath = $this->tmpDir.'/auth.lock.json';
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->tmpLockPath);
-    }
-
     protected function tearDown(): void
     {
         $this->rmTree($this->tmpDir);
         parent::tearDown();
-    }
-
-    private function rmTree(string $dir): void
-    {
-        if (! is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir.DIRECTORY_SEPARATOR.$entry;
-            if (is_dir($path)) {
-                $this->rmTree($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
-    }
-
-    private function writeMatchingLockFile(): void
-    {
-        $config = $this->app->make(PublicIdConfig::class);
-        $fingerprint = $this->app->make(ConfigFingerprint::class)->compute($config);
-        $this->app->make(LockFile::class)->write($config, $fingerprint);
     }
 
     public function test_refuses_without_awkward_flag(): void
@@ -115,5 +82,38 @@ class PublicIdResetCommandTest extends TestCase
             ->expectsConfirmation('Reset the public_id lock?', 'yes')
             ->expectsOutputToContain('No lock file to reset')
             ->assertSuccessful();
+    }
+
+    protected function defineEnvironment($app): void
+    {
+        $this->tmpDir = sys_get_temp_dir().'/progravity-reset-cmd-'.uniqid('', true);
+        $this->tmpLockPath = $this->tmpDir.'/auth.lock.json';
+        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->tmpLockPath);
+    }
+
+    private function rmTree(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.DIRECTORY_SEPARATOR.$entry;
+            if (is_dir($path)) {
+                $this->rmTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    private function writeMatchingLockFile(): void
+    {
+        $config = $this->app->make(PublicIdConfig::class);
+        $fingerprint = $this->app->make(ConfigFingerprint::class)->compute($config);
+        $this->app->make(LockFile::class)->write($config, $fingerprint);
     }
 }

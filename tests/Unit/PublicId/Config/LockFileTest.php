@@ -30,47 +30,6 @@ class LockFileTest extends TestCase
         parent::tearDown();
     }
 
-    private function rmTree(string $dir): void
-    {
-        if (! is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir.DIRECTORY_SEPARATOR.$entry;
-            if (is_dir($path)) {
-                $this->rmTree($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
-    }
-
-    private function makeConfig(): PublicIdConfig
-    {
-        $array = [
-            'prefix_max_length' => 7,
-            'separator' => '_',
-            'body' => [
-                'length' => 18,
-                'alphabet' => 'lowercase_alphanumeric',
-            ],
-            'checksum' => [
-                'enabled' => true,
-                'length' => 2,
-                'strategy' => PositionalSumChecksum::class,
-            ],
-            'lock_file_path' => null,
-            'prefixes' => [],
-            'custom_alphabet_presets' => [],
-        ];
-
-        return new PublicIdConfig($array, new AlphabetRegistry);
-    }
-
     public function test_exists_returns_false_when_file_does_not_exist(): void
     {
         $lockFile = new LockFile($this->tmpDir.'/missing.lock.json');
@@ -226,5 +185,46 @@ class LockFileTest extends TestCase
         $lockFile = new LockFile('/tmp/some/path.json');
 
         $this->assertSame('/tmp/some/path.json', $lockFile->path());
+    }
+
+    private function rmTree(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.DIRECTORY_SEPARATOR.$entry;
+            if (is_dir($path)) {
+                $this->rmTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    private function makeConfig(): PublicIdConfig
+    {
+        $array = [
+            'prefix_max_length' => 7,
+            'separator' => '_',
+            'body' => [
+                'length' => 18,
+                'alphabet' => 'lowercase_alphanumeric',
+            ],
+            'checksum' => [
+                'enabled' => true,
+                'length' => 2,
+                'strategy' => PositionalSumChecksum::class,
+            ],
+            'lock_file_path' => null,
+            'prefixes' => [],
+            'custom_alphabet_presets' => [],
+        ];
+
+        return new PublicIdConfig($array, new AlphabetRegistry);
     }
 }

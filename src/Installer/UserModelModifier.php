@@ -6,7 +6,6 @@ namespace Progravity\Auth\Installer;
 
 use PhpParser\BuilderFactory;
 use PhpParser\Node;
-use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeTraverser;
@@ -15,6 +14,7 @@ use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\PrettyPrinter\Standard;
 use RuntimeException;
+use Throwable;
 
 /**
  * AST-based modifier for the consumer's User model.
@@ -47,7 +47,7 @@ final class UserModelModifier
 
         try {
             $ast = $this->parser->parse($code);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return $this->emptyAnalysis(fileExists: true, parseable: false);
         }
 
@@ -143,7 +143,7 @@ final class UserModelModifier
         $unusual = ! $extendsAuthenticatable;
         $unusualReason = $unusual
             ? sprintf(
-                "class does not extend Illuminate\\Foundation\\Auth\\User (extends %s)",
+                'class does not extend Illuminate\\Foundation\\Auth\\User (extends %s)',
                 $classNode->extends?->toString() ?? '<none>',
             )
             : null;
@@ -218,8 +218,8 @@ final class UserModelModifier
             }
 
             /**
-             * @param  array<int, Node\Stmt>  $stmts
-             * @return array<int, Node\Stmt>
+             * @param  array<int, Stmt>  $stmts
+             * @return array<int, Stmt>
              */
             private function processContainer(array $stmts): array
             {
@@ -257,8 +257,8 @@ final class UserModelModifier
             }
 
             /**
-             * @param  array<int, Node\Stmt>  $bodyStmts
-             * @return array<int, Node\Stmt>
+             * @param  array<int, Stmt>  $bodyStmts
+             * @return array<int, Stmt>
              */
             private function processClassBody(array $bodyStmts): array
             {
@@ -350,10 +350,10 @@ final class UserModelModifier
      * namespace declaration. Modifies $stmts (top-level) in place via the
      * same import/trait insertion rules.
      *
-     * @param  array<int, Node\Stmt>  $stmts
+     * @param  array<int, Stmt>  $stmts
      * @param  list<string>  $importsToAdd
      * @param  list<string>  $traitsToAdd
-     * @return array<int, Node\Stmt>
+     * @return array<int, Stmt>
      */
     private function processRootContainer(array $stmts, array $importsToAdd, array $traitsToAdd, bool $addPrefixMethod): array
     {

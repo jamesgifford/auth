@@ -27,6 +27,7 @@ use Progravity\Auth\Models\AccountRole;
 use Progravity\Auth\Models\AccountUser;
 use Progravity\Auth\Roles\RolesConfig;
 use Progravity\Auth\SystemRole;
+use Progravity\Auth\Transfers;
 use Progravity\Auth\Transfers\AccountRoleTransfer;
 use Progravity\Auth\Transfers\AccountTransfer;
 use Progravity\Auth\Transfers\MembershipTransfer;
@@ -38,7 +39,7 @@ use Progravity\Auth\Transfers\UserTransfer;
  * All mutating methods wrap their database work in a transaction and queue
  * event dispatch via DB::afterCommit() so listeners never fire on a rolled
  * back transaction. Events carry readonly transfers rather than live model
- * references — see {@see \Progravity\Auth\Transfers}.
+ * references — see {@see Transfers}.
  *
  * Methods take the consumer's User model as an Illuminate Model because the
  * concrete class is configured via config('progravity.auth.models.user').
