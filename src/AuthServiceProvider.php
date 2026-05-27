@@ -17,6 +17,7 @@ use Progravity\Auth\PublicId\Config\PublicIdConfig;
 use Progravity\Auth\PublicId\Generator;
 use Progravity\Auth\PublicId\PrefixRegistry;
 use Progravity\Auth\PublicId\Validator;
+use Progravity\Auth\Roles\RolesConfig;
 
 /**
  * Progravity Auth package service provider.
@@ -75,6 +76,12 @@ class AuthServiceProvider extends ServiceProvider
                 $app->make(ConfigFingerprint::class),
             );
         });
+
+        $this->app->singleton(RolesConfig::class, function () {
+            return new RolesConfig(
+                config('progravity.auth.roles', []),
+            );
+        });
     }
 
     public function boot(): void
@@ -82,6 +89,10 @@ class AuthServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../config/auth.php' => config_path('progravity/auth.php'),
         ], 'progravity-auth-config');
+
+        $this->publishes([
+            __DIR__.'/../database/migrations/' => database_path('migrations'),
+        ], 'progravity-auth-migrations');
 
         $this->app->make(ConfigGuard::class)->assertMatches();
 

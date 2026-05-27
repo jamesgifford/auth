@@ -81,4 +81,79 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Model Resolution
+    |--------------------------------------------------------------------------
+    |
+    | The fully-qualified class names of models the package uses. Override
+    | any of these to use your own subclass.
+    |
+    */
+
+    'models' => [
+        'user' => \App\Models\User::class,
+        'account' => \Progravity\Auth\Models\Account::class,
+        'account_role' => \Progravity\Auth\Models\AccountRole::class,
+        'account_user' => \Progravity\Auth\Models\AccountUser::class,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Account Roles
+    |--------------------------------------------------------------------------
+    |
+    | The roles available within an account. The keys are stable identifiers
+    | used in code; the names and descriptions are displayed in UI.
+    |
+    | System roles (system => true) ship with the package and are seeded
+    | automatically. The 'owner' role is required and cannot be removed,
+    | though its name and description may be customized.
+    |
+    | To add custom roles, add entries below with system => false.
+    |
+    */
+
+    'roles' => [
+        'owner' => [
+            'name' => 'Owner',
+            'description' => 'Full control over the account, including deletion and ownership transfer.',
+            'system' => true,
+            'sort_order' => 1,
+        ],
+        'admin' => [
+            'name' => 'Administrator',
+            'description' => 'Manage account settings, members, and resources.',
+            'system' => true,
+            'sort_order' => 2,
+        ],
+        'member' => [
+            'name' => 'Member',
+            'description' => 'Standard access to account resources.',
+            'system' => true,
+            'sort_order' => 3,
+        ],
+        'viewer' => [
+            'name' => 'Viewer',
+            'description' => 'Read-only access to account resources.',
+            'system' => true,
+            'sort_order' => 4,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Accounts
+    |--------------------------------------------------------------------------
+    |
+    | Behavior options for the accounts subsystem.
+    |
+    */
+
+    'accounts' => [
+        // Default account name when one isn't provided (e.g., during
+        // registration). The string {name} is replaced with the user's name.
+        'default_name_template' => "{name}'s Account",
+    ],
+
 ];
