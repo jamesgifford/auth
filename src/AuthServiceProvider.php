@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Progravity\Auth;
 
 use Illuminate\Support\ServiceProvider;
+use Progravity\Auth\Accounts\Services\AccountService;
 use Progravity\Auth\Console\Commands\PublicIdCheckCommand;
 use Progravity\Auth\Console\Commands\PublicIdResetCommand;
 use Progravity\Auth\Console\Commands\PublicIdSetupCommand;
@@ -82,6 +83,8 @@ class AuthServiceProvider extends ServiceProvider
                 config('progravity.auth.roles', []),
             );
         });
+
+        $this->app->singleton(AccountService::class);
     }
 
     public function boot(): void
