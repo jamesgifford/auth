@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
 use RuntimeException;
 
@@ -12,7 +12,7 @@ use RuntimeException;
  * fingerprints, the field-by-field diff, and remediation guidance.
  *
  * Resolved by either reverting the config back to match the lock or
- * running `progravity:public-id:reset` (destructive — invalidates IDs).
+ * running `jamesgifford:public-id:reset` (destructive — invalidates IDs).
  */
 class PublicIdConfigLockedException extends RuntimeException
 {
@@ -45,7 +45,7 @@ class PublicIdConfigLockedException extends RuntimeException
 
         $lines[] = '';
         $lines[] = '  See documentation for resolution: revert config or run';
-        $lines[] = '  `php artisan progravity:public-id:reset` (destructive).';
+        $lines[] = '  `php artisan jamesgifford:public-id:reset` (destructive).';
 
         return implode("\n", $lines);
     }

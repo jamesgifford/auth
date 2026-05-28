@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
 use InvalidArgumentException;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use OutOfBoundsException;
-use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
 
 /**
  * Immutable value object representing a resolved alphabet — the set of

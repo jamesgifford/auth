@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Console;
+namespace JamesGifford\Auth\Tests\Feature\Console;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PublicIdCheckCommandTest extends TestCase
 {
@@ -22,7 +22,7 @@ class PublicIdCheckCommandTest extends TestCase
 
     public function test_all_checks_pass_with_no_registered_prefixes(): void
     {
-        $this->artisan('progravity:public-id:check')
+        $this->artisan('jamesgifford:public-id:check')
             ->expectsOutputToContain('Class autoload check passed')
             ->expectsOutputToContain('Prefix collision check passed')
             ->expectsOutputToContain('Prefix format check passed')
@@ -34,7 +34,7 @@ class PublicIdCheckCommandTest extends TestCase
     {
         $this->app->make(PrefixRegistry::class)->register(FixtureModel::class);
 
-        $this->artisan('progravity:public-id:check')
+        $this->artisan('jamesgifford:public-id:check')
             ->expectsOutputToContain('Class autoload check passed')
             ->expectsOutputToContain('Prefix collision check passed')
             ->expectsOutputToContain('Prefix format check passed')
@@ -47,13 +47,13 @@ class PublicIdCheckCommandTest extends TestCase
     {
         // Patch config and force re-resolve of PublicIdConfig so the new
         // prefixes array surfaces in the command.
-        config(['progravity.auth.public_id.prefixes' => [
+        config(['jamesgifford.auth.public_id.prefixes' => [
             'App\\Models\\NonexistentTypo' => 'typ',
         ]]);
         $this->app->forgetInstance(PublicIdConfig::class);
         $this->app->forgetInstance(PrefixRegistry::class);
 
-        $this->artisan('progravity:public-id:check')
+        $this->artisan('jamesgifford:public-id:check')
             ->expectsOutputToContain('Class autoload check failed')
             ->expectsOutputToContain('App\\Models\\NonexistentTypo')
             ->expectsOutputToContain('typ')
@@ -66,7 +66,7 @@ class PublicIdCheckCommandTest extends TestCase
         $registry->register(FixtureModelCollisionA::class);
         $registry->register(FixtureModelCollisionB::class);
 
-        $this->artisan('progravity:public-id:check')
+        $this->artisan('jamesgifford:public-id:check')
             ->expectsOutputToContain('Prefix collision check failed')
             ->expectsOutputToContain("'col'")
             ->expectsOutputToContain(FixtureModelCollisionA::class)
@@ -76,26 +76,26 @@ class PublicIdCheckCommandTest extends TestCase
 
     public function test_failure_exits_with_nonzero_status(): void
     {
-        config(['progravity.auth.public_id.prefixes' => [
+        config(['jamesgifford.auth.public_id.prefixes' => [
             'App\\Models\\NonexistentTypo' => 'typ',
         ]]);
         $this->app->forgetInstance(PublicIdConfig::class);
         $this->app->forgetInstance(PrefixRegistry::class);
 
-        $exitCode = $this->artisan('progravity:public-id:check')->run();
+        $exitCode = $this->artisan('jamesgifford:public-id:check')->run();
 
         $this->assertNotSame(0, $exitCode);
     }
 
     public function test_summary_line_reports_issue_count(): void
     {
-        config(['progravity.auth.public_id.prefixes' => [
+        config(['jamesgifford.auth.public_id.prefixes' => [
             'App\\Models\\NonexistentOne' => 'one',
         ]]);
         $this->app->forgetInstance(PublicIdConfig::class);
         $this->app->forgetInstance(PrefixRegistry::class);
 
-        $this->artisan('progravity:public-id:check')
+        $this->artisan('jamesgifford:public-id:check')
             ->expectsOutputToContain('1 issue found')
             ->assertFailed();
     }

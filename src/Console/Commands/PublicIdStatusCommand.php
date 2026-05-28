@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Console\Commands;
+namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\GuardStatus;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
-use Progravity\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\GuardStatus;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
 
 /**
  * Read-only diagnostic showing the current public_id configuration state:
@@ -19,11 +19,11 @@ use Progravity\Auth\PublicId\PrefixRegistry;
  *
  * Returns success in all states; this command never enforces.
  *
- * Run with: `php artisan progravity:public-id:status`
+ * Run with: `php artisan jamesgifford:public-id:status`
  */
 final class PublicIdStatusCommand extends Command
 {
-    protected $signature = 'progravity:public-id:status';
+    protected $signature = 'jamesgifford:public-id:status';
 
     protected $description = 'Display the current public_id configuration status.';
 
@@ -44,7 +44,7 @@ final class PublicIdStatusCommand extends Command
         $status = $this->guard->status();
 
         match ($status) {
-            GuardStatus::NotYetLocked => $this->warn('Status: NOT LOCKED — run progravity:public-id:setup to lock.'),
+            GuardStatus::NotYetLocked => $this->warn('Status: NOT LOCKED — run jamesgifford:public-id:setup to lock.'),
             GuardStatus::Locked => $this->info('Status: LOCKED'),
             GuardStatus::Drifted => $this->error('Status: DRIFTED — config does not match lock file.'),
         };

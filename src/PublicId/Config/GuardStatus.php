@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Config;
+namespace JamesGifford\Auth\PublicId\Config;
 
 /**
  * Three states the {@see ConfigGuard} can report:

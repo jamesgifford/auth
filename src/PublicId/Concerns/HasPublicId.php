@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Concerns;
+namespace JamesGifford\Auth\PublicId\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\PublicId\PublicId;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PublicId;
 
 /**
  * Apply this trait to Eloquent models that need a public_id.
@@ -18,7 +18,7 @@ use Progravity\Auth\PublicId\PublicId;
  *  - Provides scopeWherePublicId and scopeWherePublicIdIn query scopes
  *  - Resolves the prefix via PrefixRegistry — either through an override
  *    of publicIdPrefix() on the model, or via the prefixes map in
- *    config/progravity/auth.php
+ *    config/jamesgifford/auth.php
  *
  * The model's table must have a public_id column sized to PublicId::maxLength():
  *

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
 use InvalidArgumentException;
 

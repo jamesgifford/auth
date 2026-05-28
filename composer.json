@@ -1,12 +1,12 @@
 {
-    "name": "progravity/auth",
+    "name": "jamesgifford/auth",
     "description": "Reusable authentication scaffolding for Laravel applications. Provides public ID generation, account management, invitations, and registration flows.",
     "type": "library",
     "license": "MIT",
     "authors": [
         {
             "name": "James Gifford",
-            "email": "james@progravity.com"
+            "email": "james@jamesgifford.com"
         }
     ],
     "require": {
@@ -20,17 +20,17 @@
     "require-dev": {
         "laravel/pint": "^1.13",
         "mockery/mockery": "^1.6",
-        "orchestra/testbench": "^9.0|^10.0",
+        "orchestra/testbench": "^10.0|^11.0",
         "phpunit/phpunit": "^11.0"
     },
     "autoload": {
         "psr-4": {
-            "Progravity\\Auth\\": "src/"
+            "JamesGifford\\Auth\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Progravity\\Auth\\Tests\\": "tests/"
+            "JamesGifford\\Auth\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -41,7 +41,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Progravity\\Auth\\AuthServiceProvider"
+                "JamesGifford\\Auth\\AuthServiceProvider"
             ]
         }
     },

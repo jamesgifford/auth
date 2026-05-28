@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature;
+namespace JamesGifford\Auth\Tests\Feature;
 
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Generator;
-use Progravity\Auth\PublicId\PublicId;
-use Progravity\Auth\PublicId\ValidationResult;
-use Progravity\Auth\PublicId\Validator;
-use Progravity\Auth\Tests\Support\PublicIdConfigFactory;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\PublicId;
+use JamesGifford\Auth\PublicId\ValidationResult;
+use JamesGifford\Auth\PublicId\Validator;
+use JamesGifford\Auth\Tests\Support\PublicIdConfigFactory;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PublicIdFacadeTest extends TestCase
 {

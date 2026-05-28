@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Transfers;
+namespace JamesGifford\Auth\Transfers;
 
-use Progravity\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountRole;
 
 /**
  * Immutable snapshot of AccountRole state for use in events.

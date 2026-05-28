@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Exceptions;
+namespace JamesGifford\Auth\Exceptions;
 
 use RuntimeException;
 
@@ -19,7 +19,7 @@ class OwnerlessAccountException extends RuntimeException
     {
         return new self(
             "Account '{$accountPublicId}' has no valid Owner. This indicates data corruption. ".
-            'Run `php artisan progravity:auth:check-integrity` (once available) or use '.
+            'Run `php artisan jamesgifford:auth:check-integrity` (once available) or use '.
             'AccountIntegrityService::scan() to investigate.'
         );
     }

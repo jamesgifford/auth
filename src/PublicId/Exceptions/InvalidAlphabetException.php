@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
 use InvalidArgumentException;
-use Progravity\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\Alphabet;
 
 /**
  * Thrown when an alphabet string fails {@see Alphabet}

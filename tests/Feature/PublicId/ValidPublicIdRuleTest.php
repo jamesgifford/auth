@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\PublicId;
+namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Support\Facades\Validator as ValidatorFacade;
-use Progravity\Auth\PublicId\PublicId;
-use Progravity\Auth\PublicId\Rules\ValidPublicId;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\PublicId;
+use JamesGifford\Auth\PublicId\Rules\ValidPublicId;
+use JamesGifford\Auth\Tests\TestCase;
 
 class ValidPublicIdRuleTest extends TestCase
 {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
 use InvalidArgumentException;
 
 /**
- * Thrown when the `progravity.auth.public_id` config array fails validation.
+ * Thrown when the `jamesgifford.auth.public_id` config array fails validation.
  * Use {@see forKey()} so the message names the offending key and reason.
  */
 class InvalidPublicIdConfigException extends InvalidArgumentException

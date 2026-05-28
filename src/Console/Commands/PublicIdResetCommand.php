@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Console\Commands;
+namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Exceptions\LockFileWriteException;
 
 /**
  * Destructive command that clears the public_id lock file. Heavily gated:
@@ -17,11 +17,11 @@ use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
  * validate or generate consistently after a new lock is written.
  *
  * Run with:
- *   php artisan progravity:public-id:reset --i-understand-this-breaks-existing-ids
+ *   php artisan jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids
  */
 final class PublicIdResetCommand extends Command
 {
-    protected $signature = 'progravity:public-id:reset {--i-understand-this-breaks-existing-ids} {--force-production}';
+    protected $signature = 'jamesgifford:public-id:reset {--i-understand-this-breaks-existing-ids} {--force-production}';
 
     protected $description = 'Clear the public_id configuration lock. DESTRUCTIVE: invalidates all previously generated IDs.';
 
@@ -40,7 +40,7 @@ final class PublicIdResetCommand extends Command
             $this->newLine();
             $this->line('To proceed, run with the explicit flag:');
             $this->newLine();
-            $this->line('  php artisan progravity:public-id:reset --i-understand-this-breaks-existing-ids');
+            $this->line('  php artisan jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids');
             $this->newLine();
 
             return self::FAILURE;
@@ -51,7 +51,7 @@ final class PublicIdResetCommand extends Command
             $this->newLine();
             $this->line('If you are absolutely certain, run with --force-production:');
             $this->newLine();
-            $this->line('  php artisan progravity:public-id:reset --i-understand-this-breaks-existing-ids --force-production');
+            $this->line('  php artisan jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids --force-production');
             $this->newLine();
 
             return self::FAILURE;
@@ -80,7 +80,7 @@ final class PublicIdResetCommand extends Command
         $this->newLine();
         $this->info('✓ Lock file removed.');
         $this->newLine();
-        $this->line('You can now run progravity:public-id:setup to re-lock the configuration.');
+        $this->line('You can now run jamesgifford:public-id:setup to re-lock the configuration.');
         $this->newLine();
         $this->line('If your repository tracks the lock file (recommended), the next commit');
         $this->line('should reflect this deletion. Verify the file has been removed:');

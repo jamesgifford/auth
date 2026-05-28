@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
-use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Checksum\ChecksumStrategy;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 
 /**
  * Parses and validates public ID strings.

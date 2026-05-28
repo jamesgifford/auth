@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Database\Factories;
+namespace JamesGifford\Auth\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\Models\Account;
+use JamesGifford\Auth\Models\Account;
 
 /**
  * Produces Account records for tests. Data only — this factory does NOT

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\PublicId;
+namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Exceptions\PrefixCollisionException;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
+use JamesGifford\Auth\Tests\TestCase;
 use Throwable;
 
 class AuthServiceProviderCollisionTest extends TestCase
@@ -36,7 +36,7 @@ class AuthServiceProviderCollisionTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('progravity.auth.public_id.prefixes', [
+        $app['config']->set('jamesgifford.auth.public_id.prefixes', [
             FixtureModelCollisionA::class => 'col',
             FixtureModelCollisionB::class => 'col',
         ]);

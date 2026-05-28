@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Exceptions;
+namespace JamesGifford\Auth\Exceptions;
 
 use InvalidArgumentException;
 
 /**
- * Thrown when the `progravity.auth.roles` config array fails validation.
+ * Thrown when the `jamesgifford.auth.roles` config array fails validation.
  * Use {@see forKey()} so the message names the offending role key and reason.
  */
 class InvalidRolesConfigException extends InvalidArgumentException

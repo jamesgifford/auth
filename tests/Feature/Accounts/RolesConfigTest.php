@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use InvalidArgumentException;
-use Progravity\Auth\Exceptions\InvalidRolesConfigException;
-use Progravity\Auth\Roles\RolesConfig;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\Exceptions\InvalidRolesConfigException;
+use JamesGifford\Auth\Roles\RolesConfig;
+use JamesGifford\Auth\Tests\TestCase;
 
 class RolesConfigTest extends TestCase
 {
     public function test_default_config_constructs_successfully(): void
     {
-        $config = new RolesConfig(config('progravity.auth.roles'));
+        $config = new RolesConfig(config('jamesgifford.auth.roles'));
 
         $this->assertTrue($config->hasRole('owner'));
         $this->assertCount(4, $config->roles());

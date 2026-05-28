@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
-use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\Models\AccountRole;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Models\AccountRole;
 
 class AccountRoleSeederTest extends AccountsTestCase
 {
@@ -48,7 +48,7 @@ class AccountRoleSeederTest extends AccountsTestCase
 
     public function test_consumer_added_roles_are_seeded_as_non_system(): void
     {
-        config()->set('progravity.auth.roles.auditor', [
+        config()->set('jamesgifford.auth.roles.auditor', [
             'name' => 'Auditor',
             'description' => 'Reviews account activity.',
             'system' => false,
@@ -67,7 +67,7 @@ class AccountRoleSeederTest extends AccountsTestCase
     {
         $this->seed(AccountRoleSeeder::class);
 
-        config()->set('progravity.auth.roles.owner.name', 'Chief');
+        config()->set('jamesgifford.auth.roles.owner.name', 'Chief');
         $this->seed(AccountRoleSeeder::class);
 
         $owner = AccountRole::findByKey('owner');
@@ -80,9 +80,9 @@ class AccountRoleSeederTest extends AccountsTestCase
     {
         $this->seed(AccountRoleSeeder::class);
 
-        $roles = config('progravity.auth.roles');
+        $roles = config('jamesgifford.auth.roles');
         unset($roles['viewer']);
-        config()->set('progravity.auth.roles', $roles);
+        config()->set('jamesgifford.auth.roles', $roles);
 
         $this->seed(AccountRoleSeeder::class);
 

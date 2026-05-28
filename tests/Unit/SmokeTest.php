@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit;
+namespace JamesGifford\Auth\Tests\Unit;
 
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\Tests\TestCase;
 
 class SmokeTest extends TestCase
 {

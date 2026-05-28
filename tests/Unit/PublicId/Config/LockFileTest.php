@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Config;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Config;
 
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\LockFileContents;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\IncompleteLockFileException;
-use Progravity\Auth\PublicId\Exceptions\MalformedLockFileException;
-use Progravity\Auth\PublicId\Exceptions\MissingLockFileException;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\LockFileContents;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\IncompleteLockFileException;
+use JamesGifford\Auth\PublicId\Exceptions\MalformedLockFileException;
+use JamesGifford\Auth\PublicId\Exceptions\MissingLockFileException;
+use JamesGifford\Auth\Tests\TestCase;
 
 class LockFileTest extends TestCase
 {
@@ -21,7 +21,7 @@ class LockFileTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->tmpDir = sys_get_temp_dir().'/progravity-auth-lockfile-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().'/jamesgifford-auth-lockfile-'.uniqid('', true);
     }
 
     protected function tearDown(): void

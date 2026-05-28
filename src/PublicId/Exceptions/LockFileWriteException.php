@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
-use Progravity\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\LockFile;
 use RuntimeException;
 use Throwable;
 

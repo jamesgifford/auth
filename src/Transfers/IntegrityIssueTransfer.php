@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Transfers;
+namespace JamesGifford\Auth\Transfers;
 
 /**
  * One Owner-invariant violation detected by AccountIntegrityService.

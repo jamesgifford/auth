@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Roles;
+namespace JamesGifford\Auth\Roles;
 
 use InvalidArgumentException;
-use Progravity\Auth\Exceptions\InvalidRolesConfigException;
-use Progravity\Auth\SystemRole;
+use JamesGifford\Auth\Exceptions\InvalidRolesConfigException;
+use JamesGifford\Auth\SystemRole;
 
 /**
- * Typed wrapper over the raw `progravity.auth.roles` config array.
+ * Typed wrapper over the raw `jamesgifford.auth.roles` config array.
  *
  * Validates the array eagerly at construction so misconfiguration surfaces
  * at first resolution rather than at seed time. The 'owner' role is required
@@ -17,7 +17,7 @@ use Progravity\Auth\SystemRole;
  * (owner, admin, member, viewer) must also be declared system => true so
  * consumers cannot accidentally redefine a system role as custom.
  *
- * Constructed by the service provider from `config('progravity.auth.roles')`.
+ * Constructed by the service provider from `config('jamesgifford.auth.roles')`.
  */
 final class RolesConfig
 {

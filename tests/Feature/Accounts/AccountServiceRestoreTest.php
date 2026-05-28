@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\AccountRestored;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\AccountRestored;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountTransfer;
 
 class AccountServiceRestoreTest extends AccountsTestCase
 {

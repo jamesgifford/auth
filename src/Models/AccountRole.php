@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Models;
+namespace JamesGifford\Auth\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Progravity\Auth\Database\Factories\AccountRoleFactory;
-use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\Exceptions\CannotDeleteSystemRoleException;
+use JamesGifford\Auth\Database\Factories\AccountRoleFactory;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Exceptions\CannotDeleteSystemRoleException;
 
 /**
  * A role that can be assigned to a member within an account.
  *
  * Roles are reference data. They are configured in
- * config('progravity.auth.roles') (the source of truth) and seeded into the
+ * config('jamesgifford.auth.roles') (the source of truth) and seeded into the
  * account_roles table via {@see AccountRoleSeeder}.
  *
  * System roles (system => true) ship with the package and cannot be deleted
  * via Eloquent — see {@see booted()}. Consumers may extend this class and
- * point config('progravity.auth.models.account_role') at their subclass.
+ * point config('jamesgifford.auth.models.account_role') at their subclass.
  */
 class AccountRole extends Model
 {

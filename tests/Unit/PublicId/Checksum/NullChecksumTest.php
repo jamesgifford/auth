@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Checksum;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Checksum;
 
-use Progravity\Auth\PublicId\Alphabet;
-use Progravity\Auth\PublicId\Checksum\NullChecksum;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\Checksum\NullChecksum;
+use JamesGifford\Auth\Tests\TestCase;
 
 class NullChecksumTest extends TestCase
 {

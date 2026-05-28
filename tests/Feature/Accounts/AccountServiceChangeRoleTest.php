@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\AccountRoleChanged;
-use Progravity\Auth\Exceptions\CannotAssignOwnerRoleException;
-use Progravity\Auth\Exceptions\CannotModifyOwnerRoleException;
-use Progravity\Auth\Exceptions\InvalidRoleException;
-use Progravity\Auth\Exceptions\NotAMemberException;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountRoleTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\AccountRoleChanged;
+use JamesGifford\Auth\Exceptions\CannotAssignOwnerRoleException;
+use JamesGifford\Auth\Exceptions\CannotModifyOwnerRoleException;
+use JamesGifford\Auth\Exceptions\InvalidRoleException;
+use JamesGifford\Auth\Exceptions\NotAMemberException;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountRoleTransfer;
 
 class AccountServiceChangeRoleTest extends AccountsTestCase
 {

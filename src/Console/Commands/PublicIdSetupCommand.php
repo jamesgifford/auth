@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Console\Commands;
+namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\GuardStatus;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
-use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
-use Progravity\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\GuardStatus;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\LockFileWriteException;
+use JamesGifford\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
+use JamesGifford\Auth\PublicId\Generator;
 use Throwable;
 
 /**
@@ -21,11 +21,11 @@ use Throwable;
  * configuration. Refuses to proceed if a lock already exists; surfaces
  * the diff if the lock has drifted from current config.
  *
- * Run with: `php artisan progravity:public-id:setup`
+ * Run with: `php artisan jamesgifford:public-id:setup`
  */
 final class PublicIdSetupCommand extends Command
 {
-    protected $signature = 'progravity:public-id:setup';
+    protected $signature = 'jamesgifford:public-id:setup';
 
     protected $description = 'Lock the public_id configuration for this application.';
 
@@ -52,7 +52,7 @@ final class PublicIdSetupCommand extends Command
                 // best-effort: skip the timestamp line if read fails
             }
             $this->newLine();
-            $this->line('If you intended to change the configuration, use `progravity:public-id:reset` first (destructive).');
+            $this->line('If you intended to change the configuration, use `jamesgifford:public-id:reset` first (destructive).');
 
             return self::SUCCESS;
         }
@@ -66,7 +66,7 @@ final class PublicIdSetupCommand extends Command
                 $this->line($e->getMessage());
             }
             $this->newLine();
-            $this->line('Either revert your config changes to match the lock, or run `progravity:public-id:reset` to discard the existing lock.');
+            $this->line('Either revert your config changes to match the lock, or run `jamesgifford:public-id:reset` to discard the existing lock.');
 
             return self::FAILURE;
         }
@@ -187,12 +187,12 @@ final class PublicIdSetupCommand extends Command
     {
         $this->info('Next steps:');
         $this->line('  1. Commit '.$this->lockFile->path().' to your repository.');
-        $this->line('  2. Use Progravity\\Auth\\PublicId\\PublicId::maxLength() in migrations:');
+        $this->line('  2. Use JamesGifford\\Auth\\PublicId\\PublicId::maxLength() in migrations:');
         $this->line('       $table->string(\'public_id\', PublicId::maxLength())->unique();');
         $this->line('  3. Apply the HasPublicId trait to models that need public IDs.');
         $this->line('  4. Either implement publicIdPrefix() on each model, or register');
-        $this->line('     prefixes in config/progravity/auth.php under public_id.prefixes.');
+        $this->line('     prefixes in config/jamesgifford/auth.php under public_id.prefixes.');
         $this->newLine();
-        $this->line('Run `php artisan progravity:public-id:status` to verify the lock at any time.');
+        $this->line('Run `php artisan jamesgifford:public-id:status` to verify the lock at any time.');
     }
 }

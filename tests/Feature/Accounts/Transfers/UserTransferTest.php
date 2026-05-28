@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts\Transfers;
+namespace JamesGifford\Auth\Tests\Feature\Accounts\Transfers;
 
 use Error;
-use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\UserTransfer;
 
 class UserTransferTest extends AccountsTestCase
 {

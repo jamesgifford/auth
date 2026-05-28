@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Config;
+namespace JamesGifford\Auth\PublicId\Config;
 
-use Progravity\Auth\PublicId\Alphabet;
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
-use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
-use Progravity\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
+use JamesGifford\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Checksum\ChecksumStrategy;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
 
 /**
- * Typed wrapper over the raw `progravity.auth.public_id` config array.
+ * Typed wrapper over the raw `jamesgifford.auth.public_id` config array.
  *
  * Validates the array eagerly at construction so that any misconfiguration
  * surfaces at boot rather than at first ID generation. Exposes typed
  * accessors and the locked-fingerprint subset of fields.
  *
- * Constructed by the service provider from `config('progravity.auth.public_id')`.
+ * Constructed by the service provider from `config('jamesgifford.auth.public_id')`.
  */
 final class PublicIdConfig
 {

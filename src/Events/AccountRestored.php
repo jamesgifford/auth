@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Events;
+namespace JamesGifford\Auth\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
-use Progravity\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
 
 /**
  * Dispatched after AccountService::restore() commits.

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Console;
+namespace JamesGifford\Auth\Tests\Feature\Console;
 
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PublicIdSetupCommandTest extends TestCase
 {
@@ -24,7 +24,7 @@ class PublicIdSetupCommandTest extends TestCase
 
     public function test_writes_lock_file_when_user_confirms(): void
     {
-        $this->artisan('progravity:public-id:setup')
+        $this->artisan('jamesgifford:public-id:setup')
             ->expectsConfirmation('Lock this configuration?', 'yes')
             ->expectsOutputToContain('Public ID configuration locked')
             ->assertSuccessful();
@@ -34,7 +34,7 @@ class PublicIdSetupCommandTest extends TestCase
 
     public function test_does_not_write_when_user_declines(): void
     {
-        $this->artisan('progravity:public-id:setup')
+        $this->artisan('jamesgifford:public-id:setup')
             ->expectsConfirmation('Lock this configuration?', 'no')
             ->expectsOutputToContain('Setup canceled')
             ->assertSuccessful();
@@ -44,7 +44,7 @@ class PublicIdSetupCommandTest extends TestCase
 
     public function test_displays_configuration_and_sample_ids(): void
     {
-        $this->artisan('progravity:public-id:setup')
+        $this->artisan('jamesgifford:public-id:setup')
             ->expectsOutputToContain('Body length')
             ->expectsOutputToContain('lowercase_alphanumeric')
             ->expectsOutputToContain('Sample IDs')
@@ -61,7 +61,7 @@ class PublicIdSetupCommandTest extends TestCase
         $this->app->make(LockFile::class)->write($config, $fingerprint);
         $this->rebindGuard();
 
-        $this->artisan('progravity:public-id:setup')
+        $this->artisan('jamesgifford:public-id:setup')
             ->expectsOutputToContain('already locked')
             ->assertSuccessful();
     }
@@ -73,7 +73,7 @@ class PublicIdSetupCommandTest extends TestCase
         $this->app->make(LockFile::class)->write($config, $bogusFingerprint);
         $this->rebindGuard();
 
-        $this->artisan('progravity:public-id:setup')
+        $this->artisan('jamesgifford:public-id:setup')
             ->expectsOutputToContain('does not match')
             ->expectsOutputToContain('drifted')
             ->assertFailed();
@@ -81,9 +81,9 @@ class PublicIdSetupCommandTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $this->tmpDir = sys_get_temp_dir().'/progravity-setup-cmd-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().'/jamesgifford-setup-cmd-'.uniqid('', true);
         $this->tmpLockPath = $this->tmpDir.'/auth.lock.json';
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->tmpLockPath);
+        $app['config']->set('jamesgifford.auth.public_id.lock_file_path', $this->tmpLockPath);
     }
 
     private function rmTree(string $dir): void

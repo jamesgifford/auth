@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts\Transfers;
+namespace JamesGifford\Auth\Tests\Feature\Accounts\Transfers;
 
 use Error;
-use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
-use Progravity\Auth\Transfers\IntegrityIssueTransfer;
-use Progravity\Auth\Transfers\IntegrityIssueType;
+use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
+use JamesGifford\Auth\Transfers\IntegrityIssueTransfer;
+use JamesGifford\Auth\Transfers\IntegrityIssueType;
 
 class IntegrityIssueTransferTest extends AccountsTestCase
 {

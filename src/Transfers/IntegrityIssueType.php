@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Transfers;
+namespace JamesGifford\Auth\Transfers;
 
-use Progravity\Auth\Accounts\Services\AccountIntegrityService;
+use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
 
 /**
  * Categories of Owner-invariant violations detected by

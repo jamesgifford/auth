@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Schema;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
 class MigrationsTest extends AccountsTestCase
 {

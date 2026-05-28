@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Transfers;
+namespace JamesGifford\Auth\Transfers;
 
 use DateTimeImmutable;
-use Progravity\Auth\Models\AccountUser;
+use JamesGifford\Auth\Models\AccountUser;
 
 /**
  * Immutable snapshot of an AccountUser (membership) row for use in events.

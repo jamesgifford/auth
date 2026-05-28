@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Checksum;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Checksum;
 
+use JamesGifford\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\Tests\TestCase;
 use OutOfBoundsException;
-use Progravity\Auth\PublicId\Alphabet;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
-use Progravity\Auth\Tests\TestCase;
 
 class PositionalSumChecksumTest extends TestCase
 {

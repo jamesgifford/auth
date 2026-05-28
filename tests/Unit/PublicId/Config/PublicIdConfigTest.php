@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Config;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Config;
 
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Checksum\NullChecksum;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
-use Progravity\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Checksum\NullChecksum;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
+use JamesGifford\Auth\Tests\TestCase;
 use stdClass;
 
 class PublicIdConfigTest extends TestCase

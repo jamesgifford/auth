@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Concerns;
+namespace JamesGifford\Auth\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Progravity\Auth\Exceptions\NotAMemberException;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\PublicId\Concerns\HasPublicId;
-use Progravity\Auth\SystemRole;
+use JamesGifford\Auth\Exceptions\NotAMemberException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
+use JamesGifford\Auth\SystemRole;
 
 /**
  * Apply this trait to the consumer's User model to turn it into an account
@@ -34,7 +34,7 @@ trait HasAccounts
     public function accounts(): BelongsToMany
     {
         return $this->belongsToMany(
-            config('progravity.auth.models.account'),
+            config('jamesgifford.auth.models.account'),
             'account_user'
         )
             ->using(AccountUser::class)
@@ -50,7 +50,7 @@ trait HasAccounts
     public function currentAccount(): BelongsTo
     {
         return $this->belongsTo(
-            config('progravity.auth.models.account'),
+            config('jamesgifford.auth.models.account'),
             'current_account_id'
         );
     }
@@ -58,7 +58,7 @@ trait HasAccounts
     public function ownedAccounts(): HasMany
     {
         return $this->hasMany(
-            config('progravity.auth.models.account'),
+            config('jamesgifford.auth.models.account'),
             'owner_id'
         );
     }

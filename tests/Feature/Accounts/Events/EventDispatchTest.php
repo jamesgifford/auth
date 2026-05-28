@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts\Events;
+namespace JamesGifford\Auth\Tests\Feature\Accounts\Events;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\AccountCreated;
-use Progravity\Auth\Events\AccountRoleChanged;
-use Progravity\Auth\Events\UserAttachedToAccount;
-use Progravity\Auth\Events\UserDetachedFromAccount;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountRoleTransfer;
-use Progravity\Auth\Transfers\AccountTransfer;
-use Progravity\Auth\Transfers\MembershipTransfer;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\AccountCreated;
+use JamesGifford\Auth\Events\AccountRoleChanged;
+use JamesGifford\Auth\Events\UserAttachedToAccount;
+use JamesGifford\Auth\Events\UserDetachedFromAccount;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountRoleTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\MembershipTransfer;
+use JamesGifford\Auth\Transfers\UserTransfer;
 use RuntimeException;
 
 class EventDispatchTest extends AccountsTestCase

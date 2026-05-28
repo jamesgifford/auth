@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId;
+namespace JamesGifford\Auth\Tests\Unit\PublicId;
 
 use InvalidArgumentException;
+use JamesGifford\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
+use JamesGifford\Auth\Tests\TestCase;
 use OutOfBoundsException;
-use Progravity\Auth\PublicId\Alphabet;
-use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
-use Progravity\Auth\Tests\TestCase;
 
 class AlphabetTest extends TestCase
 {

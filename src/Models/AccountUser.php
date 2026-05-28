@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Models;
+namespace JamesGifford\Auth\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
-use Progravity\Auth\Database\Factories\AccountUserFactory;
-use Progravity\Auth\SystemRole;
+use JamesGifford\Auth\Database\Factories\AccountUserFactory;
+use JamesGifford\Auth\SystemRole;
 
 /**
  * The explicit pivot for the Account ↔ User relationship.
@@ -19,7 +19,7 @@ use Progravity\Auth\SystemRole;
  * records (direct querying, easier event handling).
  *
  * This model is data + relationships only. Consumers may extend it and point
- * config('progravity.auth.models.account_user') at their subclass.
+ * config('jamesgifford.auth.models.account_user') at their subclass.
  */
 class AccountUser extends Pivot
 {
@@ -42,7 +42,7 @@ class AccountUser extends Pivot
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(config('progravity.auth.models.user'), 'user_id');
+        return $this->belongsTo(config('jamesgifford.auth.models.user'), 'user_id');
     }
 
     public function role(): BelongsTo

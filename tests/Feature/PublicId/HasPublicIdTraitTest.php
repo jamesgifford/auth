@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\PublicId;
+namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\PublicId\PublicId;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PublicId;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
+use JamesGifford\Auth\Tests\TestCase;
 
 class HasPublicIdTraitTest extends TestCase
 {

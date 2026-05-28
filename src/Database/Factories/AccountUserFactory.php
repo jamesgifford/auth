@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Database\Factories;
+namespace JamesGifford\Auth\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\SystemRole;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\SystemRole;
 
 /**
  * Produces AccountUser (membership) records for tests. Callers provide the

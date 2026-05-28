@@ -2,36 +2,36 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Accounts\Services;
+namespace JamesGifford\Auth\Accounts\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use Progravity\Auth\Events\AccountCreated;
-use Progravity\Auth\Events\AccountDeleted;
-use Progravity\Auth\Events\AccountForceDeleted;
-use Progravity\Auth\Events\AccountOwnershipTransferred;
-use Progravity\Auth\Events\AccountRestored;
-use Progravity\Auth\Events\AccountRoleChanged;
-use Progravity\Auth\Events\UserAttachedToAccount;
-use Progravity\Auth\Events\UserDetachedFromAccount;
-use Progravity\Auth\Exceptions\AlreadyAMemberException;
-use Progravity\Auth\Exceptions\CannotAssignOwnerRoleException;
-use Progravity\Auth\Exceptions\CannotDetachOwnerException;
-use Progravity\Auth\Exceptions\CannotModifyOwnerRoleException;
-use Progravity\Auth\Exceptions\InvalidRoleException;
-use Progravity\Auth\Exceptions\NotAMemberException;
-use Progravity\Auth\Exceptions\OwnerlessAccountException;
-use Progravity\Auth\Exceptions\SelfOwnershipTransferException;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Roles\RolesConfig;
-use Progravity\Auth\SystemRole;
-use Progravity\Auth\Transfers;
-use Progravity\Auth\Transfers\AccountRoleTransfer;
-use Progravity\Auth\Transfers\AccountTransfer;
-use Progravity\Auth\Transfers\MembershipTransfer;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Events\AccountCreated;
+use JamesGifford\Auth\Events\AccountDeleted;
+use JamesGifford\Auth\Events\AccountForceDeleted;
+use JamesGifford\Auth\Events\AccountOwnershipTransferred;
+use JamesGifford\Auth\Events\AccountRestored;
+use JamesGifford\Auth\Events\AccountRoleChanged;
+use JamesGifford\Auth\Events\UserAttachedToAccount;
+use JamesGifford\Auth\Events\UserDetachedFromAccount;
+use JamesGifford\Auth\Exceptions\AlreadyAMemberException;
+use JamesGifford\Auth\Exceptions\CannotAssignOwnerRoleException;
+use JamesGifford\Auth\Exceptions\CannotDetachOwnerException;
+use JamesGifford\Auth\Exceptions\CannotModifyOwnerRoleException;
+use JamesGifford\Auth\Exceptions\InvalidRoleException;
+use JamesGifford\Auth\Exceptions\NotAMemberException;
+use JamesGifford\Auth\Exceptions\OwnerlessAccountException;
+use JamesGifford\Auth\Exceptions\SelfOwnershipTransferException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Roles\RolesConfig;
+use JamesGifford\Auth\SystemRole;
+use JamesGifford\Auth\Transfers;
+use JamesGifford\Auth\Transfers\AccountRoleTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\MembershipTransfer;
+use JamesGifford\Auth\Transfers\UserTransfer;
 
 /**
  * Service layer for account and membership operations.
@@ -42,7 +42,7 @@ use Progravity\Auth\Transfers\UserTransfer;
  * references — see {@see Transfers}.
  *
  * Methods take the consumer's User model as an Illuminate Model because the
- * concrete class is configured via config('progravity.auth.models.user').
+ * concrete class is configured via config('jamesgifford.auth.models.user').
  * The package does not know the FQCN at compile time.
  */
 final class AccountService
@@ -56,7 +56,7 @@ final class AccountService
      *
      * @param  Model  $owner  The consumer's User model (config-resolved class).
      * @param  string|null  $name  Account name. When null, resolved from
-     *                             config('progravity.auth.accounts.default_name_template')
+     *                             config('jamesgifford.auth.accounts.default_name_template')
      *                             with {name} substituted by the owner's name.
      *
      * Side effects:
@@ -73,7 +73,7 @@ final class AccountService
         $ownerRole = $this->requireRole(SystemRole::OWNER);
 
         /** @var class-string<Account> $accountClass */
-        $accountClass = config('progravity.auth.models.account');
+        $accountClass = config('jamesgifford.auth.models.account');
 
         $account = DB::transaction(function () use ($accountClass, $owner, $accountName, $ownerRole) {
             /** @var Account $account */
@@ -342,7 +342,7 @@ final class AccountService
         }
 
         /** @var class-string<Model> $userClass */
-        $userClass = config('progravity.auth.models.user');
+        $userClass = config('jamesgifford.auth.models.user');
         /** @var Model $previousOwner */
         $previousOwner = $userClass::query()->findOrFail($account->owner_id);
 
@@ -385,7 +385,7 @@ final class AccountService
         $transfer = AccountTransfer::fromModel($account);
 
         /** @var class-string<Model> $userClass */
-        $userClass = config('progravity.auth.models.user');
+        $userClass = config('jamesgifford.auth.models.user');
 
         DB::transaction(function () use ($account, $userClass, $transfer): void {
             $account->delete();
@@ -459,7 +459,7 @@ final class AccountService
 
     private function renderDefaultName(Model $owner): string
     {
-        $template = config('progravity.auth.accounts.default_name_template', "{name}'s Account");
+        $template = config('jamesgifford.auth.accounts.default_name_template', "{name}'s Account");
 
         return str_replace('{name}', $owner->name ?? 'User', $template);
     }

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Config;
+namespace JamesGifford\Auth\PublicId\Config;
 
-use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
+use JamesGifford\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
 
 /**
  * Boot-time check that the current public_id config matches the locked
@@ -16,7 +16,7 @@ use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
  * from the one IDs were generated under.
  *
  * Drift causes: any change to body length, body alphabet, separator,
- * or checksum settings after `progravity:public-id:setup` was run.
+ * or checksum settings after `jamesgifford:public-id:setup` was run.
  */
 final class ConfigGuard
 {

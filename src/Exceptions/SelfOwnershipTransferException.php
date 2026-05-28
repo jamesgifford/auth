@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Exceptions;
+namespace JamesGifford\Auth\Exceptions;
 
 use RuntimeException;
 

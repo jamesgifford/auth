@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 use App\Models\User;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
 
 return [
 
@@ -16,7 +16,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | These values control how public IDs are generated and validated. Once
-    | you run `php artisan progravity:public-id:setup`, the format-defining
+    | you run `php artisan jamesgifford:public-id:setup`, the format-defining
     | values below are locked. Changing them after lock requires explicit
     | reset and will invalidate all previously generated IDs.
     |
@@ -57,13 +57,13 @@ return [
 
             // Fully qualified class name of the checksum strategy.
             // Must implement
-            // Progravity\Auth\PublicId\Checksum\ChecksumStrategy.
+            // JamesGifford\Auth\PublicId\Checksum\ChecksumStrategy.
             // Locked at setup.
             'strategy' => PositionalSumChecksum::class,
         ],
 
         // Path to the lock file. Null uses the default location at
-        // config_path('progravity/auth.lock.json').
+        // config_path('jamesgifford/auth.lock.json').
         'lock_file_path' => null,
 
         // Map of model class FQCNs to their public_id prefix. Models that

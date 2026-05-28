@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\PublicId;
+namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Generator;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\PublicId\PublicId;
-use Progravity\Auth\PublicId\Validator;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PublicId;
+use JamesGifford\Auth\PublicId\Validator;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
+use JamesGifford\Auth\Tests\TestCase;
 
 class AuthServiceProviderTest extends TestCase
 {
@@ -60,7 +60,7 @@ class AuthServiceProviderTest extends TestCase
 
     public function test_merged_config_is_accessible(): void
     {
-        $config = config('progravity.auth.public_id');
+        $config = config('jamesgifford.auth.public_id');
 
         $this->assertIsArray($config);
         $this->assertSame(7, $config['prefix_max_length']);
@@ -87,7 +87,7 @@ class AuthServiceProviderTest extends TestCase
     {
         $lockFile = $this->app->make(LockFile::class);
 
-        $this->assertStringEndsWith('progravity/auth.lock.json', $lockFile->path());
+        $this->assertStringEndsWith('jamesgifford/auth.lock.json', $lockFile->path());
     }
 
     public function test_models_in_config_are_registered_during_boot(): void

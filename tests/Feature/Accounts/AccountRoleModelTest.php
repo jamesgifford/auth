@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Database\QueryException;
-use Progravity\Auth\Exceptions\CannotDeleteSystemRoleException;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Exceptions\CannotDeleteSystemRoleException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
 class AccountRoleModelTest extends AccountsTestCase
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Exceptions;
+namespace JamesGifford\Auth\Exceptions;
 
-use Progravity\Auth\Concerns\HasAccounts;
+use JamesGifford\Auth\Concerns\HasAccounts;
 use RuntimeException;
 
 /**

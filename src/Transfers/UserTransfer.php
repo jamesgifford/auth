@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Transfers;
+namespace JamesGifford\Auth\Transfers;
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * Immutable snapshot of User state for use in events.
  *
  * Typed loosely as Model in {@see fromModel()} because the User class is
- * configurable via config('progravity.auth.models.user') — the package
+ * configurable via config('jamesgifford.auth.models.user') — the package
  * cannot type-hint a specific class. publicId is nullable so consumers who
  * opt out of HasPublicId on their User model are still supported.
  */

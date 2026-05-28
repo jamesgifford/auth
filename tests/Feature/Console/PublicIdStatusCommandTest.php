@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Console;
+namespace JamesGifford\Auth\Tests\Feature\Console;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PublicIdStatusCommandTest extends TestCase
 {
@@ -27,7 +27,7 @@ class PublicIdStatusCommandTest extends TestCase
 
     public function test_status_when_no_lock_file_shows_not_locked(): void
     {
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('NOT LOCKED')
             ->assertSuccessful();
     }
@@ -39,7 +39,7 @@ class PublicIdStatusCommandTest extends TestCase
         $this->app->make(LockFile::class)->write($config, $fingerprint);
         $this->rebindGuard();
 
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('Status: LOCKED')
             ->expectsOutputToContain($fingerprint)
             ->expectsOutputToContain('Locked at:')
@@ -52,7 +52,7 @@ class PublicIdStatusCommandTest extends TestCase
         $this->app->make(LockFile::class)->write($config, 'sha256:'.str_repeat('0', 64));
         $this->rebindGuard();
 
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('DRIFTED')
             ->expectsOutputToContain('Changed fields')
             ->assertSuccessful();
@@ -60,7 +60,7 @@ class PublicIdStatusCommandTest extends TestCase
 
     public function test_status_always_displays_current_configuration(): void
     {
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('Current configuration')
             ->expectsOutputToContain('Body length')
             ->expectsOutputToContain('Total max length')
@@ -69,7 +69,7 @@ class PublicIdStatusCommandTest extends TestCase
 
     public function test_status_shows_none_when_no_prefixes_registered(): void
     {
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('Registered prefixes: (none)')
             ->assertSuccessful();
     }
@@ -79,7 +79,7 @@ class PublicIdStatusCommandTest extends TestCase
         Model::clearBootedModels();
         $this->app->make(PrefixRegistry::class)->register(FixtureModel::class);
 
-        $this->artisan('progravity:public-id:status')
+        $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain(FixtureModel::class)
             ->expectsOutputToContain('fix')
             ->assertSuccessful();
@@ -92,14 +92,14 @@ class PublicIdStatusCommandTest extends TestCase
         $this->rebindGuard();
 
         // Status command is read-only — never returns failure.
-        $this->artisan('progravity:public-id:status')->assertSuccessful();
+        $this->artisan('jamesgifford:public-id:status')->assertSuccessful();
     }
 
     protected function defineEnvironment($app): void
     {
-        $this->tmpDir = sys_get_temp_dir().'/progravity-status-cmd-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().'/jamesgifford-status-cmd-'.uniqid('', true);
         $this->tmpLockPath = $this->tmpDir.'/auth.lock.json';
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->tmpLockPath);
+        $app['config']->set('jamesgifford.auth.public_id.lock_file_path', $this->tmpLockPath);
     }
 
     private function rmTree(string $dir): void

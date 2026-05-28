@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Database\Factories;
+namespace JamesGifford\Auth\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Progravity\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountRole;
 
 /**
  * Produces AccountRole records for tests. By default it creates custom

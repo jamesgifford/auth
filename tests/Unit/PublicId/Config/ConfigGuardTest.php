@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Config;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Config;
 
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Checksum\NullChecksum;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\GuardStatus;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Checksum\NullChecksum;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\GuardStatus;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\PublicIdConfigLockedException;
+use JamesGifford\Auth\Tests\TestCase;
 
 class ConfigGuardTest extends TestCase
 {
@@ -22,7 +22,7 @@ class ConfigGuardTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->tmpDir = sys_get_temp_dir().'/progravity-auth-guard-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().'/jamesgifford-auth-guard-'.uniqid('', true);
     }
 
     protected function tearDown(): void

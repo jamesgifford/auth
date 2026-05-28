@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
-use Progravity\Auth\PublicId\Checksum\ChecksumStrategy;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
+use JamesGifford\Auth\PublicId\Checksum\ChecksumStrategy;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidPrefixException;
 
 /**
  * Builds full public IDs of the form `{prefix}{separator}{body}{checksum}`.

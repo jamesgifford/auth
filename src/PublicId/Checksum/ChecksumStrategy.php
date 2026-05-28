@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Checksum;
+namespace JamesGifford\Auth\PublicId\Checksum;
 
-use Progravity\Auth\PublicId\Alphabet;
+use JamesGifford\Auth\PublicId\Alphabet;
 
 /**
  * Computes and verifies checksums for public-ID bodies.

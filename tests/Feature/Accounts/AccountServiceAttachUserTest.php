@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\UserAttachedToAccount;
-use Progravity\Auth\Exceptions\AlreadyAMemberException;
-use Progravity\Auth\Exceptions\CannotAssignOwnerRoleException;
-use Progravity\Auth\Exceptions\InvalidRoleException;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountRoleTransfer;
-use Progravity\Auth\Transfers\AccountTransfer;
-use Progravity\Auth\Transfers\MembershipTransfer;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\UserAttachedToAccount;
+use JamesGifford\Auth\Exceptions\AlreadyAMemberException;
+use JamesGifford\Auth\Exceptions\CannotAssignOwnerRoleException;
+use JamesGifford\Auth\Exceptions\InvalidRoleException;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountRoleTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\MembershipTransfer;
+use JamesGifford\Auth\Transfers\UserTransfer;
 
 class AccountServiceAttachUserTest extends AccountsTestCase
 {

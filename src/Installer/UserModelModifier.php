@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Installer;
+namespace JamesGifford\Auth\Installer;
 
 use PhpParser\BuilderFactory;
 use PhpParser\Node;
@@ -126,10 +126,10 @@ final class UserModelModifier
                     if (count($traitName->getParts()) > 1) {
                         $fqcn = $traitName->toString();
                     }
-                    if ($fqcn === 'Progravity\\Auth\\PublicId\\Concerns\\HasPublicId') {
+                    if ($fqcn === 'JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId') {
                         $hasHasPublicIdTrait = true;
                     }
-                    if ($fqcn === 'Progravity\\Auth\\Concerns\\HasAccounts') {
+                    if ($fqcn === 'JamesGifford\\Auth\\Concerns\\HasAccounts') {
                         $hasHasAccountsTrait = true;
                     }
                 }
@@ -183,12 +183,12 @@ final class UserModelModifier
         $addedTraits = [];
         $missingTraits = [];
         if (! $analysis->hasHasPublicIdTrait) {
-            $addedImports[] = 'Progravity\\Auth\\PublicId\\Concerns\\HasPublicId';
+            $addedImports[] = 'JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId';
             $addedTraits[] = 'HasPublicId';
             $missingTraits[] = 'HasPublicId';
         }
         if (! $analysis->hasHasAccountsTrait) {
-            $addedImports[] = 'Progravity\\Auth\\Concerns\\HasAccounts';
+            $addedImports[] = 'JamesGifford\\Auth\\Concerns\\HasAccounts';
             $addedTraits[] = 'HasAccounts';
             $missingTraits[] = 'HasAccounts';
         }

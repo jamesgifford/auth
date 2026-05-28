@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
-use Progravity\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
 use RuntimeException;
 
 /**
@@ -21,7 +21,7 @@ class PrefixCollisionException extends RuntimeException
         return new self(sprintf(
             "Prefix '%s' is claimed by multiple models: %s. Each public_id prefix must be unique. ".
             'Resolve by changing the prefix on one of these models, either by updating '.
-            'publicIdPrefix() or the config/progravity/auth.php prefixes map.',
+            'publicIdPrefix() or the config/jamesgifford/auth.php prefixes map.',
             $prefix,
             implode(', ', $modelClasses),
         ));

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Database\Seeders;
+namespace JamesGifford\Auth\Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Progravity\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountRole;
 
 /**
- * Seeds the account_roles table from config('progravity.auth.roles').
+ * Seeds the account_roles table from config('jamesgifford.auth.roles').
  *
  * The config is the source of truth; this seeder is the mechanism that
  * brings the database into line with it. Idempotent via updateOrCreate keyed
@@ -22,7 +22,7 @@ class AccountRoleSeeder extends Seeder
 {
     public function run(): void
     {
-        $roles = config('progravity.auth.roles', []);
+        $roles = config('jamesgifford.auth.roles', []);
 
         foreach ($roles as $key => $attributes) {
             AccountRole::query()->updateOrCreate(

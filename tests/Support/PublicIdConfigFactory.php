@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Support;
+namespace JamesGifford\Auth\Tests\Support;
 
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use LogicException;
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Checksum\PositionalSumChecksum;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
 
 final class PublicIdConfigFactory
 {

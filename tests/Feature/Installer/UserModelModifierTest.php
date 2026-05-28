@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Installer;
+namespace JamesGifford\Auth\Tests\Feature\Installer;
 
+use JamesGifford\Auth\Installer\UserModelModifier;
+use JamesGifford\Auth\Tests\TestCase;
 use PhpParser\Parser;
 use PhpParser\PrettyPrinter\Standard;
-use Progravity\Auth\Installer\UserModelModifier;
-use Progravity\Auth\Tests\TestCase;
 use RuntimeException;
 
 class UserModelModifierTest extends TestCase
@@ -26,7 +26,7 @@ class UserModelModifierTest extends TestCase
             $this->app->make(Parser::class),
             new Standard,
         );
-        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'progravity-modifier-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-modifier-'.uniqid('', true);
         mkdir($this->tmpDir, 0777, true);
     }
 
@@ -136,8 +136,8 @@ class UserModelModifierTest extends TestCase
 
         $mod = $this->modifier->modify($file, $analysis);
 
-        $this->assertStringContainsString('use Progravity\\Auth\\PublicId\\Concerns\\HasPublicId;', $mod->modifiedCode);
-        $this->assertContains('Progravity\\Auth\\PublicId\\Concerns\\HasPublicId', $mod->addedImports);
+        $this->assertStringContainsString('use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;', $mod->modifiedCode);
+        $this->assertContains('JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId', $mod->addedImports);
     }
 
     public function test_modify_adds_has_accounts_import_when_missing(): void
@@ -147,8 +147,8 @@ class UserModelModifierTest extends TestCase
 
         $mod = $this->modifier->modify($file, $analysis);
 
-        $this->assertStringContainsString('use Progravity\\Auth\\Concerns\\HasAccounts;', $mod->modifiedCode);
-        $this->assertContains('Progravity\\Auth\\Concerns\\HasAccounts', $mod->addedImports);
+        $this->assertStringContainsString('use JamesGifford\\Auth\\Concerns\\HasAccounts;', $mod->modifiedCode);
+        $this->assertContains('JamesGifford\\Auth\\Concerns\\HasAccounts', $mod->addedImports);
     }
 
     public function test_modify_adds_trait_usage_to_class_body(): void
@@ -222,7 +222,7 @@ class UserModelModifierTest extends TestCase
         $mod = $this->modifier->modify($file, $analysis);
 
         // The original namespace must be preserved.
-        $this->assertStringContainsString('namespace Progravity\\Auth\\Tests\\Support\\Fixtures\\UserModels;', $mod->modifiedCode);
+        $this->assertStringContainsString('namespace JamesGifford\\Auth\\Tests\\Support\\Fixtures\\UserModels;', $mod->modifiedCode);
         // The original use statements must still be present.
         $this->assertStringContainsString('use Illuminate\\Database\\Eloquent\\Factories\\HasFactory;', $mod->modifiedCode);
         $this->assertStringContainsString('use Illuminate\\Notifications\\Notifiable;', $mod->modifiedCode);
@@ -243,7 +243,7 @@ class UserModelModifierTest extends TestCase
         $diff = $mod->diff();
 
         $this->assertNotSame('', $diff);
-        $this->assertStringContainsString('use Progravity\\Auth\\PublicId\\Concerns\\HasPublicId;', $diff);
+        $this->assertStringContainsString('use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;', $diff);
         $this->assertStringContainsString('use HasPublicId, HasAccounts;', $diff);
     }
 
@@ -265,7 +265,7 @@ class UserModelModifierTest extends TestCase
         $code = (string) file_get_contents($sourceFile);
         // Rewrite the namespace+classname so the loaded class doesn't collide
         // with the fixture's original class.
-        $code = preg_replace('/namespace [^;]+;/', "namespace Progravity\\Auth\\Tests\\Tmp\\Mod{$uniqueClass};", $code);
+        $code = preg_replace('/namespace [^;]+;/', "namespace JamesGifford\\Auth\\Tests\\Tmp\\Mod{$uniqueClass};", $code);
         $code = preg_replace('/class StandardLaravelUser /', "class {$uniqueClass} ", $code);
 
         $tmpFile = $this->tmpDir.DIRECTORY_SEPARATOR.$uniqueClass.'.php';
@@ -278,7 +278,7 @@ class UserModelModifierTest extends TestCase
 
         require $tmpFile;
 
-        $fqcn = "Progravity\\Auth\\Tests\\Tmp\\Mod{$uniqueClass}\\{$uniqueClass}";
+        $fqcn = "JamesGifford\\Auth\\Tests\\Tmp\\Mod{$uniqueClass}\\{$uniqueClass}";
         $this->assertTrue(class_exists($fqcn));
 
         $instance = new $fqcn;

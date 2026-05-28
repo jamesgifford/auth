@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Config;
+namespace JamesGifford\Auth\PublicId\Config;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use JamesGifford\Auth\PublicId\Exceptions\IncompleteLockFileException;
+use JamesGifford\Auth\PublicId\Exceptions\LockFileWriteException;
+use JamesGifford\Auth\PublicId\Exceptions\MalformedLockFileException;
+use JamesGifford\Auth\PublicId\Exceptions\MissingLockFileException;
 use JsonException;
-use Progravity\Auth\PublicId\Exceptions\IncompleteLockFileException;
-use Progravity\Auth\PublicId\Exceptions\LockFileWriteException;
-use Progravity\Auth\PublicId\Exceptions\MalformedLockFileException;
-use Progravity\Auth\PublicId\Exceptions\MissingLockFileException;
 
 /**
  * Reads, writes, and deletes the public_id lock file on disk.

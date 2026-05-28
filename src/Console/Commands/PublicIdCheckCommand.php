@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Console\Commands;
+namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
-use Progravity\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\PrefixCollisionException;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
 use Throwable;
 
 /**
@@ -18,11 +18,11 @@ use Throwable;
  *
  * Exits non-zero on any failure, making it suitable as a CI step.
  *
- * Run with: `php artisan progravity:public-id:check`
+ * Run with: `php artisan jamesgifford:public-id:check`
  */
 final class PublicIdCheckCommand extends Command
 {
-    protected $signature = 'progravity:public-id:check';
+    protected $signature = 'jamesgifford:public-id:check';
 
     protected $description = 'Verify public_id prefix registry integrity and detect config issues.';
 
@@ -55,7 +55,7 @@ final class PublicIdCheckCommand extends Command
             foreach ($missing as $modelClass => $prefix) {
                 $this->line(sprintf("      %s (configured prefix: '%s') — class does not exist.", $modelClass, $prefix));
             }
-            $this->line('      Possible typo in config/progravity/auth.php under public_id.prefixes.');
+            $this->line('      Possible typo in config/jamesgifford/auth.php under public_id.prefixes.');
             $issues++;
         }
 

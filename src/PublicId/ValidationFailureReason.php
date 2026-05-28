@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
 /**
  * Distinct failure modes produced by {@see Validator}. Each case is a

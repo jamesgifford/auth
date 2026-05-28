@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Console\Commands;
+namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
-use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\Installer\UserModelModifier;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\GuardStatus;
-use Progravity\Auth\SystemRole;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\UserModelModifier;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\GuardStatus;
+use JamesGifford\Auth\SystemRole;
 use ReflectionClass;
 use Throwable;
 
@@ -23,7 +23,7 @@ use Throwable;
  */
 final class AuthInstallCommand extends Command
 {
-    protected $signature = 'progravity:auth:install
+    protected $signature = 'jamesgifford:auth:install
         {--skip-public-id : Skip public_id config setup}
         {--skip-migrations : Skip publishing and running migrations}
         {--skip-roles : Skip seeding system roles}
@@ -32,7 +32,7 @@ final class AuthInstallCommand extends Command
         {--force : Bypass interactive prompts}
         {--verify : Only run verification; don\'t modify anything}';
 
-    protected $description = 'Install and configure the Progravity Auth package in this application.';
+    protected $description = 'Install and configure the JamesGifford Auth package in this application.';
 
     public function __construct(
         private readonly UserModelModifier $modifier,
@@ -43,7 +43,7 @@ final class AuthInstallCommand extends Command
 
     public function handle(): int
     {
-        $this->info('Progravity Auth Installer');
+        $this->info('JamesGifford Auth Installer');
         $this->newLine();
 
         if ($this->option('verify')) {
@@ -89,11 +89,11 @@ final class AuthInstallCommand extends Command
         $ok = true;
 
         if (! $this->shouldSkipUserModel()) {
-            $userClass = config('progravity.auth.models.user');
+            $userClass = config('jamesgifford.auth.models.user');
 
             if (! is_string($userClass) || ! class_exists($userClass)) {
                 $this->error("User model class '{$userClass}' is not loadable. ".
-                    "Verify config('progravity.auth.models.user') or run Laravel's auth scaffolding first.");
+                    "Verify config('jamesgifford.auth.models.user') or run Laravel's auth scaffolding first.");
                 $ok = false;
             } else {
                 $reflection = new ReflectionClass($userClass);
@@ -195,7 +195,7 @@ final class AuthInstallCommand extends Command
 
     private function resolveUserModelFile(): ?string
     {
-        $userClass = config('progravity.auth.models.user');
+        $userClass = config('jamesgifford.auth.models.user');
         if (! is_string($userClass) || ! class_exists($userClass)) {
             return null;
         }
@@ -216,7 +216,7 @@ final class AuthInstallCommand extends Command
         $this->newLine();
 
         $rows = [
-            'public_id_setup' => 'Lock public_id configuration (`progravity:public-id:setup`)',
+            'public_id_setup' => 'Lock public_id configuration (`jamesgifford:public-id:setup`)',
             'publish_migrations' => 'Publish package migrations to database/migrations/',
             'run_migrations' => 'Run pending migrations',
             'seed_roles' => 'Seed system roles into account_roles',
@@ -303,7 +303,7 @@ final class AuthInstallCommand extends Command
     {
         $this->newLine();
         $this->info('→ Locking public_id configuration...');
-        $exit = $this->call('progravity:public-id:setup');
+        $exit = $this->call('jamesgifford:public-id:setup');
 
         return $exit === self::SUCCESS;
     }
@@ -312,7 +312,7 @@ final class AuthInstallCommand extends Command
     {
         $this->newLine();
         $this->info('→ Publishing package migrations...');
-        $this->call('vendor:publish', ['--tag' => 'progravity-auth-migrations']);
+        $this->call('vendor:publish', ['--tag' => 'jamesgifford-auth-migrations']);
 
         $published = glob(database_path('migrations'.DIRECTORY_SEPARATOR.'*_create_accounts_table.php'));
         if ($published === []) {
@@ -426,8 +426,8 @@ final class AuthInstallCommand extends Command
         $this->newLine();
         $this->line('  Add to the use statements at the top of the file:');
         $this->newLine();
-        $this->line('      use Progravity\\Auth\\PublicId\\Concerns\\HasPublicId;');
-        $this->line('      use Progravity\\Auth\\Concerns\\HasAccounts;');
+        $this->line('      use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;');
+        $this->line('      use JamesGifford\\Auth\\Concerns\\HasAccounts;');
         $this->newLine();
         $this->line('  Add to the class body, after the existing traits:');
         $this->newLine();
@@ -440,7 +440,7 @@ final class AuthInstallCommand extends Command
         $this->line("          return 'usr';");
         $this->line('      }');
         $this->newLine();
-        $this->line('Then run `php artisan progravity:auth:install --verify` to confirm.');
+        $this->line('Then run `php artisan jamesgifford:auth:install --verify` to confirm.');
     }
 
     // ---- Verification ----
@@ -479,7 +479,7 @@ final class AuthInstallCommand extends Command
                 $check('User model is loadable', false);
             } else {
                 $analysis = $this->modifier->analyze($file);
-                $userClass = config('progravity.auth.models.user');
+                $userClass = config('jamesgifford.auth.models.user');
                 $check("{$userClass} uses HasPublicId trait", $analysis->hasHasPublicIdTrait);
                 $check("{$userClass} uses HasAccounts trait", $analysis->hasHasAccountsTrait);
                 $check("{$userClass} has publicIdPrefix() method", $analysis->hasPublicIdPrefixMethod);
@@ -504,10 +504,10 @@ final class AuthInstallCommand extends Command
         $this->line('       php artisan test');
         $this->newLine();
         $this->line('  2. Optionally customize the configuration:');
-        $this->line('       config/progravity/auth.php');
+        $this->line('       config/jamesgifford/auth.php');
         $this->newLine();
         $this->line('  3. Start using the package:');
-        $this->line('       use Progravity\\Auth\\Accounts\\Services\\AccountService;');
+        $this->line('       use JamesGifford\\Auth\\Accounts\\Services\\AccountService;');
         $this->line('       $account = app(AccountService::class)->create($user);');
     }
 }

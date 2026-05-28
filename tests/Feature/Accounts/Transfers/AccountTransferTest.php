@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts\Transfers;
+namespace JamesGifford\Auth\Tests\Feature\Accounts\Transfers;
 
 use DateTimeImmutable;
 use Error;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountTransfer;
 
 class AccountTransferTest extends AccountsTestCase
 {

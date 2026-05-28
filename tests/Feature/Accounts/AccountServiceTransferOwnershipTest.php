@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\AccountOwnershipTransferred;
-use Progravity\Auth\Exceptions\CannotAssignOwnerRoleException;
-use Progravity\Auth\Exceptions\InvalidRoleException;
-use Progravity\Auth\Exceptions\NotAMemberException;
-use Progravity\Auth\Exceptions\OwnerlessAccountException;
-use Progravity\Auth\Exceptions\SelfOwnershipTransferException;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Roles\RolesConfig;
-use Progravity\Auth\SystemRole;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountRoleTransfer;
-use Progravity\Auth\Transfers\AccountTransfer;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\AccountOwnershipTransferred;
+use JamesGifford\Auth\Exceptions\CannotAssignOwnerRoleException;
+use JamesGifford\Auth\Exceptions\InvalidRoleException;
+use JamesGifford\Auth\Exceptions\NotAMemberException;
+use JamesGifford\Auth\Exceptions\OwnerlessAccountException;
+use JamesGifford\Auth\Exceptions\SelfOwnershipTransferException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Roles\RolesConfig;
+use JamesGifford\Auth\SystemRole;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountRoleTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\UserTransfer;
 use RuntimeException;
 
 class AccountServiceTransferOwnershipTest extends AccountsTestCase
@@ -157,7 +157,7 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         ]);
         // Register the custom role with the rolesConfig at runtime by
         // updating config so the service's pre-check accepts it.
-        config(['progravity.auth.roles.auditor' => [
+        config(['jamesgifford.auth.roles.auditor' => [
             'name' => 'Auditor',
             'description' => 'Custom auditor role',
             'system' => false,

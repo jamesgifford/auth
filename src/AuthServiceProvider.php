@@ -2,37 +2,37 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth;
+namespace JamesGifford\Auth;
 
 use Illuminate\Support\ServiceProvider;
+use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
+use JamesGifford\Auth\Console\Commands\PublicIdCheckCommand;
+use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
+use JamesGifford\Auth\Console\Commands\PublicIdSetupCommand;
+use JamesGifford\Auth\Console\Commands\PublicIdStatusCommand;
+use JamesGifford\Auth\Installer\UserModelModifier;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\Validator;
+use JamesGifford\Auth\Roles\RolesConfig;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter\Standard as PhpParserPrinter;
-use Progravity\Auth\Accounts\Services\AccountIntegrityService;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Console\Commands\AuthInstallCommand;
-use Progravity\Auth\Console\Commands\PublicIdCheckCommand;
-use Progravity\Auth\Console\Commands\PublicIdResetCommand;
-use Progravity\Auth\Console\Commands\PublicIdSetupCommand;
-use Progravity\Auth\Console\Commands\PublicIdStatusCommand;
-use Progravity\Auth\Installer\UserModelModifier;
-use Progravity\Auth\PublicId\AlphabetRegistry;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Generator;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\PublicId\Validator;
-use Progravity\Auth\Roles\RolesConfig;
 
 /**
- * Progravity Auth package service provider.
+ * JamesGifford Auth package service provider.
  *
  * Responsibilities:
- *  - Merge package config defaults under the `progravity.auth` namespace
+ *  - Merge package config defaults under the `jamesgifford.auth` namespace
  *  - Bind public_id services (config wrapper, generator, validator, registries, lock file, guard) as singletons
- *  - Publish the config file to the consumer's config/progravity directory
+ *  - Publish the config file to the consumer's config/jamesgifford directory
  *  - On boot: assert the locked fingerprint matches current config, then register
  *    config-mapped models with the prefix registry and check for collisions
  */
@@ -40,7 +40,7 @@ class AuthServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/auth.php', 'progravity.auth');
+        $this->mergeConfigFrom(__DIR__.'/../config/auth.php', 'jamesgifford.auth');
 
         $this->app->singleton(AlphabetRegistry::class, function () {
             return new AlphabetRegistry;
@@ -48,7 +48,7 @@ class AuthServiceProvider extends ServiceProvider
 
         $this->app->singleton(PublicIdConfig::class, function ($app) {
             return new PublicIdConfig(
-                config('progravity.auth.public_id'),
+                config('jamesgifford.auth.public_id'),
                 $app->make(AlphabetRegistry::class),
             );
         });
@@ -67,7 +67,7 @@ class AuthServiceProvider extends ServiceProvider
 
         $this->app->singleton(LockFile::class, function ($app) {
             $config = $app->make(PublicIdConfig::class);
-            $path = $config->lockFilePath() ?? config_path('progravity/auth.lock.json');
+            $path = $config->lockFilePath() ?? config_path('jamesgifford/auth.lock.json');
 
             return new LockFile($path);
         });
@@ -86,7 +86,7 @@ class AuthServiceProvider extends ServiceProvider
 
         $this->app->singleton(RolesConfig::class, function () {
             return new RolesConfig(
-                config('progravity.auth.roles', []),
+                config('jamesgifford.auth.roles', []),
             );
         });
 
@@ -106,12 +106,12 @@ class AuthServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__.'/../config/auth.php' => config_path('progravity/auth.php'),
-        ], 'progravity-auth-config');
+            __DIR__.'/../config/auth.php' => config_path('jamesgifford/auth.php'),
+        ], 'jamesgifford-auth-config');
 
         $this->publishes([
             __DIR__.'/../database/migrations/' => database_path('migrations'),
-        ], 'progravity-auth-migrations');
+        ], 'jamesgifford-auth-migrations');
 
         $this->app->make(ConfigGuard::class)->assertMatches();
 

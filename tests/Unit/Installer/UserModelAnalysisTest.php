@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\Installer;
+namespace JamesGifford\Auth\Tests\Unit\Installer;
 
+use JamesGifford\Auth\Installer\UserModelAnalysis;
 use PHPUnit\Framework\TestCase;
-use Progravity\Auth\Installer\UserModelAnalysis;
 
 class UserModelAnalysisTest extends TestCase
 {

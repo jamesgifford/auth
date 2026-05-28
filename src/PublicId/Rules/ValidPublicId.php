@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Rules;
+namespace JamesGifford\Auth\PublicId\Rules;
 
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Progravity\Auth\PublicId\ValidationFailureReason;
-use Progravity\Auth\PublicId\Validator;
+use JamesGifford\Auth\PublicId\ValidationFailureReason;
+use JamesGifford\Auth\PublicId\Validator;
 
 /**
  * Laravel validation rule that wraps the package Validator.

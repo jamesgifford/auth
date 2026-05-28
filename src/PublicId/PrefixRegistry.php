@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
-use Progravity\Auth\PublicId\Concerns\HasPublicId;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
-use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
-use Progravity\Auth\PublicId\Exceptions\UnregisteredModelException;
+use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidPrefixException;
+use JamesGifford\Auth\PublicId\Exceptions\PrefixCollisionException;
+use JamesGifford\Auth\PublicId\Exceptions\UnregisteredModelException;
 use ReflectionClass;
 use ReflectionMethod;
 
@@ -18,7 +18,7 @@ use ReflectionMethod;
  * Resolution order for a given model:
  *   1. If the model overrides publicIdPrefix(), call it (NOT the trait's
  *      default — that would recurse back into the registry)
- *   2. Otherwise, look the model up in config('progravity.auth.public_id.prefixes')
+ *   2. Otherwise, look the model up in config('jamesgifford.auth.public_id.prefixes')
  *   3. Otherwise, throw {@see UnregisteredModelException}
  *
  * Resolution is lazy and cached — first call resolves and stores; subsequent
@@ -119,7 +119,14 @@ final class PrefixRegistry
         if ($reflection->hasMethod('publicIdPrefix')) {
             $method = $reflection->getMethod('publicIdPrefix');
             if (! $this->isTraitDefault($method)) {
-                $instance = new $modelClass;
+                // Instantiate WITHOUT the constructor so resolving a prefix
+                // never triggers the model's boot sequence. The eager
+                // register() call happens during bootHasPublicId(); a plain
+                // `new $modelClass` would re-enter boot, which Laravel 13's
+                // Model::bootIfNotBooted() rejects with a LogicException.
+                // publicIdPrefix() returns a constant string and needs no
+                // constructor state, so a constructor-less instance is safe.
+                $instance = $reflection->newInstanceWithoutConstructor();
                 $prefix = $instance->publicIdPrefix();
 
                 if (! is_string($prefix) || preg_match('/^[a-z]+$/', $prefix) !== 1

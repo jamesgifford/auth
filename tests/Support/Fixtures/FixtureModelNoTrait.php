@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Support\Fixtures;
+namespace JamesGifford\Auth\Tests\Support\Fixtures;
 
 use Illuminate\Database\Eloquent\Model;
 

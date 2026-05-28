@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts\Events;
+namespace JamesGifford\Auth\Tests\Feature\Accounts\Events;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Progravity\Auth\Accounts\Services\AccountService;
-use Progravity\Auth\Events\AccountDeleted;
-use Progravity\Auth\Events\AccountForceDeleted;
-use Progravity\Auth\Events\AccountOwnershipTransferred;
-use Progravity\Auth\Events\AccountRestored;
-use Progravity\Auth\Exceptions\SelfOwnershipTransferException;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Feature\Accounts\AccountsTestCase;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Events\AccountDeleted;
+use JamesGifford\Auth\Events\AccountForceDeleted;
+use JamesGifford\Auth\Events\AccountOwnershipTransferred;
+use JamesGifford\Auth\Events\AccountRestored;
+use JamesGifford\Auth\Exceptions\SelfOwnershipTransferException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Transfers\AccountTransfer;
 use RuntimeException;
 
 class OwnershipAndLifecycleEventsTest extends AccountsTestCase

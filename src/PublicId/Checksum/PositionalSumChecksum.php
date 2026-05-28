@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Checksum;
+namespace JamesGifford\Auth\PublicId\Checksum;
 
+use JamesGifford\Auth\PublicId\Alphabet;
 use OutOfBoundsException;
-use Progravity\Auth\PublicId\Alphabet;
 
 /**
  * Default checksum strategy. For each character in the body, multiplies

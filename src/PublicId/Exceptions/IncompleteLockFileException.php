@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
-use Progravity\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\LockFile;
 use RuntimeException;
 
 /**
@@ -24,7 +24,7 @@ class IncompleteLockFileException extends RuntimeException
             "Lock file at '%s' is missing required keys: %s. ".
             'The file may have been written by an incompatible version of the package '.
             'or manually edited. Restore from version control or run '.
-            '`php artisan progravity:public-id:reset --i-understand-this-breaks-existing-ids`.',
+            '`php artisan jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids`.',
             $path,
             implode(', ', $missingKeys),
         ));

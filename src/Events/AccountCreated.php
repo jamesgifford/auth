@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Events;
+namespace JamesGifford\Auth\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
-use Progravity\Auth\Transfers\AccountTransfer;
-use Progravity\Auth\Transfers\MembershipTransfer;
-use Progravity\Auth\Transfers\UserTransfer;
+use JamesGifford\Auth\Transfers\AccountTransfer;
+use JamesGifford\Auth\Transfers\MembershipTransfer;
+use JamesGifford\Auth\Transfers\UserTransfer;
 
 /**
  * Dispatched after AccountService::create() commits.

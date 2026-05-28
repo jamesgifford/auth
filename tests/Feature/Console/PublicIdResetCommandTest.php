@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Console;
+namespace JamesGifford\Auth\Tests\Feature\Console;
 
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PublicIdResetCommandTest extends TestCase
 {
@@ -23,7 +23,7 @@ class PublicIdResetCommandTest extends TestCase
 
     public function test_refuses_without_awkward_flag(): void
     {
-        $this->artisan('progravity:public-id:reset')
+        $this->artisan('jamesgifford:public-id:reset')
             ->expectsOutputToContain('discards the public_id configuration lock')
             ->expectsOutputToContain('--i-understand-this-breaks-existing-ids')
             ->assertFailed();
@@ -33,7 +33,7 @@ class PublicIdResetCommandTest extends TestCase
     {
         $this->app['env'] = 'production';
 
-        $this->artisan('progravity:public-id:reset --i-understand-this-breaks-existing-ids')
+        $this->artisan('jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids')
             ->expectsOutputToContain('refuses to run in production')
             ->expectsOutputToContain('--force-production')
             ->assertFailed();
@@ -44,7 +44,7 @@ class PublicIdResetCommandTest extends TestCase
         $this->writeMatchingLockFile();
         $this->app['env'] = 'production';
 
-        $this->artisan('progravity:public-id:reset --i-understand-this-breaks-existing-ids --force-production')
+        $this->artisan('jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids --force-production')
             ->expectsConfirmation('Reset the public_id lock?', 'yes')
             ->expectsOutputToContain('Lock file removed')
             ->assertSuccessful();
@@ -56,7 +56,7 @@ class PublicIdResetCommandTest extends TestCase
     {
         $this->writeMatchingLockFile();
 
-        $this->artisan('progravity:public-id:reset --i-understand-this-breaks-existing-ids')
+        $this->artisan('jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids')
             ->expectsConfirmation('Reset the public_id lock?', 'no')
             ->expectsOutputToContain('Reset canceled')
             ->assertSuccessful();
@@ -68,7 +68,7 @@ class PublicIdResetCommandTest extends TestCase
     {
         $this->writeMatchingLockFile();
 
-        $this->artisan('progravity:public-id:reset --i-understand-this-breaks-existing-ids')
+        $this->artisan('jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids')
             ->expectsConfirmation('Reset the public_id lock?', 'yes')
             ->expectsOutputToContain('Lock file removed')
             ->assertSuccessful();
@@ -78,7 +78,7 @@ class PublicIdResetCommandTest extends TestCase
 
     public function test_no_lock_file_to_reset_returns_success(): void
     {
-        $this->artisan('progravity:public-id:reset --i-understand-this-breaks-existing-ids')
+        $this->artisan('jamesgifford:public-id:reset --i-understand-this-breaks-existing-ids')
             ->expectsConfirmation('Reset the public_id lock?', 'yes')
             ->expectsOutputToContain('No lock file to reset')
             ->assertSuccessful();
@@ -86,9 +86,9 @@ class PublicIdResetCommandTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $this->tmpDir = sys_get_temp_dir().'/progravity-reset-cmd-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().'/jamesgifford-reset-cmd-'.uniqid('', true);
         $this->tmpLockPath = $this->tmpDir.'/auth.lock.json';
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->tmpLockPath);
+        $app['config']->set('jamesgifford.auth.public_id.lock_file_path', $this->tmpLockPath);
     }
 
     private function rmTree(string $dir): void

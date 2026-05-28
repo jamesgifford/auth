@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId;
+namespace JamesGifford\Auth\PublicId;
 
+use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use OutOfBoundsException;
-use Progravity\Auth\PublicId\Exceptions\InvalidAlphabetException;
 
 /**
  * Registry of named alphabet presets. Resolves config values — which

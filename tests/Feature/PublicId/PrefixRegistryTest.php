@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\PublicId;
+namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\PublicId\Exceptions\InvalidPrefixException;
-use Progravity\Auth\PublicId\Exceptions\PrefixCollisionException;
-use Progravity\Auth\PublicId\Exceptions\UnregisteredModelException;
-use Progravity\Auth\PublicId\PrefixRegistry;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModel;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelBadPrefix;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelNoTrait;
-use Progravity\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
-use Progravity\Auth\Tests\Support\PublicIdConfigFactory;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Exceptions\InvalidPrefixException;
+use JamesGifford\Auth\PublicId\Exceptions\PrefixCollisionException;
+use JamesGifford\Auth\PublicId\Exceptions\UnregisteredModelException;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelBadPrefix;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelNoTrait;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
+use JamesGifford\Auth\Tests\Support\PublicIdConfigFactory;
+use JamesGifford\Auth\Tests\TestCase;
 
 class PrefixRegistryTest extends TestCase
 {

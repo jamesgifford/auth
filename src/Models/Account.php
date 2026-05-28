@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Models;
+namespace JamesGifford\Auth\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Progravity\Auth\Database\Factories\AccountFactory;
-use Progravity\Auth\PublicId\Concerns\HasPublicId;
+use JamesGifford\Auth\Database\Factories\AccountFactory;
+use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
 
 /**
  * An account (tenant) within the application.
@@ -23,7 +23,7 @@ use Progravity\Auth\PublicId\Concerns\HasPublicId;
  *
  * This model is data + relationships only. Behavior such as ownership
  * transfer or member attachment lives on AccountService, not here. Consumers
- * may extend this class and point config('progravity.auth.models.account')
+ * may extend this class and point config('jamesgifford.auth.models.account')
  * at their subclass.
  */
 class Account extends Model
@@ -41,12 +41,12 @@ class Account extends Model
 
     public function owner(): BelongsTo
     {
-        return $this->belongsTo(config('progravity.auth.models.user'), 'owner_id');
+        return $this->belongsTo(config('jamesgifford.auth.models.user'), 'owner_id');
     }
 
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(config('progravity.auth.models.user'), 'account_user')
+        return $this->belongsToMany(config('jamesgifford.auth.models.user'), 'account_user')
             ->using(AccountUser::class)
             ->withPivot(['account_role_id', 'joined_at'])
             ->withTimestamps();

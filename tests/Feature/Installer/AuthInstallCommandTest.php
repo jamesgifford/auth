@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Installer;
+namespace JamesGifford\Auth\Tests\Feature\Installer;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
-use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\PublicId\Config\ConfigFingerprint;
-use Progravity\Auth\PublicId\Config\ConfigGuard;
-use Progravity\Auth\PublicId\Config\LockFile;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
+use JamesGifford\Auth\PublicId\Config\ConfigGuard;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\TestCase;
 
 class AuthInstallCommandTest extends TestCase
 {
@@ -31,7 +31,7 @@ class AuthInstallCommandTest extends TestCase
         // tmpDir and lockFilePath are computed in defineEnvironment but
         // setUp may need them, so make sure they're populated.
         if (! isset($this->tmpDir)) {
-            $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'progravity-install-'.uniqid('', true);
+            $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-install-'.uniqid('', true);
             mkdir($this->tmpDir, 0777, true);
             $this->lockFilePath = $this->tmpDir.DIRECTORY_SEPARATOR.'auth.lock.json';
         }
@@ -47,13 +47,13 @@ class AuthInstallCommandTest extends TestCase
             @unlink($this->userModelPath.'.bak');
         }
         if (isset($this->migrationsDir) && is_dir($this->migrationsDir)) {
-            foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*progravity*') as $f) {
+            foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*jamesgifford*') as $f) {
                 @unlink((string) $f);
             }
             foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_create_account*') as $f) {
                 @unlink((string) $f);
             }
-            foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_add_progravity*') as $f) {
+            foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_add_jamesgifford*') as $f) {
                 @unlink((string) $f);
             }
             foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_add_current_account*') as $f) {
@@ -67,7 +67,7 @@ class AuthInstallCommandTest extends TestCase
 
     public function test_verify_reports_failures_on_fresh_app(): void
     {
-        $this->artisan('progravity:auth:install', ['--verify' => true])
+        $this->artisan('jamesgifford:auth:install', ['--verify' => true])
             ->expectsOutputToContain('Public ID configuration locked')
             ->expectsOutputToContain('users.public_id column exists')
             ->expectsOutputToContain('One or more checks failed.')
@@ -83,7 +83,7 @@ class AuthInstallCommandTest extends TestCase
         // Trigger schema check by hitting the package's seeder.
         $this->app->make(AccountRoleSeeder::class)->run();
 
-        $this->artisan('progravity:auth:install', ['--verify' => true])
+        $this->artisan('jamesgifford:auth:install', ['--verify' => true])
             ->expectsOutputToContain('All checks passed.')
             ->assertSuccessful();
     }
@@ -92,7 +92,7 @@ class AuthInstallCommandTest extends TestCase
     {
         // Set the user model to something unloadable; --skip-user-model means
         // the verify path won't try to inspect it.
-        config(['progravity.auth.models.user' => 'App\\Models\\NonexistentUserClass']);
+        config(['jamesgifford.auth.models.user' => 'App\\Models\\NonexistentUserClass']);
 
         $this->writeLockFile();
         $this->copyPackageMigrationsToTestbenchPath();
@@ -100,7 +100,7 @@ class AuthInstallCommandTest extends TestCase
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
         $this->app->make(AccountRoleSeeder::class)->run();
 
-        $this->artisan('progravity:auth:install', ['--verify' => true, '--skip-user-model' => true])
+        $this->artisan('jamesgifford:auth:install', ['--verify' => true, '--skip-user-model' => true])
             ->expectsOutputToContain('All checks passed.')
             ->assertSuccessful();
     }
@@ -109,9 +109,9 @@ class AuthInstallCommandTest extends TestCase
 
     public function test_preflight_fails_when_user_model_class_missing(): void
     {
-        config(['progravity.auth.models.user' => 'App\\Models\\NonexistentUserClass']);
+        config(['jamesgifford.auth.models.user' => 'App\\Models\\NonexistentUserClass']);
 
-        $this->artisan('progravity:auth:install', ['--force' => true])
+        $this->artisan('jamesgifford:auth:install', ['--force' => true])
             ->expectsOutputToContain("User model class 'App\\Models\\NonexistentUserClass' is not loadable")
             ->assertExitCode(1);
     }
@@ -119,7 +119,7 @@ class AuthInstallCommandTest extends TestCase
     public function test_preflight_fails_when_users_table_missing(): void
     {
         // No migrations run at all — users table doesn't exist.
-        $this->artisan('progravity:auth:install', ['--force' => true, '--skip-user-model' => true])
+        $this->artisan('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true])
             ->expectsOutputToContain("'users' table does not exist")
             ->assertExitCode(1);
     }
@@ -130,7 +130,7 @@ class AuthInstallCommandTest extends TestCase
     {
         $this->loadLaravelMigrations();
 
-        $this->artisan('progravity:auth:install', [
+        $this->artisan('jamesgifford:auth:install', [
             '--skip-public-id' => true,
             '--skip-migrations' => true,
             '--skip-roles' => true,
@@ -146,7 +146,7 @@ class AuthInstallCommandTest extends TestCase
     {
         $this->loadLaravelMigrations();
 
-        $this->artisan('progravity:auth:install', ['--skip-user-model' => true])
+        $this->artisan('jamesgifford:auth:install', ['--skip-user-model' => true])
             ->expectsConfirmation('Proceed?', 'no')
             ->expectsOutputToContain('Installation canceled.')
             ->assertSuccessful();
@@ -164,7 +164,7 @@ class AuthInstallCommandTest extends TestCase
 
         // Second run: with everything in place and --skip-user-model so we
         // don't touch the fixture, every step should be marked "already".
-        $this->artisan('progravity:auth:install', ['--force' => true, '--skip-user-model' => true])
+        $this->artisan('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true])
             ->expectsOutputToContain('already locked')
             ->expectsOutputToContain('already published')
             ->expectsOutputToContain('already run')
@@ -181,7 +181,7 @@ class AuthInstallCommandTest extends TestCase
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
         $this->app->make(AccountRoleSeeder::class)->run();
 
-        $this->artisan('progravity:auth:install', ['--verify' => true])
+        $this->artisan('jamesgifford:auth:install', ['--verify' => true])
             ->expectsOutputToContain('All checks passed.')
             ->assertSuccessful();
     }
@@ -198,7 +198,7 @@ class AuthInstallCommandTest extends TestCase
         // PendingCommand's expectsOutputToContain matches line-by-line and
         // would consume the same line twice if we used both expectations.
         // Run via Artisan facade and inspect the full output string.
-        Artisan::call('progravity:auth:install', [
+        Artisan::call('jamesgifford:auth:install', [
             '--force' => true,
             '--skip-user-model' => true,
         ]);
@@ -215,20 +215,20 @@ class AuthInstallCommandTest extends TestCase
         $this->loadLaravelMigrations();
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
 
-        $this->artisan('progravity:auth:install', ['--force' => true, '--no-modify-user' => true])
+        $this->artisan('jamesgifford:auth:install', ['--force' => true, '--no-modify-user' => true])
             ->expectsOutputToContain('skipped via flag')
             ->assertSuccessful();
     }
 
     protected function defineEnvironment($app): void
     {
-        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'progravity-install-'.uniqid('', true);
+        $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-install-'.uniqid('', true);
         mkdir($this->tmpDir, 0777, true);
         $this->lockFilePath = $this->tmpDir.DIRECTORY_SEPARATOR.'auth.lock.json';
         $this->migrationsDir = $app->databasePath('migrations');
 
-        $app['config']->set('progravity.auth.public_id.lock_file_path', $this->lockFilePath);
-        $app['config']->set('progravity.auth.models.user', User::class);
+        $app['config']->set('jamesgifford.auth.public_id.lock_file_path', $this->lockFilePath);
+        $app['config']->set('jamesgifford.auth.models.user', User::class);
 
         // Sqlite + foreign keys for the full-install path.
         $connection = $app['config']->get('database.default');

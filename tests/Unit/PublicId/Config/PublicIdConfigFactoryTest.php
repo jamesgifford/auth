@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId\Config;
+namespace JamesGifford\Auth\Tests\Unit\PublicId\Config;
 
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\Tests\Support\PublicIdConfigFactory;
+use JamesGifford\Auth\Tests\TestCase;
 use LogicException;
-use Progravity\Auth\PublicId\Config\PublicIdConfig;
-use Progravity\Auth\Tests\Support\PublicIdConfigFactory;
-use Progravity\Auth\Tests\TestCase;
 
 class PublicIdConfigFactoryTest extends TestCase
 {

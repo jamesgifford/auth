@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests;
+namespace JamesGifford\Auth\Tests;
 
+use JamesGifford\Auth\AuthServiceProvider;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
-use Progravity\Auth\AuthServiceProvider;
 
 abstract class TestCase extends OrchestraTestCase
 {

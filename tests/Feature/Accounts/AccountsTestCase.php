@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Feature\Accounts;
+namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
 use Illuminate\Database\Eloquent\Model;
-use Progravity\Auth\Database\Seeders\AccountRoleSeeder;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\Tests\Support\Fixtures\User;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\TestCase;
 
 /**
  * Base test case for the accounts subsystem.
@@ -36,7 +36,7 @@ abstract class AccountsTestCase extends TestCase
     {
         // Point the package's user model at the test fixture; the consumer's
         // App\Models\User does not exist in the test environment.
-        $app['config']->set('progravity.auth.models.user', User::class);
+        $app['config']->set('jamesgifford.auth.models.user', User::class);
 
         // Testbench's in-memory sqlite connection ships with foreign keys
         // disabled; enable them so the cascade/restrict/null-on-delete
@@ -56,7 +56,7 @@ abstract class AccountsTestCase extends TestCase
     }
 
     /**
-     * Seed the account_roles table from config('progravity.auth.roles').
+     * Seed the account_roles table from config('jamesgifford.auth.roles').
      */
     protected function seedRoles(): void
     {

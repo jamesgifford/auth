@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Accounts\Services;
+namespace JamesGifford\Auth\Accounts\Services;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
-use Progravity\Auth\Models\Account;
-use Progravity\Auth\Models\AccountRole;
-use Progravity\Auth\Models\AccountUser;
-use Progravity\Auth\SystemRole;
-use Progravity\Auth\Transfers\IntegrityIssueTransfer;
-use Progravity\Auth\Transfers\IntegrityIssueType;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\SystemRole;
+use JamesGifford\Auth\Transfers\IntegrityIssueTransfer;
+use JamesGifford\Auth\Transfers\IntegrityIssueType;
 
 /**
  * Read-only scanner for Owner-invariant violations across accounts.
@@ -100,7 +100,7 @@ final class AccountIntegrityService
     private function accountQuery(AccountRole $ownerRole): Builder
     {
         /** @var class-string<Account> $accountClass */
-        $accountClass = config('progravity.auth.models.account');
+        $accountClass = config('jamesgifford.auth.models.account');
 
         return $accountClass::query()
             ->with(['memberships' => function ($query) use ($ownerRole): void {

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Unit\PublicId;
+namespace JamesGifford\Auth\Tests\Unit\PublicId;
 
-use Progravity\Auth\PublicId\Checksum\NullChecksum;
-use Progravity\Auth\PublicId\Generator;
-use Progravity\Auth\PublicId\ValidationFailureReason;
-use Progravity\Auth\PublicId\Validator;
-use Progravity\Auth\Tests\Support\PublicIdConfigFactory;
-use Progravity\Auth\Tests\TestCase;
+use JamesGifford\Auth\PublicId\Checksum\NullChecksum;
+use JamesGifford\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\ValidationFailureReason;
+use JamesGifford\Auth\PublicId\Validator;
+use JamesGifford\Auth\Tests\Support\PublicIdConfigFactory;
+use JamesGifford\Auth\Tests\TestCase;
 
 class ValidatorTest extends TestCase
 {

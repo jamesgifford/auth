@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Exceptions;
+namespace JamesGifford\Auth\Exceptions;
 
 use InvalidArgumentException;
 
@@ -17,7 +17,7 @@ class InvalidRoleException extends InvalidArgumentException
     {
         return new self(
             "No role exists with key '{$roleKey}'. ".
-            "Available roles are configured in config('progravity.auth.roles')."
+            "Available roles are configured in config('jamesgifford.auth.roles')."
         );
     }
 }

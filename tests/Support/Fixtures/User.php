@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Tests\Support\Fixtures;
+namespace JamesGifford\Auth\Tests\Support\Fixtures;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Progravity\Auth\Concerns\HasAccounts;
-use Progravity\Auth\PublicId\Concerns\HasPublicId;
+use JamesGifford\Auth\Concerns\HasAccounts;
+use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
 
 class User extends Authenticatable
 {

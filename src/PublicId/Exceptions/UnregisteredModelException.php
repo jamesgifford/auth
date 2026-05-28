@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\PublicId\Exceptions;
+namespace JamesGifford\Auth\PublicId\Exceptions;
 
-use Progravity\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
 use RuntimeException;
 
 /**
@@ -19,7 +19,7 @@ class UnregisteredModelException extends RuntimeException
         return new self(sprintf(
             "Model '%s' has no registered public_id prefix.\n".
             "Either implement publicIdPrefix() on the model, or register it in\n".
-            "config/progravity/auth.php under public_id.prefixes:\n\n".
+            "config/jamesgifford/auth.php under public_id.prefixes:\n\n".
             "    '%s' => 'your_prefix_here',",
             $modelClass,
             $modelClass,

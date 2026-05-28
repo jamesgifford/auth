@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Progravity\Auth\Installer;
+namespace JamesGifford\Auth\Installer;
 
 /**
  * The result of inspecting a consumer's User model file without modifying it.
