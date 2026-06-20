@@ -286,6 +286,32 @@ class AuthInstallCommandTest extends TestCase
         $this->assertFileExists($target);
     }
 
+    public function test_completion_prints_conditional_boost_reminder(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('Using Laravel Boost?', $output);
+        $this->assertStringContainsString('php artisan boost:update', $output);
+        $this->assertStringContainsString("don't use Boost, no action is needed", $output);
+    }
+
+    public function test_install_never_invokes_a_boost_command(): void
+    {
+        // Boost is not installed in the test environment. If install tried to
+        // CALL a boost command, Artisan would throw CommandNotFoundException and
+        // this run would fail. A clean exit proves the reminder is text-only.
+        $this->loadLaravelMigrations();
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('php artisan boost:update', $output);
+    }
+
     public function test_http_plumbing_is_enabled_by_default_in_published_config(): void
     {
         $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');

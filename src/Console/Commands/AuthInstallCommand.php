@@ -976,5 +976,21 @@ final class AuthInstallCommand extends Command
         $this->line('  The package checks this file to confirm the public ID format');
         $this->line("  hasn't changed unexpectedly. Commit it to version control so it");
         $this->line('  stays consistent across your environments.');
+
+        $this->displayBoostReminder();
+    }
+
+    /**
+     * Soft, conditional pointer for Laravel Boost users. This does NOT detect,
+     * require, or invoke Boost — it only prints text. Consumers who don't use
+     * Boost can ignore it.
+     */
+    private function displayBoostReminder(): void
+    {
+        $this->newLine();
+        $this->line('  Using Laravel Boost? Run `php artisan boost:update` to install this');
+        $this->line("  package's AI skill, which teaches coding agents its auth conventions.");
+        $this->line('  (First-time Boost setup uses `php artisan boost:install`.) If you');
+        $this->line("  don't use Boost, no action is needed.");
     }
 }
