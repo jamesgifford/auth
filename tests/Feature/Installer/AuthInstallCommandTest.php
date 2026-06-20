@@ -62,9 +62,11 @@ class AuthInstallCommandTest extends TestCase
             }
         }
         if ($this->app !== null) {
-            $published = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
-            if (is_file($published)) {
-                @unlink($published);
+            foreach (['auth.php', 'auth.lock.json'] as $name) {
+                $file = config_path('jamesgifford'.DIRECTORY_SEPARATOR.$name);
+                if (is_file($file)) {
+                    @unlink($file);
+                }
             }
         }
         parent::tearDown();
@@ -407,6 +409,23 @@ class AuthInstallCommandTest extends TestCase
         // The old next-steps checklist is gone.
         $this->assertStringNotContainsString('php artisan test', $output);
         $this->assertStringNotContainsString('AccountService::class)->create', $output);
+    }
+
+    public function test_completion_message_shows_project_relative_lock_path(): void
+    {
+        $this->loadLaravelMigrations();
+
+        // Use the default, in-project lock location instead of the tmp path.
+        $absolute = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.lock.json');
+        config(['jamesgifford.auth.public_id.lock_file_path' => $absolute]);
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $relative = 'config'.DIRECTORY_SEPARATOR.'jamesgifford'.DIRECTORY_SEPARATOR.'auth.lock.json';
+        $this->assertStringContainsString($relative, $output);
+        // The absolute path (with the project root prefix) is not shown.
+        $this->assertStringNotContainsString($absolute, $output);
     }
 
     protected function defineEnvironment($app): void

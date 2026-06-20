@@ -989,12 +989,18 @@ final class AuthInstallCommand extends Command
         $this->newLine();
 
         // Resolve the actual lock file path the same way the running command
-        // does, so a customized lock_file_path is reflected here verbatim.
+        // does, so a customized lock_file_path is reflected here. Display it
+        // relative to the project root when it lives inside it, so the note
+        // shows config/jamesgifford/auth.lock.json rather than an absolute path.
         $lockPath = $this->laravel->make(LockFile::class)->path();
+        $base = $this->laravel->basePath().DIRECTORY_SEPARATOR;
+        $displayPath = str_starts_with($lockPath, $base)
+            ? substr($lockPath, strlen($base))
+            : $lockPath;
 
         $this->line('  The public ID format is now locked. This lock is recorded in:');
         $this->newLine();
-        $this->line('      '.$lockPath);
+        $this->line('      '.$displayPath);
         $this->newLine();
         $this->line('  The package checks this file to confirm the public ID format');
         $this->line("  hasn't changed unexpectedly. Commit it to version control so it");
