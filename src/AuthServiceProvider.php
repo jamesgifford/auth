@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth;
 
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
 use JamesGifford\Auth\Accounts\Services\AccountService;
@@ -14,6 +16,7 @@ use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdSetupCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdStatusCommand;
 use JamesGifford\Auth\Installer\UserModelModifier;
+use JamesGifford\Auth\Listeners\CreateAccountOnRegistration;
 use JamesGifford\Auth\PublicId\AlphabetRegistry;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
@@ -126,6 +129,11 @@ class AuthServiceProvider extends ServiceProvider
         }
 
         $registry->assertNoCollisions();
+
+        // Auto-account-creation on registration. Single, isolated wiring point:
+        // a future config gate would wrap just this one line. Activates by the
+        // package being installed; no install-command change, no config flag.
+        Event::listen(Registered::class, CreateAccountOnRegistration::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([
