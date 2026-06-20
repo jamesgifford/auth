@@ -88,6 +88,48 @@ class AuthInstallCommandTest extends TestCase
             ->assertSuccessful();
     }
 
+    /**
+     * Regression test for the verification staleness bug: the User model trait
+     * checks must read the file from disk (UserModelModifier::analyze) rather
+     * than reflecting on the already-loaded class.
+     *
+     * We load a class that HAS the traits (so reflection would report them as
+     * present), then strip the traits from the file on disk. A file-based check
+     * reports them missing and fails; a reflection-based check would still see
+     * the loaded class's traits and wrongly pass.
+     */
+    public function test_verification_reads_user_model_from_disk_not_reflection(): void
+    {
+        // Stage everything else so the User model checks are the only ones that
+        // can fail.
+        $this->writeLockFile();
+        $this->copyPackageMigrationsToTestbenchPath();
+        $this->loadLaravelMigrations();
+        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
+        $this->app->make(AccountRoleSeeder::class)->run();
+
+        $class = 'FileBasedVerifyUser';
+        $fqcn = 'JamesGifford\\Auth\\Tests\\Support\\Tmp\\'.$class;
+        $this->userModelPath = $this->tmpDir.DIRECTORY_SEPARATOR.$class.'.php';
+
+        // Write + load a version WITH the traits: reflection now sees them.
+        file_put_contents($this->userModelPath, $this->userModelSource($class, withTraits: true));
+        require $this->userModelPath;
+
+        config(['jamesgifford.auth.models.user' => $fqcn]);
+
+        // Strip the traits from the file. The loaded class is unchanged.
+        file_put_contents($this->userModelPath, $this->userModelSource($class, withTraits: false));
+
+        Artisan::call('jamesgifford:auth:install', ['--verify' => true]);
+        $output = Artisan::output();
+
+        // Proof it read the file, not the loaded class: the checks fail.
+        $this->assertStringContainsString('✗ '.$fqcn.' uses HasPublicId trait', $output);
+        $this->assertStringContainsString('✗ '.$fqcn.' uses HasAccounts trait', $output);
+        $this->assertStringContainsString('One or more checks failed.', $output);
+    }
+
     public function test_verify_skips_user_model_checks_when_skip_flag_set(): void
     {
         // Set the user model to something unloadable; --skip-user-model means
@@ -233,6 +275,33 @@ class AuthInstallCommandTest extends TestCase
         // Sqlite + foreign keys for the full-install path.
         $connection = $app['config']->get('database.default');
         $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
+    }
+
+    private function userModelSource(string $class, bool $withTraits): string
+    {
+        $imports = $withTraits
+            ? "use JamesGifford\\Auth\\Concerns\\HasAccounts;\n".
+              "use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;\n"
+            : '';
+
+        $body = $withTraits
+            ? "    use HasAccounts;\n".
+              "    use HasPublicId;\n\n".
+              "    protected \$table = 'users';\n\n".
+              "    public function publicIdPrefix(): string\n".
+              "    {\n".
+              "        return 'usr';\n".
+              "    }\n"
+            : "    protected \$table = 'users';\n";
+
+        return "<?php\n\n".
+            "namespace JamesGifford\\Auth\\Tests\\Support\\Tmp;\n\n".
+            "use Illuminate\\Foundation\\Auth\\User as Authenticatable;\n".
+            $imports.
+            "\nclass {$class} extends Authenticatable\n".
+            "{\n".
+            $body.
+            "}\n";
     }
 
     private function rmTree(string $dir): void

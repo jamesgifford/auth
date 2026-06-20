@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Console\Commands;
 
+use Closure;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
 use JamesGifford\Auth\PublicId\Config\GuardStatus;
+use JamesGifford\Auth\PublicId\Config\LockFile;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\SystemRole;
 use ReflectionClass;
 use Throwable;
@@ -30,6 +35,7 @@ final class AuthInstallCommand extends Command
         {--skip-user-model : Skip User model modification; print instructions instead}
         {--no-modify-user : Alias for --skip-user-model}
         {--force : Bypass interactive prompts}
+        {--fresh : Tear down and cleanly redo the package setup (development only; refuses if package data exists)}
         {--verify : Only run verification; don\'t modify anything}';
 
     protected $description = 'Install and configure the JamesGifford Auth package in this application.';
@@ -50,6 +56,17 @@ final class AuthInstallCommand extends Command
             return $this->runVerification() ? self::SUCCESS : self::FAILURE;
         }
 
+        // --fresh tears down the package's setup before the normal (additive)
+        // install flow redoes it from current config. The preamble may refuse
+        // (returns FAILURE) or be canceled (returns SUCCESS); either way it
+        // short-circuits. A null return means teardown succeeded — fall through.
+        if ($this->option('fresh')) {
+            $stop = $this->runFreshPreamble();
+            if ($stop !== null) {
+                return $stop;
+            }
+        }
+
         if (! $this->runPreflightChecks()) {
             return self::FAILURE;
         }
@@ -65,6 +82,10 @@ final class AuthInstallCommand extends Command
 
         if (! $this->executeInstall($plan)) {
             return self::FAILURE;
+        }
+
+        if ($this->option('fresh')) {
+            $this->warnPublicIdPrefixMismatch();
         }
 
         $this->newLine();
@@ -256,7 +277,9 @@ final class AuthInstallCommand extends Command
 
     private function confirmPlan(): bool
     {
-        if ($this->option('force')) {
+        // --fresh already obtained confirmation (or --force) in its preamble;
+        // don't prompt a second time for the redo.
+        if ($this->option('force') || $this->option('fresh')) {
             return true;
         }
 
@@ -443,27 +466,307 @@ final class AuthInstallCommand extends Command
         $this->line('Then run `php artisan jamesgifford:auth:install --verify` to confirm.');
     }
 
+    // ---- Fresh mode ----
+
+    /**
+     * Guard, confirm, and tear down before the redo. Returns null to proceed
+     * (teardown + re-lock done), self::FAILURE to refuse, or self::SUCCESS when
+     * the consumer cancels at the confirmation prompt.
+     */
+    private function runFreshPreamble(): ?int
+    {
+        if ($this->laravel->environment() === 'production') {
+            $this->error('--fresh refuses to run in production.');
+            $this->newLine();
+            $this->line('In production you should evolve the schema with new migrations, not');
+            $this->line('tear it down. Generate a migration for your change and run:');
+            $this->newLine();
+            $this->line('  php artisan migrate');
+
+            return self::FAILURE;
+        }
+
+        $data = $this->packageDataExists();
+        if ($data !== []) {
+            $this->error('--fresh refuses to run: package-owned data exists.');
+            $this->newLine();
+            foreach ($data as $line) {
+                $this->line('  • '.$line);
+            }
+            $this->newLine();
+            $this->line('A fresh reinstall would orphan or destroy this data.');
+            $this->newLine();
+            $this->line('To remove the package when data exists, use the dedicated teardown');
+            $this->line('command `jamesgifford:auth:uninstall` (note: not yet available in this');
+            $this->line('version). Otherwise back up your data and reset manually before retrying.');
+
+            return self::FAILURE;
+        }
+
+        if (! $this->option('force')) {
+            $this->warn('--fresh will roll back the package\'s migrations, delete the published');
+            $this->line('migration files, reset the public ID configuration lock, and redo the');
+            $this->line('setup from current config. No package data exists, so this is safe.');
+            $this->newLine();
+
+            if (! $this->confirm('Proceed?', false)) {
+                $this->info('Fresh reinstall canceled.');
+
+                return self::SUCCESS;
+            }
+        }
+
+        $this->newLine();
+        $this->info('→ Tearing down existing package setup...');
+        $this->rollbackPackageMigrations();
+        $this->deletePublishedMigrationFiles();
+        $this->resetPublicIdLock();
+
+        $this->newLine();
+        $this->info('→ Re-locking public ID configuration from current config...');
+        if (! $this->relockPublicId()) {
+            return self::FAILURE;
+        }
+
+        return null;
+    }
+
+    /**
+     * Structured description of any package-owned data that exists. An empty
+     * array means it is safe to tear down and redo.
+     *
+     * @return list<string>
+     */
+    private function packageDataExists(): array
+    {
+        $found = [];
+
+        if (Schema::hasTable('accounts')) {
+            $count = DB::table('accounts')->count();
+            if ($count > 0) {
+                $found[] = "the 'accounts' table has {$count} row(s)";
+            }
+        }
+
+        if (Schema::hasTable('account_user')) {
+            $count = DB::table('account_user')->count();
+            if ($count > 0) {
+                $found[] = "the 'account_user' table has {$count} membership row(s)";
+            }
+        }
+
+        if (Schema::hasTable('account_roles')) {
+            $custom = DB::table('account_roles')->where('system', false)->count();
+            if ($custom > 0) {
+                $found[] = "the 'account_roles' table has {$custom} custom (non-system) role(s)";
+            }
+        }
+
+        if (Schema::hasTable('users') && Schema::hasColumn('users', 'public_id')) {
+            $withPublicId = DB::table('users')->whereNotNull('public_id')->count();
+            if ($withPublicId > 0) {
+                $found[] = "{$withPublicId} user(s) have a non-null public_id";
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * Roll back ONLY the package's own migrations, in reverse order, leaving
+     * any non-package migrations untouched. Migrations that aren't recorded as
+     * run are skipped gracefully.
+     */
+    private function rollbackPackageMigrations(): void
+    {
+        $migrator = $this->laravel->make('migrator');
+        $repository = $migrator->getRepository();
+
+        if (! $repository->repositoryExists()) {
+            $this->line('  - no migration repository; nothing to roll back');
+
+            return;
+        }
+
+        $ran = $repository->getRan();
+
+        // resolvePath() is protected but handles php-parser's anonymous-class
+        // migration files correctly (including the require cache), so bind into
+        // the migrator to reuse it rather than re-requiring files ourselves.
+        $resolve = Closure::bind(
+            fn (string $path) => $this->resolvePath($path),
+            $migrator,
+            $migrator::class,
+        );
+
+        foreach (array_reverse($this->packageMigrationNames()) as $name) {
+            if (! in_array($name, $ran, true)) {
+                $this->line("  - {$name} (not run; skipped)");
+
+                continue;
+            }
+
+            $path = database_path('migrations'.DIRECTORY_SEPARATOR.$name.'.php');
+            if (! is_file($path)) {
+                $this->warn("  - {$name}: file missing from database/migrations; cannot roll back its schema");
+
+                continue;
+            }
+
+            $migration = $resolve($path);
+            if (is_object($migration) && method_exists($migration, 'down')) {
+                $migration->down();
+            }
+            $repository->delete((object) ['migration' => $name]);
+            $this->line("  - rolled back {$name}");
+        }
+    }
+
+    /**
+     * Delete the consumer's published copies of the package migrations so the
+     * re-publish produces a clean set (no growing list of stale files).
+     */
+    private function deletePublishedMigrationFiles(): void
+    {
+        foreach ($this->packageMigrationNames() as $name) {
+            $path = database_path('migrations'.DIRECTORY_SEPARATOR.$name.'.php');
+            if (is_file($path)) {
+                @unlink($path);
+                $this->line("  - removed published migration {$name}.php");
+            }
+        }
+    }
+
+    /**
+     * Delete the public ID lock file (no IDs exist per the data check, so this
+     * is safe). Equivalent to what jamesgifford:public-id:reset does.
+     */
+    private function resetPublicIdLock(): void
+    {
+        try {
+            $this->laravel->make(LockFile::class)->delete();
+            $this->line('  - reset public ID configuration lock');
+        } catch (Throwable $e) {
+            $this->warn('  - could not delete the lock file: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Write a fresh lock file from the CURRENT (possibly edited) config,
+     * resolving fresh config/lock singletons so edits are picked up.
+     */
+    private function relockPublicId(): bool
+    {
+        foreach ([PublicIdConfig::class, LockFile::class, ConfigFingerprint::class, ConfigGuard::class] as $abstract) {
+            $this->laravel->forgetInstance($abstract);
+        }
+
+        $config = $this->laravel->make(PublicIdConfig::class);
+        $lockFile = $this->laravel->make(LockFile::class);
+        $fingerprint = $this->laravel->make(ConfigFingerprint::class);
+
+        try {
+            $lockFile->write($config, $fingerprint->compute($config));
+        } catch (Throwable $e) {
+            $this->error('Failed to re-lock public ID configuration: '.$e->getMessage());
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Advisory (not an error): if config maps the User model to a different
+     * prefix than the model's publicIdPrefix() actually returns, tell the
+     * consumer — --fresh deliberately does not rewrite the User model.
+     */
+    private function warnPublicIdPrefixMismatch(): void
+    {
+        $userClass = config('jamesgifford.auth.models.user');
+        if (! is_string($userClass) || ! class_exists($userClass)) {
+            return;
+        }
+
+        $configPrefixes = config('jamesgifford.auth.public_id.prefixes', []);
+        if (! is_array($configPrefixes) || ! array_key_exists($userClass, $configPrefixes)) {
+            // No config-implied user prefix to compare against.
+            return;
+        }
+        $configPrefix = $configPrefixes[$userClass];
+
+        try {
+            $modelPrefix = (new $userClass)->publicIdPrefix();
+        } catch (Throwable) {
+            return;
+        }
+
+        if ($modelPrefix === $configPrefix) {
+            return;
+        }
+
+        $this->newLine();
+        $this->warn(sprintf(
+            "Your User model's publicIdPrefix() returns '%s', but config maps %s to '%s'.",
+            $modelPrefix,
+            $userClass,
+            (string) $configPrefix,
+        ));
+        $this->line('If you intended to change the user prefix, update app/Models/User.php manually.');
+        $this->line('--fresh does not modify your User model.');
+    }
+
+    /**
+     * Canonical list of the package's migration names (basename without .php),
+     * sourced from the package's own database/migrations directory. This is the
+     * manifest used to identify "our" migrations for surgical rollback and for
+     * deleting stale published copies. Published files keep these exact names.
+     *
+     * @return list<string>
+     */
+    private function packageMigrationNames(): array
+    {
+        $source = __DIR__.'/../../../database/migrations';
+        $files = glob($source.DIRECTORY_SEPARATOR.'*.php') ?: [];
+        sort($files);
+
+        return array_map(static fn (string $f): string => basename($f, '.php'), $files);
+    }
+
     // ---- Verification ----
 
     private function runVerification(): bool
     {
-        $allOk = true;
+        // Verification runs in the same process that just wrote the lock file,
+        // ran migrations, and modified the User model file. Stale in-process
+        // state would produce false negatives, so refresh first:
+        //  - config:clear drops any cached config so config()-backed checks
+        //    read current values.
+        //  - A freshly-resolved ConfigGuard re-reads the lock file from disk
+        //    (the injected guard may have memoized "not yet locked" before the
+        //    lock was written during this same run).
+        $this->callSilent('config:clear');
+        $guard = $this->freshPublicIdGuard();
 
-        $check = function (string $label, bool $ok) use (&$allOk): void {
-            $symbol = $ok ? '✓' : '✗';
-            $this->line("  {$symbol} {$label}");
+        /** @var list<string> $failures */
+        $failures = [];
+
+        $check = function (string $label, bool $ok) use (&$failures): void {
+            $this->line('  '.($ok ? '✓' : '✗')." {$label}");
             if (! $ok) {
-                $allOk = false;
+                $failures[] = $label;
             }
         };
 
-        $check('Public ID configuration locked', $this->publicIdGuard->status() === GuardStatus::Locked);
+        $check('Public ID configuration locked', $guard->status() === GuardStatus::Locked);
 
         $check(
             'Package migrations published',
             glob(database_path('migrations'.DIRECTORY_SEPARATOR.'*_create_accounts_table.php')) !== [],
         );
 
+        // Schema::has* issues a fresh query per call (no per-process memoization
+        // is added by this command), so these reflect the current schema.
         $check('users.public_id column exists', Schema::hasColumn('users', 'public_id'));
         $check('users.current_account_id column exists', Schema::hasColumn('users', 'current_account_id'));
         $check('accounts table exists', Schema::hasTable('accounts'));
@@ -478,6 +781,11 @@ final class AuthInstallCommand extends Command
             if ($file === null) {
                 $check('User model is loadable', false);
             } else {
+                // Re-analyze the file from disk via php-parser rather than
+                // reflecting on the already-loaded class. PHP caches the class
+                // definition from its first autoload, so reflection would
+                // report the pre-modification shape even though the file now
+                // has the traits. analyze() reads current file content.
                 $analysis = $this->modifier->analyze($file);
                 $userClass = config('jamesgifford.auth.models.user');
                 $check("{$userClass} uses HasPublicId trait", $analysis->hasHasPublicIdTrait);
@@ -487,9 +795,38 @@ final class AuthInstallCommand extends Command
         }
 
         $this->newLine();
-        $this->line($allOk ? 'All checks passed.' : 'One or more checks failed.');
 
-        return $allOk;
+        if ($failures !== []) {
+            $this->line('The following checks failed:');
+            foreach ($failures as $label) {
+                $this->line('  ✗ '.$label);
+            }
+            $this->newLine();
+            $this->line('One or more checks failed.');
+
+            return false;
+        }
+
+        $this->line('All checks passed.');
+
+        return true;
+    }
+
+    /**
+     * Resolve a ConfigGuard that reflects current on-disk + config state.
+     *
+     * The guard (and the config/lock-file singletons it depends on) memoize
+     * their state on first use. During a full install run that happens before
+     * the lock file is written, so the injected instance can report a stale
+     * "not yet locked". Forgetting and re-resolving forces a fresh read.
+     */
+    private function freshPublicIdGuard(): ConfigGuard
+    {
+        foreach ([ConfigGuard::class, PublicIdConfig::class, LockFile::class, ConfigFingerprint::class] as $abstract) {
+            $this->laravel->forgetInstance($abstract);
+        }
+
+        return $this->laravel->make(ConfigGuard::class);
     }
 
     // ---- Next steps ----
