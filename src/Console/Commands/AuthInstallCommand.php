@@ -11,11 +11,14 @@ use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PublicId\AlphabetRegistry;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
 use JamesGifford\Auth\PublicId\Config\GuardStatus;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\Generator;
+use JamesGifford\Auth\PublicId\Validator;
 use JamesGifford\Auth\SystemRole;
 use ReflectionClass;
 use Throwable;
@@ -71,11 +74,24 @@ final class AuthInstallCommand extends Command
             return self::FAILURE;
         }
 
+        // Make sure the config file is published (and read fresh) before we
+        // build the plan from it or display it.
+        $this->ensureConfigPublished();
+
         $plan = $this->buildPlan();
         $this->displayPlan($plan);
 
         if (! $this->confirmPlan()) {
             $this->info('Installation canceled.');
+
+            return self::SUCCESS;
+        }
+
+        // Surface the configuration that will be locked, and confirm it, before
+        // the irreversible public_id lock. Only when we are actually going to
+        // lock (a re-run with the config already locked has nothing to gate).
+        if ($plan['public_id_setup'] && ! $this->confirmPublicIdConfig()) {
+            $this->info('Setup canceled. Edit config/jamesgifford/auth.php and re-run.');
 
             return self::SUCCESS;
         }
@@ -237,7 +253,7 @@ final class AuthInstallCommand extends Command
         $this->newLine();
 
         $rows = [
-            'public_id_setup' => 'Lock public_id configuration (`jamesgifford:public-id:setup`)',
+            'public_id_setup' => 'Lock public_id configuration format',
             'publish_migrations' => 'Publish package migrations to database/migrations/',
             'run_migrations' => 'Run pending migrations',
             'seed_roles' => 'Seed system roles into account_roles',
@@ -286,6 +302,131 @@ final class AuthInstallCommand extends Command
         return $this->confirm('Proceed?', true);
     }
 
+    // ---- Configuration surfacing ----
+
+    private function publishedConfigPath(): string
+    {
+        return config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+    }
+
+    /**
+     * Publish the package config if the consumer hasn't already. No prompt —
+     * just publish the defaults and continue. If it already exists (the
+     * consumer may have edited it), leave it untouched.
+     */
+    private function ensureConfigPublished(): void
+    {
+        if (is_file($this->publishedConfigPath())) {
+            return;
+        }
+
+        $this->callSilent('vendor:publish', ['--tag' => 'jamesgifford-auth-config']);
+
+        // The merged config was resolved at boot, before the file existed; clear
+        // any cached config so subsequent reads reflect the published file.
+        // (Same in-process staleness remedy as the verification step.)
+        $this->callSilent('config:clear');
+
+        $this->line('Published configuration to config/jamesgifford/auth.php');
+    }
+
+    /**
+     * Concise, look-before-you-leap summary of the public_id format settings
+     * that are about to be locked, plus the role list and a genuine sample ID.
+     * Every value is pulled from resolved config (not hardcoded). Shared by the
+     * normal install path and the --fresh path.
+     */
+    private function displayPublicIdConfig(): void
+    {
+        // The config singletons were built at boot; rebuild them so the display
+        // reflects the current (possibly just-published or edited) config.
+        foreach ([PublicIdConfig::class, Generator::class, Validator::class] as $abstract) {
+            $this->laravel->forgetInstance($abstract);
+        }
+
+        $config = $this->laravel->make(PublicIdConfig::class);
+        $generator = $this->laravel->make(Generator::class);
+
+        $this->newLine();
+        $this->info('Configuration (from config/jamesgifford/auth.php):');
+        $this->newLine();
+        $this->line('  Public ID format');
+        $this->line(sprintf('    Prefix max length   %d', $config->prefixMaxLength()));
+        $this->line(sprintf('    Body length         %d', $config->bodyLength()));
+        $this->line('    Alphabet            '.$this->describeAlphabet($config));
+        $this->line('    Checksum            '.$this->describeChecksum($config));
+        $this->line('    Example             '.$generator->generate($this->sampleExamplePrefix($config)));
+        $this->newLine();
+        $this->line('  Account roles         '.$this->describeRoles());
+        $this->newLine();
+        $this->line('  The public ID format above will be locked at setup and cannot be');
+        $this->line('  changed afterward without invalidating any IDs already created.');
+        $this->newLine();
+        $this->line('  To use different settings, edit config/jamesgifford/auth.php and re-run.');
+    }
+
+    /**
+     * Display the config and prompt to proceed (normal install path). Under
+     * --force the display still prints (for the log) but the prompt is skipped.
+     * Returns false when the consumer declines.
+     */
+    private function confirmPublicIdConfig(): bool
+    {
+        $this->displayPublicIdConfig();
+
+        if ($this->option('force')) {
+            return true;
+        }
+
+        $this->newLine();
+
+        return $this->confirm('Proceed with this configuration?', true);
+    }
+
+    private function describeAlphabet(PublicIdConfig $config): string
+    {
+        $value = $config->bodyAlphabetConfigValue();
+        $size = $config->bodyAlphabet()->size();
+
+        // Named preset → human name + count. Raw string → the (truncated)
+        // string + count. Mirrors the setup wizard's named-vs-raw distinction.
+        if ($this->laravel->make(AlphabetRegistry::class)->has($value)) {
+            return sprintf('%s (%d characters)', $value, $size);
+        }
+
+        $shown = mb_strlen($value) > 32 ? mb_substr($value, 0, 31).'…' : $value;
+
+        return sprintf('%s (%d characters)', $shown, $size);
+    }
+
+    private function describeChecksum(PublicIdConfig $config): string
+    {
+        if (! $config->checksumEnabled()) {
+            return 'disabled';
+        }
+
+        return sprintf('enabled (%d characters)', $config->checksumLength());
+    }
+
+    private function describeRoles(): string
+    {
+        $roles = config('jamesgifford.auth.roles', []);
+        $keys = is_array($roles) ? array_keys($roles) : [];
+
+        return $keys === [] ? '(none configured)' : implode(', ', $keys);
+    }
+
+    /**
+     * A representative prefix that fits within the configured prefix length,
+     * so the example ID is a genuine, valid sample of the configured format.
+     */
+    private function sampleExamplePrefix(PublicIdConfig $config): string
+    {
+        $max = $config->prefixMaxLength();
+
+        return $max >= 3 ? 'acc' : substr('acc', 0, max(1, $max));
+    }
+
     // ---- Execution ----
 
     /**
@@ -326,9 +467,12 @@ final class AuthInstallCommand extends Command
     {
         $this->newLine();
         $this->info('→ Locking public_id configuration...');
-        $exit = $this->call('jamesgifford:public-id:setup');
 
-        return $exit === self::SUCCESS;
+        // The configuration was already displayed and confirmed (see
+        // confirmPublicIdConfig in handle()), so write the lock directly rather
+        // than delegating to the interactive setup wizard, which would display
+        // and prompt a second time.
+        return $this->writePublicIdLock();
     }
 
     private function executePublishMigrations(): bool
@@ -503,14 +647,21 @@ final class AuthInstallCommand extends Command
             return self::FAILURE;
         }
 
+        // Surface the configuration that will be re-locked from the (possibly
+        // edited) config file, and confirm it BEFORE any teardown — declining
+        // must leave the existing install untouched.
+        $this->ensureConfigPublished();
+        $this->displayPublicIdConfig();
+
         if (! $this->option('force')) {
+            $this->newLine();
             $this->warn('--fresh will roll back the package\'s migrations, delete the published');
             $this->line('migration files, reset the public ID configuration lock, and redo the');
-            $this->line('setup from current config. No package data exists, so this is safe.');
+            $this->line('setup from this configuration. No package data exists, so this is safe.');
             $this->newLine();
 
-            if (! $this->confirm('Proceed?', false)) {
-                $this->info('Fresh reinstall canceled.');
+            if (! $this->confirm('Proceed with this configuration?', false)) {
+                $this->info('Fresh reinstall canceled. Edit config/jamesgifford/auth.php and re-run.');
 
                 return self::SUCCESS;
             }
@@ -524,7 +675,7 @@ final class AuthInstallCommand extends Command
 
         $this->newLine();
         $this->info('→ Re-locking public ID configuration from current config...');
-        if (! $this->relockPublicId()) {
+        if (! $this->writePublicIdLock()) {
             return self::FAILURE;
         }
 
@@ -652,10 +803,11 @@ final class AuthInstallCommand extends Command
     }
 
     /**
-     * Write a fresh lock file from the CURRENT (possibly edited) config,
-     * resolving fresh config/lock singletons so edits are picked up.
+     * Write the public_id lock file from the CURRENT (possibly edited) config,
+     * resolving fresh config/lock singletons so edits are picked up. Shared by
+     * the normal install path and the --fresh redo.
      */
-    private function relockPublicId(): bool
+    private function writePublicIdLock(): bool
     {
         foreach ([PublicIdConfig::class, LockFile::class, ConfigFingerprint::class, ConfigGuard::class] as $abstract) {
             $this->laravel->forgetInstance($abstract);
@@ -668,7 +820,7 @@ final class AuthInstallCommand extends Command
         try {
             $lockFile->write($config, $fingerprint->compute($config));
         } catch (Throwable $e) {
-            $this->error('Failed to re-lock public ID configuration: '.$e->getMessage());
+            $this->error('Failed to lock public ID configuration: '.$e->getMessage());
 
             return false;
         }

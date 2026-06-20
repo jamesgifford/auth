@@ -103,6 +103,35 @@ class AuthInstallFreshModeTest extends TestCase
         $this->assertSame('Locked', $this->freshGuard()->status()->name);
     }
 
+    public function test_fresh_displays_config_and_confirms_before_relocking(): void
+    {
+        $this->stagePostInstallState();
+        config(['jamesgifford.auth.public_id.body.length' => 22]);
+
+        Artisan::call('jamesgifford:auth:install', ['--fresh' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        // Same display-and-confirm as the normal path, sourced from config.
+        $this->assertStringContainsString('Configuration (from config/jamesgifford/auth.php):', $output);
+        $this->assertStringContainsString('Body length         22', $output);
+        $this->assertStringContainsString('All checks passed.', $output);
+    }
+
+    public function test_fresh_declining_config_gate_does_not_tear_down(): void
+    {
+        $this->stagePostInstallState();
+
+        $this->artisan('jamesgifford:auth:install', ['--fresh' => true])
+            ->expectsOutputToContain('Configuration (from config/jamesgifford/auth.php):')
+            ->expectsConfirmation('Proceed with this configuration?', 'no')
+            ->expectsOutputToContain('Fresh reinstall canceled. Edit config/jamesgifford/auth.php and re-run.')
+            ->assertSuccessful();
+
+        // Declining before teardown leaves the existing install intact.
+        $this->assertTrue(Schema::hasTable('accounts'));
+        $this->assertFileExists($this->lockFilePath);
+    }
+
     // ---- Data-safety refusals ----
 
     public function test_fresh_refuses_when_accounts_has_rows(): void

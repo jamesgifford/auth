@@ -11,6 +11,7 @@ use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\TestCase;
 
@@ -58,6 +59,12 @@ class AuthInstallCommandTest extends TestCase
             }
             foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_add_current_account*') as $f) {
                 @unlink((string) $f);
+            }
+        }
+        if ($this->app !== null) {
+            $published = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+            if (is_file($published)) {
+                @unlink($published);
             }
         }
         parent::tearDown();
@@ -262,6 +269,125 @@ class AuthInstallCommandTest extends TestCase
             ->assertSuccessful();
     }
 
+    // ---- Config surfacing + auto-publish ----
+
+    public function test_install_publishes_config_when_absent(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        @unlink($target);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('Published configuration to config/jamesgifford/auth.php', $output);
+        $this->assertFileExists($target);
+    }
+
+    public function test_install_does_not_overwrite_existing_config(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        if (! is_dir(dirname($target))) {
+            mkdir(dirname($target), 0777, true);
+        }
+        // A consumer-edited config file already in place.
+        file_put_contents($target, "<?php\n\n// consumer-edited marker 8f3a\nreturn ['public_id' => ['body' => ['length' => 21]]];\n");
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringNotContainsString('Published configuration to', $output);
+        $this->assertStringContainsString('consumer-edited marker 8f3a', (string) file_get_contents($target));
+    }
+
+    public function test_config_display_reflects_overridden_value(): void
+    {
+        $this->loadLaravelMigrations();
+        // Override after boot: proves the display reads resolved config (and
+        // refreshes the config singletons), not hardcoded constants.
+        config(['jamesgifford.auth.public_id.body.length' => 24]);
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('Body length         24', $output);
+    }
+
+    public function test_example_id_in_display_is_a_valid_public_id(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $example = $this->extractExampleId($output);
+        $this->assertNotNull($example, 'Expected an Example line in the config display.');
+        $this->assertTrue(
+            PublicId::isValid($example),
+            "Example ID '{$example}' should be a valid public_id."
+        );
+    }
+
+    public function test_config_display_reflects_value_after_in_process_publish(): void
+    {
+        // Regression for publish-then-read staleness: the config file is absent
+        // (so install auto-publishes it mid-process), and a non-default value is
+        // active. The display must reflect the live value, not a stale default.
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        @unlink($target);
+        $this->loadLaravelMigrations();
+        config(['jamesgifford.auth.public_id.body.length' => 30]);
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('Published configuration to config/jamesgifford/auth.php', $output);
+        $this->assertStringContainsString('Body length         30', $output);
+    }
+
+    public function test_declining_config_prompt_cancels_without_locking(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->assertFileDoesNotExist($this->lockFilePath);
+
+        $this->artisan('jamesgifford:auth:install', ['--skip-user-model' => true])
+            ->expectsConfirmation('Proceed?', 'yes')
+            ->expectsOutputToContain('Configuration (from config/jamesgifford/auth.php):')
+            ->expectsConfirmation('Proceed with this configuration?', 'no')
+            ->expectsOutputToContain('Setup canceled. Edit config/jamesgifford/auth.php and re-run.')
+            ->assertSuccessful();
+
+        // The irreversible lock was NOT written.
+        $this->assertFileDoesNotExist($this->lockFilePath);
+    }
+
+    public function test_confirming_config_prompt_proceeds_to_lock(): void
+    {
+        $this->loadLaravelMigrations();
+
+        $this->artisan('jamesgifford:auth:install', ['--skip-user-model' => true])
+            ->expectsConfirmation('Proceed?', 'yes')
+            ->expectsConfirmation('Proceed with this configuration?', 'yes')
+            ->expectsOutputToContain('All checks passed.')
+            ->assertSuccessful();
+
+        $this->assertFileExists($this->lockFilePath);
+    }
+
+    public function test_force_skips_config_prompt_but_still_displays_and_locks(): void
+    {
+        $this->loadLaravelMigrations();
+
+        // No expectsConfirmation: --force must not prompt. The display still prints.
+        $this->artisan('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true])
+            ->expectsOutputToContain('Configuration (from config/jamesgifford/auth.php):')
+            ->expectsOutputToContain('All checks passed.')
+            ->assertSuccessful();
+
+        $this->assertFileExists($this->lockFilePath);
+    }
+
     protected function defineEnvironment($app): void
     {
         $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-install-'.uniqid('', true);
@@ -275,6 +401,15 @@ class AuthInstallCommandTest extends TestCase
         // Sqlite + foreign keys for the full-install path.
         $connection = $app['config']->get('database.default');
         $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
+    }
+
+    private function extractExampleId(string $output): ?string
+    {
+        if (preg_match('/Example\s+(\S+)/', $output, $m) === 1) {
+            return $m[1];
+        }
+
+        return null;
     }
 
     private function userModelSource(string $class, bool $withTraits): string
