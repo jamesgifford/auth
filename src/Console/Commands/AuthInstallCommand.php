@@ -39,6 +39,7 @@ final class AuthInstallCommand extends Command
         {--no-modify-user : Alias for --skip-user-model}
         {--force : Bypass interactive prompts}
         {--fresh : Tear down and cleanly redo the package setup (development only; refuses if package data exists)}
+        {--without-http : Disable the HTTP plumbing (routes + middleware); sets http.enabled = false in the published config}
         {--verify : Only run verification; don\'t modify anything}';
 
     protected $description = 'Install and configure the JamesGifford Auth package in this application.';
@@ -78,6 +79,13 @@ final class AuthInstallCommand extends Command
         // Make sure the config file is published (and read fresh) before we
         // build the plan from it or display it.
         $this->ensureConfigPublished();
+
+        // HTTP plumbing is on by default; --without-http turns it off in the
+        // published config so the service provider skips route/middleware
+        // registration.
+        if ($this->option('without-http')) {
+            $this->disableHttpPlumbing();
+        }
 
         $plan = $this->buildPlan();
         $this->displayPlan($plan);
@@ -308,6 +316,45 @@ final class AuthInstallCommand extends Command
     private function publishedConfigPath(): string
     {
         return config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+    }
+
+    /**
+     * Turn off the HTTP plumbing by setting http.enabled = false, both in the
+     * live config (for this process) and in the published config file (so the
+     * service provider skips route/middleware registration on future requests).
+     */
+    private function disableHttpPlumbing(): void
+    {
+        config(['jamesgifford.auth.http.enabled' => false]);
+
+        $path = $this->publishedConfigPath();
+        if (! is_file($path)) {
+            $this->line('HTTP plumbing disabled for this run (no published config file to update).');
+
+            return;
+        }
+
+        $contents = (string) file_get_contents($path);
+
+        // Flip the http block's `enabled` to false. The lazy match is anchored
+        // to the 'http' key, so it targets http.enabled and not the unrelated
+        // checksum.enabled earlier in the file.
+        $updated = preg_replace(
+            "/('http'\\s*=>\\s*\\[.*?'enabled'\\s*=>\\s*)true/s",
+            '${1}false',
+            $contents,
+            1,
+        );
+
+        if (is_string($updated) && $updated !== $contents) {
+            file_put_contents($path, $updated);
+            $this->callSilent('config:clear');
+            $this->line('HTTP plumbing disabled (set http.enabled = false in config/jamesgifford/auth.php).');
+
+            return;
+        }
+
+        $this->line('HTTP plumbing disabled for this run; update http.enabled in config/jamesgifford/auth.php manually to persist it.');
     }
 
     /**

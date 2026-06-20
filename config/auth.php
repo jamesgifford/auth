@@ -164,4 +164,38 @@ return [
         'default_name_template' => "{name}'s Account",
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | HTTP plumbing
+    |--------------------------------------------------------------------------
+    |
+    | The package's frontend-agnostic HTTP layer: the account switch/list
+    | routes and the EnsureCurrentAccount middleware. The controllers only
+    | redirect or return JSON — never a view — so this works identically on
+    | Livewire, Inertia, Blade, or API stacks. The service provider checks
+    | `enabled` before registering the routes and the middleware alias.
+    |
+    */
+
+    'http' => [
+
+        // Master switch for the HTTP plumbing. Set to false (or run
+        // `php artisan jamesgifford:auth:install --without-http`) to register
+        // no routes and no middleware alias — useful if you wire your own.
+        'enabled' => true,
+
+        'middleware' => [
+            // EnsureCurrentAccount: route name to send a "floating" user
+            // (authenticated, but with no current account) to. null means
+            // auto-assign their first account and continue instead of redirecting.
+            'redirect_floating_to' => null,
+
+            // EnsureCurrentAccount: route name to send a user to when their
+            // current account has gone (deleted, or membership lost). null means
+            // fall back to the floating behavior (auto-assign another account,
+            // else continue).
+            'redirect_missing_to' => null,
+        ],
+    ],
+
 ];

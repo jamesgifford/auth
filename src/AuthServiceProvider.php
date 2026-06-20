@@ -15,6 +15,7 @@ use JamesGifford\Auth\Console\Commands\PublicIdCheckCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdSetupCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdStatusCommand;
+use JamesGifford\Auth\Http\Middleware\EnsureCurrentAccount;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Listeners\CreateAccountOnRegistration;
 use JamesGifford\Auth\PublicId\AlphabetRegistry;
@@ -134,6 +135,14 @@ class AuthServiceProvider extends ServiceProvider
         // a future config gate would wrap just this one line. Activates by the
         // package being installed; no install-command change, no config flag.
         Event::listen(Registered::class, CreateAccountOnRegistration::class);
+
+        // Frontend-agnostic HTTP plumbing (account switch/list routes +
+        // EnsureCurrentAccount middleware). Gated by a single config flag so
+        // `--without-http` (which sets it false) skips all of it.
+        if (config('jamesgifford.auth.http.enabled', true)) {
+            $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+            $this->app['router']->aliasMiddleware('auth.current-account', EnsureCurrentAccount::class);
+        }
 
         if ($this->app->runningInConsole()) {
             $this->commands([

@@ -286,6 +286,38 @@ class AuthInstallCommandTest extends TestCase
         $this->assertFileExists($target);
     }
 
+    public function test_http_plumbing_is_enabled_by_default_in_published_config(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        @unlink($target);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $contents = (string) file_get_contents($target);
+        $this->assertMatchesRegularExpression("/'http'\\s*=>\\s*\\[.*?'enabled'\\s*=>\\s*true/s", $contents);
+    }
+
+    public function test_without_http_flag_disables_http_in_published_config(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        @unlink($target);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--without-http' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertFileExists($target);
+        $contents = (string) file_get_contents($target);
+        $this->assertMatchesRegularExpression("/'http'\\s*=>\\s*\\[.*?'enabled'\\s*=>\\s*false/s", $contents);
+        $this->assertStringContainsString('HTTP plumbing disabled', $output);
+        $this->assertFalse(config('jamesgifford.auth.http.enabled'));
+    }
+
     public function test_install_does_not_overwrite_existing_config(): void
     {
         $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
