@@ -18,8 +18,6 @@ use ReflectionClass;
 
 class AuthUninstallCommandTest extends TestCase
 {
-    private const ACK = '--i-understand-this-will-delete-all-auth-data';
-
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -56,20 +54,42 @@ class AuthUninstallCommandTest extends TestCase
         parent::tearDown();
     }
 
-    // ---- Acknowledgment gate ----
+    // ---- Warning + prompt (no flag gate) ----
 
-    public function test_refuses_without_acknowledgment_flag(): void
+    public function test_shows_warning_and_typed_confirmation_prompt_without_any_flag(): void
     {
         $this->stageInstall();
 
+        // No acknowledgment flag exists: the warning and typed prompt are
+        // reached directly. Declining at the prompt changes nothing.
         $this->artisan('jamesgifford:auth:uninstall')
+            ->expectsOutputToContain('WARNING: Uninstalling permanently deletes data and cannot be undone.')
             ->expectsOutputToContain('Uninstall removes the auth package from this application')
-            ->expectsOutputToContain('--i-understand-this-will-delete-all-auth-data')
-            ->assertExitCode(1);
+            ->expectsQuestion('Type "uninstall" to confirm, or anything else to cancel', '')
+            ->expectsOutputToContain('Uninstall canceled. Nothing was changed.')
+            ->assertExitCode(0);
 
-        // Nothing changed.
         $this->assertTrue(Schema::hasTable('accounts'));
         $this->assertFileExists($this->lockFilePath);
+    }
+
+    public function test_warning_text_is_clear_in_plain_no_color_output(): void
+    {
+        $this->stageInstall();
+
+        // Testbench captures non-decorated output, so this is the no-ANSI
+        // render. Assert on the words, not color codes — and confirm Laravel
+        // strips the color tags cleanly (no stray markup, no escape sequences).
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('WARNING: Uninstalling permanently deletes data and cannot be undone.', $output);
+        $this->assertStringContainsString('This will permanently delete:', $output);
+        $this->assertStringContainsString('Back up your database first', $output);
+
+        $this->assertStringNotContainsString('<fg=', $output);
+        $this->assertStringNotContainsString('</>', $output);
+        $this->assertStringNotContainsString("\033[", $output);
     }
 
     // ---- Production guard ----
@@ -79,7 +99,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->stageInstall();
         $this->app['env'] = 'production';
 
-        $exit = Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        $exit = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
         $this->app['env'] = 'testing';
 
@@ -94,7 +114,6 @@ class AuthUninstallCommandTest extends TestCase
         $this->app['env'] = 'production';
 
         $exit = Artisan::call('jamesgifford:auth:uninstall', [
-            self::ACK => true,
             '--force-production' => true,
             '--force' => true,
         ]);
@@ -122,7 +141,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->insertMembership($a1, $member, $ownerRole);
         $this->insertCustomRole('auditor');
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertStringContainsString('2 accounts', $output);
@@ -138,7 +157,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->writeLockFile();
         $this->loadLaravelMigrations();
 
-        $exit = Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        $exit = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertSame(0, $exit);
@@ -154,7 +173,7 @@ class AuthUninstallCommandTest extends TestCase
     {
         $this->stageInstall();
 
-        $this->artisan('jamesgifford:auth:uninstall', [self::ACK => true])
+        $this->artisan('jamesgifford:auth:uninstall', [])
             ->expectsQuestion('Type "uninstall" to confirm, or anything else to cancel', 'no thanks')
             ->expectsOutputToContain('Uninstall canceled. Nothing was changed.')
             ->assertExitCode(0);
@@ -168,7 +187,7 @@ class AuthUninstallCommandTest extends TestCase
     {
         $this->stageInstall();
 
-        $this->artisan('jamesgifford:auth:uninstall', [self::ACK => true])
+        $this->artisan('jamesgifford:auth:uninstall', [])
             ->expectsQuestion('Type "uninstall" to confirm, or anything else to cancel', 'uninstall')
             ->expectsOutputToContain('Uninstall complete.')
             ->assertExitCode(0);
@@ -181,7 +200,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->stageInstall();
 
         // No expectsQuestion: --force must not prompt.
-        $this->artisan('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true])
+        $this->artisan('jamesgifford:auth:uninstall', ['--force' => true])
             ->expectsOutputToContain('This will permanently delete:')
             ->expectsOutputToContain('Uninstall complete.')
             ->assertExitCode(0);
@@ -204,7 +223,7 @@ class AuthUninstallCommandTest extends TestCase
             'batch' => 99,
         ]);
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
 
         $this->assertTrue(Schema::hasTable('consumer_widgets'));
         $this->assertTrue(
@@ -216,7 +235,7 @@ class AuthUninstallCommandTest extends TestCase
     {
         $this->stageInstall();
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
 
         $this->assertFalse(Schema::hasTable('accounts'));
         $this->assertFalse(Schema::hasTable('account_roles'));
@@ -231,7 +250,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->stageInstall();
         $this->assertNotEmpty(glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_create_accounts_table.php'));
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
 
         $this->assertSame([], glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_create_accounts_table.php'));
         $this->assertSame([], glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_create_account_user_table.php'));
@@ -242,33 +261,37 @@ class AuthUninstallCommandTest extends TestCase
         $this->stageInstall();
         $this->assertFileExists($this->lockFilePath);
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
 
         $this->assertFileDoesNotExist($this->lockFilePath);
     }
 
     // ---- Config file handling ----
 
-    public function test_config_file_preserved_by_default(): void
+    public function test_config_file_deleted_by_default(): void
     {
         $this->stageInstall();
         $configFile = $this->writePublishedConfig();
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertFileDoesNotExist($configFile);
+        // Its removal was disclosed in the warning before confirmation.
+        $this->assertStringContainsString('the published config file (', $output);
+        $this->assertStringContainsString('removed the published config file', $output);
+    }
+
+    public function test_config_file_preserved_with_keep_config_flag(): void
+    {
+        $this->stageInstall();
+        $configFile = $this->writePublishedConfig();
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true, '--keep-config' => true]);
         $output = Artisan::output();
 
         $this->assertFileExists($configFile);
-        $this->assertStringContainsString('left the published config file in place', $output);
-    }
-
-    public function test_config_file_removed_with_delete_config_flag(): void
-    {
-        $this->stageInstall();
-        $configFile = $this->writePublishedConfig();
-
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true, '--delete-config' => true]);
-
-        $this->assertFileDoesNotExist($configFile);
+        $this->assertStringContainsString('the published config file will be kept', $output);
     }
 
     // ---- User model ----
@@ -280,7 +303,7 @@ class AuthUninstallCommandTest extends TestCase
         $userFile = (new ReflectionClass(User::class))->getFileName();
         $before = (string) file_get_contents((string) $userFile);
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
         // The User model file is untouched.
@@ -305,7 +328,7 @@ class AuthUninstallCommandTest extends TestCase
         require $path;
         config(['jamesgifford.auth.models.user' => $fqcn]);
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertStringContainsString('no longer references the package\'s traits', $output);
@@ -316,7 +339,7 @@ class AuthUninstallCommandTest extends TestCase
     {
         $this->stageInstall();
 
-        Artisan::call('jamesgifford:auth:uninstall', [self::ACK => true, '--force' => true]);
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertStringContainsString('Uninstall complete.', $output);

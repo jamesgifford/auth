@@ -21,9 +21,9 @@ use Throwable;
  *
  * This is the path for removing the package when data exists — which the
  * installer's --fresh mode refuses to touch. Because it drops tables that may
- * hold real data, it carries the strongest safeguards in the package: an
- * awkward acknowledgment flag, a production guard, a data-loss summary, and a
- * typed confirmation.
+ * hold real data, it carries the strongest safeguards in the package: a
+ * production guard, an explicit data-loss summary, and a typed confirmation
+ * (type "uninstall" to proceed).
  *
  * It does NOT edit the User model; automated reversion is deferred. It prints
  * tailored manual instructions for that one remaining step instead.
@@ -31,10 +31,9 @@ use Throwable;
 final class AuthUninstallCommand extends Command
 {
     protected $signature = 'jamesgifford:auth:uninstall
-        {--i-understand-this-will-delete-all-auth-data : Required acknowledgment that uninstall drops tables and deletes data}
-        {--delete-config : Also delete the published config file (config/jamesgifford/auth.php); by default it is left in place}
+        {--keep-config : Keep the published config file (config/jamesgifford/auth.php) instead of deleting it}
         {--force-production : Permit uninstall to run in a production environment}
-        {--force : Skip the interactive confirmation prompts (for non-interactive use)}';
+        {--force : Skip the interactive confirmation prompt (for non-interactive use)}';
 
     protected $description = 'Remove the JamesGifford Auth setup from this application. Destructive: drops tables and deletes data.';
 
@@ -51,12 +50,6 @@ final class AuthUninstallCommand extends Command
         $this->info('JamesGifford Auth Uninstaller');
         $this->newLine();
 
-        if (! $this->option('i-understand-this-will-delete-all-auth-data')) {
-            $this->displayAcknowledgmentRequired();
-
-            return self::FAILURE;
-        }
-
         if ($this->laravel->environment() === 'production' && ! $this->option('force-production')) {
             $this->displayProductionRefusal();
 
@@ -64,7 +57,7 @@ final class AuthUninstallCommand extends Command
         }
 
         $summary = $this->gatherTeardownSummary();
-        $this->displayDataLossSummary($summary);
+        $this->displayWarning($summary);
 
         if (! $this->confirmTeardown()) {
             $this->newLine();
@@ -83,25 +76,7 @@ final class AuthUninstallCommand extends Command
         return self::SUCCESS;
     }
 
-    // ---- Step 1: acknowledgment gate ----
-
-    private function displayAcknowledgmentRequired(): void
-    {
-        $this->warn('Uninstall removes the auth package from this application. It will:');
-        $this->newLine();
-        $this->line('  • Roll back the package\'s migrations, dropping the accounts,');
-        $this->line('    account_roles, and account_user tables');
-        $this->line('  • Remove the public_id and current_account_id columns from users');
-        $this->line('  • Delete the published migration files and the public ID lock file');
-        $this->newLine();
-        $this->line('This permanently deletes any data in those tables and columns.');
-        $this->newLine();
-        $this->line('To proceed, re-run with the explicit acknowledgment:');
-        $this->newLine();
-        $this->line('  php artisan jamesgifford:auth:uninstall --i-understand-this-will-delete-all-auth-data');
-    }
-
-    // ---- Step 2: production guard ----
+    // ---- Step 1: production guard ----
 
     private function displayProductionRefusal(): void
     {
@@ -111,7 +86,7 @@ final class AuthUninstallCommand extends Command
         $this->line('your database first — dropped tables cannot be recovered.');
     }
 
-    // ---- Step 3: data-loss summary ----
+    // ---- Step 2: data-loss summary ----
 
     /**
      * Compute exactly what teardown will remove, with real counts. A missing
@@ -126,6 +101,8 @@ final class AuthUninstallCommand extends Command
      *     migrationFileCount: int,
      *     lockFileExists: bool,
      *     lockPath: string,
+     *     configExists: bool,
+     *     configPath: string,
      *     notes: list<string>,
      * }
      */
@@ -196,27 +173,47 @@ final class AuthUninstallCommand extends Command
             'migrationFileCount' => $this->packageMigrations->publishedFileCount(),
             'lockFileExists' => $this->lockFile->exists(),
             'lockPath' => $this->lockFile->path(),
+            'configExists' => is_file($this->publishedConfigPath()),
+            'configPath' => $this->publishedConfigPath(),
             'notes' => $notes,
         ];
     }
 
     /**
-     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, notes: list<string>}  $summary
+     * Always-shown warning block. The wording carries the seriousness on its
+     * own (so a no-ANSI render in CI or piped output is still unambiguous);
+     * color only amplifies it — red for the headline, yellow for the counts
+     * and the back-up caution.
+     *
+     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, configExists: bool, configPath: string, notes: list<string>}  $summary
      */
-    private function displayDataLossSummary(array $summary): void
+    private function displayWarning(array $summary): void
     {
-        $this->line('This will permanently delete:');
+        $this->line('<fg=red>WARNING: Uninstalling permanently deletes data and cannot be undone.</>');
+        $this->newLine();
+
+        // What uninstall does — always shown, no longer gated behind a flag.
+        $this->line('Uninstall removes the auth package from this application. It will:');
+        $this->newLine();
+        $this->line('  • Roll back the package\'s migrations, dropping the accounts,');
+        $this->line('    account_roles, and account_user tables');
+        $this->line('  • Remove the public_id and current_account_id columns from users');
+        $this->line('  • Delete the published migration files, the public ID lock file,');
+        $this->line('    and the published config file');
+        $this->newLine();
+
+        $this->warn('This will permanently delete:');
         $this->newLine();
 
         if ($summary['accounts'] !== null) {
-            $this->line(sprintf('  • %d %s', $summary['accounts'], $this->pluralize($summary['accounts'], 'account', 'accounts')));
+            $this->warn(sprintf('  • %d %s', $summary['accounts'], $this->pluralize($summary['accounts'], 'account', 'accounts')));
         }
         if ($summary['memberships'] !== null) {
-            $this->line(sprintf('  • %d %s', $summary['memberships'], $this->pluralize($summary['memberships'], 'membership', 'memberships')));
+            $this->warn(sprintf('  • %d %s', $summary['memberships'], $this->pluralize($summary['memberships'], 'membership', 'memberships')));
         }
         if ($summary['customRoles'] !== []) {
             $count = count($summary['customRoles']);
-            $this->line(sprintf(
+            $this->warn(sprintf(
                 '  • %d %s (%s)',
                 $count,
                 $this->pluralize($count, 'custom role', 'custom roles'),
@@ -224,7 +221,7 @@ final class AuthUninstallCommand extends Command
             ));
         }
         if ($summary['userColumns'] !== [] && $summary['usersAffected'] !== null) {
-            $this->line(sprintf(
+            $this->warn(sprintf(
                 '  • %s %s from %d %s',
                 implode(' and ', $summary['userColumns']),
                 count($summary['userColumns']) === 1 ? 'column' : 'columns',
@@ -234,17 +231,25 @@ final class AuthUninstallCommand extends Command
         }
 
         $this->newLine();
-        $this->line('And remove:');
+        $this->warn('And remove:');
         $this->newLine();
-        $this->line(sprintf(
+        $this->warn(sprintf(
             '  • %d published migration %s',
             $summary['migrationFileCount'],
             $this->pluralize($summary['migrationFileCount'], 'file', 'files'),
         ));
         if ($summary['lockFileExists']) {
-            $this->line('  • the public ID lock file ('.$this->displayPath($summary['lockPath']).')');
+            $this->warn('  • the public ID lock file ('.$this->displayPath($summary['lockPath']).')');
         } else {
-            $this->line('  • the public ID lock file (already absent)');
+            $this->warn('  • the public ID lock file (already absent)');
+        }
+
+        if ($this->option('keep-config')) {
+            $this->line('  (the published config file will be kept — --keep-config)');
+        } elseif ($summary['configExists']) {
+            $this->warn('  • the published config file ('.$this->displayPath($summary['configPath']).')');
+        } else {
+            $this->warn('  • the published config file (already absent)');
         }
 
         if ($summary['notes'] !== []) {
@@ -254,9 +259,12 @@ final class AuthUninstallCommand extends Command
                 $this->line('  • '.$note);
             }
         }
+
+        $this->newLine();
+        $this->warn('Back up your database first — dropped tables cannot be recovered.');
     }
 
-    // ---- Step 4: confirmation ----
+    // ---- Step 3: confirmation ----
 
     private function confirmTeardown(): bool
     {
@@ -270,7 +278,7 @@ final class AuthUninstallCommand extends Command
         return $answer === 'uninstall';
     }
 
-    // ---- Step 5: teardown ----
+    // ---- Step 4: teardown ----
 
     private function runTeardown(): bool
     {
@@ -326,11 +334,14 @@ final class AuthUninstallCommand extends Command
 
     private function teardownConfigFile(): void
     {
-        $configPath = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        $configPath = $this->publishedConfigPath();
 
-        if (! $this->option('delete-config')) {
+        // Default is to delete the config file (full removal matches uninstall
+        // intent); --keep-config preserves it for consumers who want their
+        // customizations back later.
+        if ($this->option('keep-config')) {
             if (is_file($configPath)) {
-                $this->line('  - left the published config file in place ('.$this->displayPath($configPath).')');
+                $this->line('  - kept the published config file ('.$this->displayPath($configPath).')');
             }
 
             return;
@@ -339,10 +350,12 @@ final class AuthUninstallCommand extends Command
         if (is_file($configPath)) {
             @unlink($configPath);
             $this->line('  - removed the published config file ('.$this->displayPath($configPath).')');
+        } else {
+            $this->line('  - published config file already absent');
         }
     }
 
-    // ---- Step 6: User model manual instructions ----
+    // ---- Step 5: User model manual instructions ----
 
     private function displayUserModelInstructions(): void
     {
@@ -409,7 +422,7 @@ final class AuthUninstallCommand extends Command
         }
     }
 
-    // ---- Step 7: completion ----
+    // ---- Step 6: completion ----
 
     private function displayCompletion(): void
     {
@@ -422,6 +435,11 @@ final class AuthUninstallCommand extends Command
     }
 
     // ---- Helpers ----
+
+    private function publishedConfigPath(): string
+    {
+        return config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+    }
 
     private function resolveUserModelFile(): ?string
     {
