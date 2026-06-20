@@ -388,6 +388,27 @@ class AuthInstallCommandTest extends TestCase
         $this->assertFileExists($this->lockFilePath);
     }
 
+    public function test_completion_message_notes_the_lock_file_and_resolved_path(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('Installation complete.', $output);
+        $this->assertStringContainsString('The public ID format is now locked', $output);
+        $this->assertStringContainsString('Commit it to version control', $output);
+
+        // The resolved lock path (customized to a tmp path via config in
+        // defineEnvironment) appears verbatim — proving it's resolved, not a
+        // hardcoded literal.
+        $this->assertStringContainsString($this->lockFilePath, $output);
+
+        // The old next-steps checklist is gone.
+        $this->assertStringNotContainsString('php artisan test', $output);
+        $this->assertStringNotContainsString('AccountService::class)->create', $output);
+    }
+
     protected function defineEnvironment($app): void
     {
         $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-install-'.uniqid('', true);

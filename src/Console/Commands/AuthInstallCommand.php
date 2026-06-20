@@ -987,16 +987,17 @@ final class AuthInstallCommand extends Command
     {
         $this->info('Installation complete.');
         $this->newLine();
-        $this->line('Next steps:');
+
+        // Resolve the actual lock file path the same way the running command
+        // does, so a customized lock_file_path is reflected here verbatim.
+        $lockPath = $this->laravel->make(LockFile::class)->path();
+
+        $this->line('  The public ID format is now locked. This lock is recorded in:');
         $this->newLine();
-        $this->line('  1. Run your test suite to verify nothing else broke:');
-        $this->line('       php artisan test');
+        $this->line('      '.$lockPath);
         $this->newLine();
-        $this->line('  2. Optionally customize the configuration:');
-        $this->line('       config/jamesgifford/auth.php');
-        $this->newLine();
-        $this->line('  3. Start using the package:');
-        $this->line('       use JamesGifford\\Auth\\Accounts\\Services\\AccountService;');
-        $this->line('       $account = app(AccountService::class)->create($user);');
+        $this->line('  The package checks this file to confirm the public ID format');
+        $this->line("  hasn't changed unexpectedly. Commit it to version control so it");
+        $this->line('  stays consistent across your environments.');
     }
 }

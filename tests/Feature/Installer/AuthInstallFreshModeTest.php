@@ -73,6 +73,10 @@ class AuthInstallFreshModeTest extends TestCase
         $this->assertStringContainsString('rolled back 2026_05_06_100004_create_account_user_table', $output);
         $this->assertStringContainsString('All checks passed.', $output);
 
+        // The --fresh path shares the same lock-file completion note (resolved path).
+        $this->assertStringContainsString('The public ID format is now locked', $output);
+        $this->assertStringContainsString($this->lockFilePath, $output);
+
         // The schema is fully present again after the redo.
         $this->assertTrue(Schema::hasTable('accounts'));
         $this->assertTrue(Schema::hasColumn('users', 'public_id'));
