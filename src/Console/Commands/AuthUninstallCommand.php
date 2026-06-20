@@ -37,6 +37,8 @@ final class AuthUninstallCommand extends Command
 
     protected $description = 'Remove the JamesGifford Auth setup from this application. Destructive: drops tables and deletes data.';
 
+    private bool $configDirRemoved = false;
+
     public function __construct(
         private readonly UserModelModifier $modifier,
         private readonly LockFile $lockFile,
@@ -353,6 +355,40 @@ final class AuthUninstallCommand extends Command
         } else {
             $this->line('  - published config file already absent');
         }
+
+        $this->removeConfigDirIfEmpty();
+    }
+
+    /**
+     * Remove the vendor config directory (the parent of the published config
+     * file, e.g. config/jamesgifford/) ONLY if it is now completely empty.
+     *
+     * The directory may be shared with other packages, so this is strictly
+     * conditional: any remaining entry — another package's config, a committed
+     * .gitkeep, a stray .DS_Store, a subdirectory — means we leave it untouched.
+     * When in doubt, leave it: wrongly deleting a directory another package
+     * depends on is far worse than leaving an empty one behind.
+     */
+    private function removeConfigDirIfEmpty(): void
+    {
+        $dir = dirname($this->publishedConfigPath());
+
+        if (! is_dir($dir)) {
+            return;
+        }
+
+        // scandir() lists ALL entries, including dotfiles like .gitkeep and
+        // .DS_Store. The directory is "empty" only once nothing but . and ..
+        // remains — a glob() that skips dotfiles would be unsafe here.
+        $entries = array_diff(scandir($dir) ?: [], ['.', '..']);
+
+        if ($entries !== []) {
+            return;
+        }
+
+        if (@rmdir($dir)) {
+            $this->configDirRemoved = true;
+        }
     }
 
     // ---- Step 5: User model manual instructions ----
@@ -432,6 +468,11 @@ final class AuthUninstallCommand extends Command
         $this->line('  The package\'s tables, columns, migration files, and public ID lock');
         $this->line('  have been removed. Any remaining manual step for your User model is');
         $this->line('  described above.');
+
+        if ($this->configDirRemoved) {
+            $this->newLine();
+            $this->line('  '.$this->displayPath(dirname($this->publishedConfigPath())).' was empty and has been removed.');
+        }
     }
 
     // ---- Helpers ----

@@ -46,10 +46,7 @@ class AuthUninstallCommandTest extends TestCase
             }
         }
         if ($this->app !== null) {
-            $published = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
-            if (is_file($published)) {
-                @unlink($published);
-            }
+            $this->rmTree(config_path('jamesgifford'));
         }
         parent::tearDown();
     }
@@ -294,6 +291,92 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertStringContainsString('the published config file will be kept', $output);
     }
 
+    // ---- Config directory cleanup ----
+
+    public function test_removes_config_directory_when_empty_after_config_deletion(): void
+    {
+        $this->stageInstall();
+        $this->writePublishedConfig();
+        $dir = config_path('jamesgifford');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertDirectoryDoesNotExist($dir);
+        $this->assertStringContainsString('config'.DIRECTORY_SEPARATOR.'jamesgifford was empty and has been removed.', $output);
+    }
+
+    public function test_preserves_config_directory_when_other_package_config_present(): void
+    {
+        $this->stageInstall();
+        $this->writePublishedConfig();
+        $dir = config_path('jamesgifford');
+        $other = $this->writeConfigDirEntry('other.php', "<?php\n\nreturn [];\n");
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertDirectoryExists($dir);
+        $this->assertFileExists($other);
+        $this->assertStringNotContainsString('was empty and has been removed', $output);
+    }
+
+    public function test_preserves_config_directory_when_only_gitkeep_remains(): void
+    {
+        $this->stageInstall();
+        $this->writePublishedConfig();
+        $dir = config_path('jamesgifford');
+        $gitkeep = $this->writeConfigDirEntry('.gitkeep', '');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+
+        // A committed .gitkeep counts as non-empty — leave the directory.
+        $this->assertDirectoryExists($dir);
+        $this->assertFileExists($gitkeep);
+    }
+
+    public function test_preserves_config_directory_when_hidden_file_present(): void
+    {
+        $this->stageInstall();
+        $this->writePublishedConfig();
+        $dir = config_path('jamesgifford');
+        $dsStore = $this->writeConfigDirEntry('.DS_Store', 'junk');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+
+        // The dotfile-inclusive scan must catch this and leave the directory.
+        $this->assertDirectoryExists($dir);
+        $this->assertFileExists($dsStore);
+    }
+
+    public function test_no_error_when_config_directory_absent(): void
+    {
+        $this->stageInstall();
+        // No config file/dir written at all.
+        $this->assertDirectoryDoesNotExist(config_path('jamesgifford'));
+
+        $exit = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('Uninstall complete.', $output);
+        $this->assertStringNotContainsString('was empty and has been removed', $output);
+    }
+
+    public function test_keep_config_leaves_directory_alone(): void
+    {
+        $this->stageInstall();
+        $configFile = $this->writePublishedConfig();
+        $dir = config_path('jamesgifford');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true, '--keep-config' => true]);
+        $output = Artisan::output();
+
+        $this->assertDirectoryExists($dir);
+        $this->assertFileExists($configFile);
+        $this->assertStringNotContainsString('was empty and has been removed', $output);
+    }
+
     // ---- User model ----
 
     public function test_does_not_modify_user_model_and_prints_manual_instructions(): void
@@ -386,6 +469,18 @@ class AuthUninstallCommandTest extends TestCase
         }
         $file = $dir.DIRECTORY_SEPARATOR.'auth.php';
         file_put_contents($file, "<?php\n\n// consumer config\nreturn [];\n");
+
+        return $file;
+    }
+
+    private function writeConfigDirEntry(string $name, string $contents): string
+    {
+        $dir = config_path('jamesgifford');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $file = $dir.DIRECTORY_SEPARATOR.$name;
+        file_put_contents($file, $contents);
 
         return $file;
     }
