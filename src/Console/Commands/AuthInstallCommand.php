@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Console\Commands;
 
-use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\PublicId\AlphabetRegistry;
@@ -46,6 +46,7 @@ final class AuthInstallCommand extends Command
     public function __construct(
         private readonly UserModelModifier $modifier,
         private readonly ConfigGuard $publicIdGuard,
+        private readonly PackageMigrations $packageMigrations,
     ) {
         parent::__construct();
     }
@@ -669,8 +670,13 @@ final class AuthInstallCommand extends Command
 
         $this->newLine();
         $this->info('→ Tearing down existing package setup...');
-        $this->rollbackPackageMigrations();
-        $this->deletePublishedMigrationFiles();
+        $this->packageMigrations->rollback(
+            fn (string $line) => $this->line($line),
+            fn (string $line) => $this->warn($line),
+        );
+        $this->packageMigrations->deletePublishedFiles(
+            fn (string $line) => $this->line($line),
+        );
         $this->resetPublicIdLock();
 
         $this->newLine();
@@ -721,71 +727,6 @@ final class AuthInstallCommand extends Command
         }
 
         return $found;
-    }
-
-    /**
-     * Roll back ONLY the package's own migrations, in reverse order, leaving
-     * any non-package migrations untouched. Migrations that aren't recorded as
-     * run are skipped gracefully.
-     */
-    private function rollbackPackageMigrations(): void
-    {
-        $migrator = $this->laravel->make('migrator');
-        $repository = $migrator->getRepository();
-
-        if (! $repository->repositoryExists()) {
-            $this->line('  - no migration repository; nothing to roll back');
-
-            return;
-        }
-
-        $ran = $repository->getRan();
-
-        // resolvePath() is protected but handles php-parser's anonymous-class
-        // migration files correctly (including the require cache), so bind into
-        // the migrator to reuse it rather than re-requiring files ourselves.
-        $resolve = Closure::bind(
-            fn (string $path) => $this->resolvePath($path),
-            $migrator,
-            $migrator::class,
-        );
-
-        foreach (array_reverse($this->packageMigrationNames()) as $name) {
-            if (! in_array($name, $ran, true)) {
-                $this->line("  - {$name} (not run; skipped)");
-
-                continue;
-            }
-
-            $path = database_path('migrations'.DIRECTORY_SEPARATOR.$name.'.php');
-            if (! is_file($path)) {
-                $this->warn("  - {$name}: file missing from database/migrations; cannot roll back its schema");
-
-                continue;
-            }
-
-            $migration = $resolve($path);
-            if (is_object($migration) && method_exists($migration, 'down')) {
-                $migration->down();
-            }
-            $repository->delete((object) ['migration' => $name]);
-            $this->line("  - rolled back {$name}");
-        }
-    }
-
-    /**
-     * Delete the consumer's published copies of the package migrations so the
-     * re-publish produces a clean set (no growing list of stale files).
-     */
-    private function deletePublishedMigrationFiles(): void
-    {
-        foreach ($this->packageMigrationNames() as $name) {
-            $path = database_path('migrations'.DIRECTORY_SEPARATOR.$name.'.php');
-            if (is_file($path)) {
-                @unlink($path);
-                $this->line("  - removed published migration {$name}.php");
-            }
-        }
     }
 
     /**
@@ -866,23 +807,6 @@ final class AuthInstallCommand extends Command
         ));
         $this->line('If you intended to change the user prefix, update app/Models/User.php manually.');
         $this->line('--fresh does not modify your User model.');
-    }
-
-    /**
-     * Canonical list of the package's migration names (basename without .php),
-     * sourced from the package's own database/migrations directory. This is the
-     * manifest used to identify "our" migrations for surgical rollback and for
-     * deleting stale published copies. Published files keep these exact names.
-     *
-     * @return list<string>
-     */
-    private function packageMigrationNames(): array
-    {
-        $source = __DIR__.'/../../../database/migrations';
-        $files = glob($source.DIRECTORY_SEPARATOR.'*.php') ?: [];
-        sort($files);
-
-        return array_map(static fn (string $f): string => basename($f, '.php'), $files);
     }
 
     // ---- Verification ----
