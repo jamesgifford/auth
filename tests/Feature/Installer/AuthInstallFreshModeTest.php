@@ -105,6 +105,19 @@ class AuthInstallFreshModeTest extends TestCase
         $this->assertStringContainsString('keep-me-9z', (string) file_get_contents($file));
     }
 
+    public function test_fresh_reapplies_configured_id_offsets(): void
+    {
+        $this->stagePostInstallState();
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => 1001]]);
+
+        Artisan::call('jamesgifford:auth:install', ['--fresh' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        // --fresh falls through to the same completion tail, so the offset step
+        // re-runs (a reported no-op on SQLite).
+        $this->assertStringContainsString('Applying configured ID offsets', $output);
+    }
+
     public function test_fresh_reseeds_account_roles(): void
     {
         $this->stagePostInstallState();

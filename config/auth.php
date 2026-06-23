@@ -166,6 +166,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Auto-increment ID offsets
+    |--------------------------------------------------------------------------
+    |
+    | Optional starting values for the auto-increment counters on the users
+    | and accounts tables, so real records begin above a chosen number (e.g.
+    | accounts at 1001). This avoids confusing user ids with account ids and
+    | reserves a low id range for deterministic dev fixtures (seeded separately).
+    |
+    | null = no offset (leave the table's default). An offset only sets where
+    | the counter STARTS, so it takes effect on an empty (or below-offset)
+    | table. Apply it with `php artisan jamesgifford:auth:apply-id-offsets`
+    | AFTER migrating and after any role/dev-data seeding, so the counter lands
+    | above existing records.
+    |
+    | Note: 'users' targets the consuming application's users table, NOT a
+    | package-owned table. Supported on MySQL/MariaDB and PostgreSQL; a no-op
+    | on SQLite (which can't honor this cleanly).
+    |
+    */
+
+    'id_offsets' => [
+        'users' => null,      // e.g. 11
+        'accounts' => null,   // e.g. 1001
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP plumbing
     |--------------------------------------------------------------------------
     |

@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
@@ -51,6 +52,7 @@ final class AuthInstallCommand extends Command
         private readonly ConfigGuard $publicIdGuard,
         private readonly PackageMigrations $packageMigrations,
         private readonly ModelPublisher $modelPublisher,
+        private readonly IdOffsetManager $idOffsetManager,
     ) {
         parent::__construct();
     }
@@ -126,6 +128,11 @@ final class AuthInstallCommand extends Command
         }
 
         $this->maybePublishModels();
+
+        // Final step: apply configured auto-increment offsets, after all data
+        // (migrations + role seeding) is in place. No-op by default (null
+        // offsets). --fresh falls through to this same tail, so it re-applies.
+        $this->maybeApplyIdOffsets();
 
         $this->newLine();
         $this->displayNextSteps();
@@ -1052,6 +1059,38 @@ final class AuthInstallCommand extends Command
         $base = $this->laravel->basePath().DIRECTORY_SEPARATOR;
 
         return str_starts_with($path, $base) ? substr($path, strlen($base)) : $path;
+    }
+
+    // ---- ID offsets ----
+
+    /**
+     * Apply configured auto-increment offsets as a finishing step. No-op (and
+     * silent) when no offsets are configured — the default. Non-fatal: a bad
+     * offset or driver issue is warned about, not allowed to fail the install.
+     */
+    private function maybeApplyIdOffsets(): void
+    {
+        /** @var array<string, mixed> $offsets */
+        $offsets = (array) config('jamesgifford.auth.id_offsets', []);
+        $configured = array_filter($offsets, static fn (mixed $value): bool => $value !== null);
+
+        if ($configured === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->info('→ Applying configured ID offsets...');
+
+        try {
+            foreach ($this->idOffsetManager->apply() as $result) {
+                $detail = $result['applied']
+                    ? "set to {$result['offset']} ({$result['driver']})"
+                    : 'skipped — '.$result['reason'];
+                $this->line("  - {$result['table']}: ".$detail);
+            }
+        } catch (Throwable $e) {
+            $this->warn('  Could not apply ID offsets: '.$e->getMessage());
+        }
     }
 
     // ---- Next steps ----

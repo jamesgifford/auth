@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
 use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Console\Commands\AuthApplyIdOffsetsCommand;
 use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
 use JamesGifford\Auth\Console\Commands\AuthPublishModelsCommand;
 use JamesGifford\Auth\Console\Commands\AuthUninstallCommand;
@@ -154,6 +155,7 @@ class AuthServiceProvider extends ServiceProvider
                 AuthInstallCommand::class,
                 AuthUninstallCommand::class,
                 AuthPublishModelsCommand::class,
+                AuthApplyIdOffsetsCommand::class,
             ]);
         }
     }

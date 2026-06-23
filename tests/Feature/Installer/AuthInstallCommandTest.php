@@ -365,6 +365,33 @@ class AuthInstallCommandTest extends TestCase
         $this->assertSame(4, DB::table('account_roles')->count());
     }
 
+    // ---- ID offsets during install ----
+
+    public function test_install_applies_configured_id_offsets_as_a_final_step(): void
+    {
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => 1001]]);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        // The step runs after seeding; on SQLite it's a reported no-op.
+        $this->assertStringContainsString('Applying configured ID offsets', $output);
+        $this->assertStringContainsString("accounts: skipped — driver 'sqlite' does not support", $output);
+    }
+
+    public function test_install_is_silent_about_offsets_when_none_configured(): void
+    {
+        // Default config has null offsets — the step must be a silent no-op.
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringNotContainsString('Applying configured ID offsets', $output);
+    }
+
     // ---- Model publishing during install ----
 
     public function test_publish_models_flag_publishes_during_install(): void
