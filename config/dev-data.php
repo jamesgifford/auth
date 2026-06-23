@@ -7,12 +7,16 @@ declare(strict_types=1);
 | JamesGifford Auth — dev data
 |--------------------------------------------------------------------------
 |
-| Declarative, deterministic LOCAL dev fixtures seeded by
-| `php artisan jamesgifford:auth:seed-dev-data`. These users take low ids so
-| real records can start above a configured offset (see auth.php → id_offsets).
+| A ready-to-use, deterministic LOCAL dev cast, seeded by
+| `php artisan jamesgifford:auth:seed-dev-data`. This file ships
+| PRE-POPULATED — a fresh install is immediately seedable. Edit or extend the
+| cast freely; it's just structure.
 |
-| This file is NOT published during a normal install (it is dev-only). Publish
-| it deliberately to customize:
+| These users take low ids so real records can start above a configured offset
+| (see auth.php → id_offsets).
+|
+| Publish it deliberately to customize (it is dev-only and NOT published during
+| a normal install):
 |
 |     php artisan vendor:publish --tag=jamesgifford-auth-dev-data
 |
@@ -34,30 +38,51 @@ return [
     // Environments in which seed-dev-data may run. The command FAILS CLOSED:
     // if the current environment is not in this list, it refuses. 'production'
     // is ALWAYS refused, independently of this list.
-    'environments' => ['local', 'testing'],
+    'environments' => ['local', 'staging'],
 
     // Shared password for every seeded dev user. Sourced from the environment
-    // so no credential is committed; it is hashed at seed time (never stored
-    // in plaintext).
-    'password' => env('JAMESGIFFORD_AUTH_DEV_PASSWORD', 'password'),
+    // (DEV_USER_PASSWORD in your .env) so no credential is committed here; it is
+    // hashed at seed time and never stored in plaintext.
+    'password' => env('DEV_USER_PASSWORD', 'password'),
 
-    // The dev users to seed. Each is idempotent (updateOrCreate on email).
-    // Optional 'account' creates an account owned by that user via the package's
-    // AccountService (so the single-owner invariant holds). Optional 'members'
-    // attach OTHER dev users to that account with a role.
-    //
-    // Example:
-    //   [
-    //       'name'    => 'Dev Owner',
-    //       'email'   => 'owner@example.test',
-    //       'account' => "Owner's Workspace",
-    //       'members' => [
-    //           ['email' => 'member@example.test', 'role' => 'admin'],
-    //       ],
-    //   ],
-    //   ['name' => 'Dev Member', 'email' => 'member@example.test'],
+    // The default dev cast — ready to seed. Each entry is idempotent
+    // (updateOrCreate on email). Optional 'account' creates an account owned by
+    // that user via the package's AccountService (so the single-owner invariant
+    // holds). Optional 'members' attach OTHER dev users to that account with a
+    // role. Together this cast exercises roles, multi-account membership,
+    // account switching, and the floating (no-account) state.
     'users' => [
-        //
+
+        // Owner of "Acme Inc"; the account also hosts the admin, member, and
+        // multi-account users below.
+        [
+            'name' => 'Owner',
+            'email' => 'owner@dev.test',
+            'account' => 'Acme Inc',
+            'members' => [
+                ['email' => 'admin@dev.test', 'role' => 'admin'],
+                ['email' => 'member@dev.test', 'role' => 'member'],
+                ['email' => 'multi@dev.test', 'role' => 'member'],
+            ],
+        ],
+
+        // Admin of "Acme Inc".
+        ['name' => 'Admin', 'email' => 'admin@dev.test'],
+
+        // Member of "Acme Inc".
+        ['name' => 'Member', 'email' => 'member@dev.test'],
+
+        // Belongs to TWO accounts: owns "Beta LLC" and is a member of "Acme Inc"
+        // (above) — exercises multiple accounts / switching.
+        [
+            'name' => 'Multi-Account User',
+            'email' => 'multi@dev.test',
+            'account' => 'Beta LLC',
+        ],
+
+        // Owns no account and belongs to none — exercises the floating state.
+        ['name' => 'Floating User', 'email' => 'floating@dev.test'],
+
     ],
 
 ];
