@@ -12,6 +12,7 @@ use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Console\Commands\AuthApplyIdOffsetsCommand;
 use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
 use JamesGifford\Auth\Console\Commands\AuthPublishModelsCommand;
+use JamesGifford\Auth\Console\Commands\AuthSeedDevDataCommand;
 use JamesGifford\Auth\Console\Commands\AuthUninstallCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdCheckCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
@@ -48,6 +49,10 @@ class AuthServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/auth.php', 'jamesgifford.auth');
+
+        // Dev-data defaults live under a sibling key so the published file
+        // (config/jamesgifford/dev-data.php) auto-loads to the same key.
+        $this->mergeConfigFrom(__DIR__.'/../config/dev-data.php', 'jamesgifford.dev-data');
 
         $this->app->singleton(AlphabetRegistry::class, function () {
             return new AlphabetRegistry;
@@ -120,6 +125,12 @@ class AuthServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations/' => database_path('migrations'),
         ], 'jamesgifford-auth-migrations');
 
+        // Dev-data config is published only on deliberate request (its own tag),
+        // never during a normal install — it is dev-only.
+        $this->publishes([
+            __DIR__.'/../config/dev-data.php' => config_path('jamesgifford/dev-data.php'),
+        ], 'jamesgifford-auth-dev-data');
+
         $this->app->make(ConfigGuard::class)->assertMatches();
 
         $registry = $this->app->make(PrefixRegistry::class);
@@ -156,6 +167,7 @@ class AuthServiceProvider extends ServiceProvider
                 AuthUninstallCommand::class,
                 AuthPublishModelsCommand::class,
                 AuthApplyIdOffsetsCommand::class,
+                AuthSeedDevDataCommand::class,
             ]);
         }
     }
