@@ -133,8 +133,7 @@ final class AuthUninstallCommand extends Command
      *     migrationFileCount: int,
      *     lockFileExists: bool,
      *     lockPath: string,
-     *     configExists: bool,
-     *     configPath: string,
+     *     configFiles: list<string>,
      *     notes: list<string>,
      * }
      */
@@ -205,8 +204,7 @@ final class AuthUninstallCommand extends Command
             'migrationFileCount' => $this->packageMigrations->publishedFileCount(),
             'lockFileExists' => $this->lockFile->exists(),
             'lockPath' => $this->lockFile->path(),
-            'configExists' => is_file($this->publishedConfigPath()),
-            'configPath' => $this->publishedConfigPath(),
+            'configFiles' => array_values(array_filter($this->publishedConfigPaths(), 'is_file')),
             'notes' => $notes,
         ];
     }
@@ -217,7 +215,7 @@ final class AuthUninstallCommand extends Command
      * color only amplifies it — red for the headline, yellow for the counts
      * and the back-up caution.
      *
-     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, configExists: bool, configPath: string, notes: list<string>}  $summary
+     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, configFiles: list<string>, notes: list<string>}  $summary
      */
     private function displayWarning(array $summary): void
     {
@@ -278,8 +276,10 @@ final class AuthUninstallCommand extends Command
 
         if ($this->option('keep-config')) {
             $this->line('  (the published config file will be kept — --keep-config)');
-        } elseif ($summary['configExists']) {
-            $this->warn('  • the published config file ('.$this->displayPath($summary['configPath']).')');
+        } elseif ($summary['configFiles'] !== []) {
+            foreach ($summary['configFiles'] as $configPath) {
+                $this->warn('  • the published config file ('.$this->displayPath($configPath).')');
+            }
         } else {
             $this->warn('  • the published config file (already absent)');
         }
@@ -366,24 +366,32 @@ final class AuthUninstallCommand extends Command
 
     private function teardownConfigFile(): void
     {
-        $configPath = $this->publishedConfigPath();
+        $paths = $this->publishedConfigPaths();
 
-        // Default is to delete the config file (full removal matches uninstall
-        // intent); --keep-config preserves it for consumers who want their
-        // customizations back later.
+        // Default is to delete the published config files (auth.php AND the
+        // dev-data config; full removal matches uninstall intent); --keep-config
+        // preserves them for consumers who want their customizations back later.
         if ($this->option('keep-config')) {
-            if (is_file($configPath)) {
-                $this->line('  - kept the published config file ('.$this->displayPath($configPath).')');
+            foreach ($paths as $path) {
+                if (is_file($path)) {
+                    $this->line('  - kept the published config file ('.$this->displayPath($path).')');
+                }
             }
 
             return;
         }
 
-        if (is_file($configPath)) {
-            @unlink($configPath);
-            $this->line('  - removed the published config file ('.$this->displayPath($configPath).')');
-        } else {
-            $this->line('  - published config file already absent');
+        $removedAny = false;
+        foreach ($paths as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+                $this->line('  - removed the published config file ('.$this->displayPath($path).')');
+                $removedAny = true;
+            }
+        }
+
+        if (! $removedAny) {
+            $this->line('  - published config files already absent');
         }
 
         $this->removeConfigDirIfEmpty();
@@ -510,6 +518,23 @@ final class AuthUninstallCommand extends Command
     private function publishedConfigPath(): string
     {
         return config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+    }
+
+    /**
+     * Every config file the package publishes into the consumer's config dir:
+     * the main config and the dev-data config. Both are removed on uninstall
+     * (unless --keep-config).
+     *
+     * @return list<string>
+     */
+    private function publishedConfigPaths(): array
+    {
+        $dir = config_path('jamesgifford');
+
+        return [
+            $dir.DIRECTORY_SEPARATOR.'auth.php',
+            $dir.DIRECTORY_SEPARATOR.'dev-data.php',
+        ];
     }
 
     private function resolveUserModelFile(): ?string

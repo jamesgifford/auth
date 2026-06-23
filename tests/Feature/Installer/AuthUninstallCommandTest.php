@@ -315,6 +315,31 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertStringContainsString('the published config file will be kept', $output);
     }
 
+    public function test_dev_data_config_file_is_removed_by_default(): void
+    {
+        $this->stageInstall();
+        $this->writePublishedConfig();
+        $devDataFile = $this->writeConfigDirEntry('dev-data.php', "<?php\n\nreturn [];\n");
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertFileDoesNotExist($devDataFile);
+        $this->assertStringContainsString('dev-data.php', $output);
+        // Both config files gone → the (now empty) dir is removed too.
+        $this->assertDirectoryDoesNotExist(config_path('jamesgifford'));
+    }
+
+    public function test_dev_data_config_file_is_preserved_with_keep_config_flag(): void
+    {
+        $this->stageInstall();
+        $devDataFile = $this->writeConfigDirEntry('dev-data.php', "<?php\n\nreturn [];\n");
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true, '--keep-config' => true]);
+
+        $this->assertFileExists($devDataFile);
+    }
+
     // ---- Config directory cleanup ----
 
     public function test_removes_config_directory_when_empty_after_config_deletion(): void
