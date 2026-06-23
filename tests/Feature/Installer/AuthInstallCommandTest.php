@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Tests\Feature\Installer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
@@ -309,6 +310,62 @@ class AuthInstallCommandTest extends TestCase
         $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
         $this->assertSame(4, DB::table('account_roles')->count());
         $this->assertStringContainsString('Seeded 4 account roles (owner, admin, member, viewer).', $output);
+    }
+
+    public function test_install_runs_migrations_when_package_tables_are_missing_despite_public_id(): void
+    {
+        // Regression: a partial state where users.public_id exists (and its
+        // migration is recorded) but account_roles does not. Previously
+        // needsMigrationsRun() only checked users.public_id, so migrations were
+        // skipped and seeding hit a non-existent account_roles table.
+        $this->copyPackageMigrationsToTestbenchPath();
+        $this->loadLaravelMigrations();
+
+        Schema::table('users', fn ($table) => $table->string('public_id', 30)->nullable());
+        DB::table('migrations')->insert([
+            'migration' => '2026_05_06_100000_add_jamesgifford_auth_columns_to_users_table',
+            'batch' => 1,
+        ]);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit);
+        // The plan now runs migrations (rather than reporting them already run).
+        $this->assertStringContainsString('→ Run pending migrations', $output);
+        $this->assertTrue(Schema::hasTable('account_roles'));
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+        $this->assertStringNotContainsString('Role seeding failed', $output);
+    }
+
+    public function test_install_fails_with_a_clear_error_when_account_roles_cannot_be_created(): void
+    {
+        // The package migrations are recorded as run but their tables were
+        // dropped, so `migrate` won't recreate them. Seeding must fail with
+        // actionable guidance, not a raw SQL "table not found".
+        $this->copyPackageMigrationsToTestbenchPath();
+        $this->loadLaravelMigrations();
+
+        Schema::table('users', fn ($table) => $table->string('public_id', 30)->nullable());
+        Schema::table('users', fn ($table) => $table->unsignedBigInteger('current_account_id')->nullable());
+        foreach ([
+            '2026_05_06_100000_add_jamesgifford_auth_columns_to_users_table',
+            '2026_05_06_100001_create_account_roles_table',
+            '2026_05_06_100002_create_accounts_table',
+            '2026_05_06_100003_add_current_account_id_to_users_table',
+            '2026_05_06_100004_create_account_user_table',
+        ] as $migration) {
+            DB::table('migrations')->insert(['migration' => $migration, 'batch' => 1]);
+        }
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('Cannot seed roles', $output);
+        $this->assertStringContainsString('migrate:fresh', $output);
+        // Actionable message, not a raw database exception.
+        $this->assertStringNotContainsString('SQLSTATE', $output);
     }
 
     public function test_install_seeds_roles_despite_stale_in_process_config(): void

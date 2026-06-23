@@ -223,7 +223,16 @@ final class AuthInstallCommand extends Command
 
     private function needsMigrationsRun(): bool
     {
-        return ! Schema::hasTable('users') || ! Schema::hasColumn('users', 'public_id');
+        // Run migrations whenever ANY part of the package schema is missing —
+        // not just users.public_id. Checking only that column let a partial
+        // state (e.g. the users columns exist but account_roles does not) skip
+        // migrations, after which role seeding hit a non-existent table.
+        return ! Schema::hasTable('users')
+            || ! Schema::hasColumn('users', 'public_id')
+            || ! Schema::hasColumn('users', 'current_account_id')
+            || ! Schema::hasTable('account_roles')
+            || ! Schema::hasTable('accounts')
+            || ! Schema::hasTable('account_user');
     }
 
     private function needsRolesSeeded(): bool
@@ -564,6 +573,22 @@ final class AuthInstallCommand extends Command
     {
         $this->newLine();
         $this->info('→ Seeding system roles...');
+
+        // Never seed against a missing table. If account_roles still doesn't
+        // exist here (e.g. the package migrations are recorded as run but their
+        // tables were dropped, so `migrate` won't recreate them), fail with
+        // actionable guidance instead of a raw "table not found" from the seeder.
+        if (! Schema::hasTable('account_roles')) {
+            $this->error("Cannot seed roles: the 'account_roles' table does not exist.");
+            $this->newLine();
+            $this->line('The package migrations did not create it. This usually means they are');
+            $this->line('recorded as run but their tables were dropped. Reset and re-run:');
+            $this->newLine();
+            $this->line('  php artisan migrate:fresh   # development only — drops all tables');
+            $this->line('  php artisan jamesgifford:auth:install');
+
+            return false;
+        }
 
         // AccountRoleSeeder reads config('jamesgifford.auth.roles'). If the
         // consuming app had its config cached (so mergeConfigFrom was skipped),
