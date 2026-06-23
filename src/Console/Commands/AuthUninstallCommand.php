@@ -73,9 +73,39 @@ final class AuthUninstallCommand extends Command
         }
 
         $this->displayUserModelInstructions();
+        $this->displayPublishedModelsNotice();
         $this->displayCompletion();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Published model subclasses are consumer-owned code, so uninstall NEVER
+     * deletes them. If any are present, note that they remain for manual
+     * cleanup.
+     */
+    private function displayPublishedModelsNotice(): void
+    {
+        $modelsDir = $this->laravel->path('Models');
+        $present = [];
+        foreach (['Account', 'AccountUser', 'AccountRole'] as $name) {
+            $path = $modelsDir.DIRECTORY_SEPARATOR.$name.'.php';
+            if (is_file($path)) {
+                $present[] = $this->displayPath($path);
+            }
+        }
+
+        if ($present === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->line('Published model subclasses were left in place (they are your code):');
+        foreach ($present as $path) {
+            $this->line('  • '.$path);
+        }
+        $this->line('Remove them manually if you no longer want them, and undo the');
+        $this->line('models config in config/jamesgifford/auth.php if you wired them.');
     }
 
     // ---- Step 1: production guard ----

@@ -118,6 +118,22 @@ destinations are config route names:
 and `jamesgifford.auth.http.middleware.redirect_missing_to` (current account
 gone); when null it auto-assigns a sensible account instead of redirecting.
 
+## Customizing models
+
+Models use Laravel 13 attribute syntax: `#[Fillable([...])]` (and `#[Hidden([...])]`
+when needed) on the class, not `protected $fillable`. A child class's
+`#[Fillable]` OVERRIDES the parent's (most-derived wins, not merged).
+
+To customize a model, publish editable subclasses with
+`php artisan jamesgifford:auth:publish-models`. It writes `App\Models\Account`,
+`App\Models\AccountUser`, and `App\Models\AccountRole` extending the package base
+models (with their `#[Fillable]`, prefix, and casts written out), skipping any
+that already exist. Then point `config('jamesgifford.auth.models.*')` at them
+(the command prints the exact lines). The `account` model is consulted
+throughout the package; `account_user`/`account_role` are provided mainly for
+your own customization. Edit these published files — do NOT edit the package's
+base models in `vendor/`.
+
 ## Do not
 
 - Do NOT change the locked `public_id` config after install.

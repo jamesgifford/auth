@@ -71,6 +71,9 @@ class AuthInstallCommandTest extends TestCase
                     @unlink($file);
                 }
             }
+            foreach (['Account', 'AccountUser', 'AccountRole'] as $model) {
+                @unlink($this->app->path('Models'.DIRECTORY_SEPARATOR.$model.'.php'));
+            }
         }
         parent::tearDown();
     }
@@ -362,6 +365,45 @@ class AuthInstallCommandTest extends TestCase
         $this->assertSame(4, DB::table('account_roles')->count());
     }
 
+    // ---- Model publishing during install ----
+
+    public function test_publish_models_flag_publishes_during_install(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--publish-models' => true,
+        ]);
+
+        $this->assertFileExists($this->app->path('Models/Account.php'));
+        $this->assertFileExists($this->app->path('Models/AccountUser.php'));
+        $this->assertFileExists($this->app->path('Models/AccountRole.php'));
+    }
+
+    public function test_install_with_force_but_no_flag_does_not_publish_models(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $this->assertFileDoesNotExist($this->app->path('Models/Account.php'));
+    }
+
+    public function test_install_publish_prompt_defaults_to_no(): void
+    {
+        $this->loadLaravelMigrations();
+
+        $this->artisan('jamesgifford:auth:install', ['--skip-user-model' => true])
+            ->expectsConfirmation('Proceed?', 'yes')
+            ->expectsConfirmation('Proceed with this configuration?', 'yes')
+            ->expectsConfirmation('Publish editable App\\Models subclasses (Account, AccountUser, AccountRole)?', 'no')
+            ->assertSuccessful();
+
+        $this->assertFileDoesNotExist($this->app->path('Models/Account.php'));
+    }
+
     public function test_completion_prints_conditional_boost_reminder(): void
     {
         $this->loadLaravelMigrations();
@@ -505,6 +547,7 @@ class AuthInstallCommandTest extends TestCase
         $this->artisan('jamesgifford:auth:install', ['--skip-user-model' => true])
             ->expectsConfirmation('Proceed?', 'yes')
             ->expectsConfirmation('Proceed with this configuration?', 'yes')
+            ->expectsConfirmation('Publish editable App\\Models subclasses (Account, AccountUser, AccountRole)?', 'no')
             ->expectsOutputToContain('All checks passed.')
             ->assertSuccessful();
 

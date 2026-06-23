@@ -10,6 +10,7 @@ use Illuminate\Support\ServiceProvider;
 use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
 use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
+use JamesGifford\Auth\Console\Commands\AuthPublishModelsCommand;
 use JamesGifford\Auth\Console\Commands\AuthUninstallCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdCheckCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
@@ -152,6 +153,7 @@ class AuthServiceProvider extends ServiceProvider
                 PublicIdCheckCommand::class,
                 AuthInstallCommand::class,
                 AuthUninstallCommand::class,
+                AuthPublishModelsCommand::class,
             ]);
         }
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,13 +27,12 @@ use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
  * may extend this class and point config('jamesgifford.auth.models.account')
  * at their subclass.
  */
+#[Fillable(['name', 'owner_id'])]
 class Account extends Model
 {
     use HasFactory;
     use HasPublicId;
     use SoftDeletes;
-
-    protected $fillable = ['name', 'owner_id'];
 
     public function publicIdPrefix(): string
     {

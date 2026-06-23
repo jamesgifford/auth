@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -22,11 +23,10 @@ use JamesGifford\Auth\Exceptions\CannotDeleteSystemRoleException;
  * via Eloquent — see {@see booted()}. Consumers may extend this class and
  * point config('jamesgifford.auth.models.account_role') at their subclass.
  */
+#[Fillable(['key', 'name', 'description', 'system', 'sort_order'])]
 class AccountRole extends Model
 {
     use HasFactory;
-
-    protected $fillable = ['key', 'name', 'description', 'system', 'sort_order'];
 
     protected $casts = [
         'system' => 'boolean',

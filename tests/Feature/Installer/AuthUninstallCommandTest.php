@@ -47,8 +47,32 @@ class AuthUninstallCommandTest extends TestCase
         }
         if ($this->app !== null) {
             $this->rmTree(config_path('jamesgifford'));
+            foreach (['Account', 'AccountUser', 'AccountRole'] as $model) {
+                @unlink($this->app->path('Models'.DIRECTORY_SEPARATOR.$model.'.php'));
+            }
         }
         parent::tearDown();
+    }
+
+    public function test_does_not_delete_published_models_and_prints_manual_notice(): void
+    {
+        $this->stageInstall();
+
+        $dir = $this->app->path('Models');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $file = $dir.DIRECTORY_SEPARATOR.'Account.php';
+        file_put_contents($file, "<?php\n// published model marker uninst-keep\n");
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        // Consumer-owned: never auto-deleted, but flagged for manual cleanup.
+        $this->assertFileExists($file);
+        $this->assertStringContainsString('uninst-keep', (string) file_get_contents($file));
+        $this->assertStringContainsString('Published model subclasses were left in place', $output);
+        $this->assertStringContainsString('Account.php', $output);
     }
 
     // ---- Warning + prompt (no flag gate) ----

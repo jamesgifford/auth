@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -21,6 +22,7 @@ use JamesGifford\Auth\SystemRole;
  * This model is data + relationships only. Consumers may extend it and point
  * config('jamesgifford.auth.models.account_user') at their subclass.
  */
+#[Fillable(['account_id', 'user_id', 'account_role_id', 'joined_at'])]
 class AccountUser extends Pivot
 {
     use HasFactory;
@@ -28,8 +30,6 @@ class AccountUser extends Pivot
     public $incrementing = true;
 
     protected $table = 'account_user';
-
-    protected $fillable = ['account_id', 'user_id', 'account_role_id', 'joined_at'];
 
     protected $casts = [
         'joined_at' => 'datetime',

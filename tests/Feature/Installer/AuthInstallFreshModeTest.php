@@ -57,6 +57,11 @@ class AuthInstallFreshModeTest extends TestCase
         if ($publishedConfig !== null && is_file($publishedConfig)) {
             @unlink($publishedConfig);
         }
+        if ($this->app !== null) {
+            foreach (['Account', 'AccountUser', 'AccountRole'] as $model) {
+                @unlink($this->app->path('Models'.DIRECTORY_SEPARATOR.$model.'.php'));
+            }
+        }
         parent::tearDown();
     }
 
@@ -80,6 +85,24 @@ class AuthInstallFreshModeTest extends TestCase
         // The schema is fully present again after the redo.
         $this->assertTrue(Schema::hasTable('accounts'));
         $this->assertTrue(Schema::hasColumn('users', 'public_id'));
+    }
+
+    public function test_fresh_does_not_delete_published_models(): void
+    {
+        $this->stagePostInstallState();
+
+        $dir = $this->app->path('Models');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $file = $dir.DIRECTORY_SEPARATOR.'Account.php';
+        file_put_contents($file, "<?php\n// published model marker keep-me-9z\n");
+
+        Artisan::call('jamesgifford:auth:install', ['--fresh' => true, '--force' => true]);
+
+        // Published models are consumer-owned; --fresh must leave them intact.
+        $this->assertFileExists($file);
+        $this->assertStringContainsString('keep-me-9z', (string) file_get_contents($file));
     }
 
     public function test_fresh_reseeds_account_roles(): void

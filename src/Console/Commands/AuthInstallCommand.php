@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Models\AccountRole;
@@ -40,6 +41,7 @@ final class AuthInstallCommand extends Command
         {--force : Bypass interactive prompts}
         {--fresh : Tear down and cleanly redo the package setup (development only; refuses if package data exists)}
         {--without-http : Disable the HTTP plumbing (routes + middleware); sets http.enabled = false in the published config}
+        {--publish-models : Publish editable App\Models subclasses (Account, AccountUser, AccountRole) without prompting}
         {--verify : Only run verification; don\'t modify anything}';
 
     protected $description = 'Install and configure the JamesGifford Auth package in this application.';
@@ -48,6 +50,7 @@ final class AuthInstallCommand extends Command
         private readonly UserModelModifier $modifier,
         private readonly ConfigGuard $publicIdGuard,
         private readonly PackageMigrations $packageMigrations,
+        private readonly ModelPublisher $modelPublisher,
     ) {
         parent::__construct();
     }
@@ -121,6 +124,8 @@ final class AuthInstallCommand extends Command
 
             return self::FAILURE;
         }
+
+        $this->maybePublishModels();
 
         $this->newLine();
         $this->displayNextSteps();
@@ -997,6 +1002,56 @@ final class AuthInstallCommand extends Command
         }
 
         return $this->laravel->make(ConfigGuard::class);
+    }
+
+    // ---- Model publishing ----
+
+    /**
+     * Offer to publish editable App\Models subclasses. Default is NO (less
+     * invasive). --publish-models opts in non-interactively; --force skips the
+     * prompt (and only publishes when --publish-models is also passed).
+     */
+    private function maybePublishModels(): void
+    {
+        if (! $this->shouldPublishModels()) {
+            return;
+        }
+
+        $this->newLine();
+        $this->info('→ Publishing model subclasses...');
+
+        foreach ($this->modelPublisher->publish() as $result) {
+            $label = $result['status'] === 'created' ? 'created' : 'skipped (already exists)';
+            $this->line('  - '.$label.' '.$this->relativeToBase($result['path']));
+        }
+
+        $this->newLine();
+        foreach ($this->modelPublisher->configInstructions() as $line) {
+            $this->line($line === '' ? '' : '  '.$line);
+        }
+    }
+
+    private function shouldPublishModels(): bool
+    {
+        if ($this->option('publish-models')) {
+            return true;
+        }
+
+        if ($this->option('force')) {
+            return false;
+        }
+
+        return $this->confirm(
+            'Publish editable App\\Models subclasses (Account, AccountUser, AccountRole)?',
+            false,
+        );
+    }
+
+    private function relativeToBase(string $path): string
+    {
+        $base = $this->laravel->basePath().DIRECTORY_SEPARATOR;
+
+        return str_starts_with($path, $base) ? substr($path, strlen($base)) : $path;
     }
 
     // ---- Next steps ----
