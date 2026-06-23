@@ -553,6 +553,16 @@ final class AuthInstallCommand extends Command
         $this->newLine();
         $this->info('→ Seeding system roles...');
 
+        // AccountRoleSeeder reads config('jamesgifford.auth.roles'). If the
+        // consuming app had its config cached (so mergeConfigFrom was skipped),
+        // or the config was just published in this same process, the live config
+        // repository can be stale/empty even though the file on disk is correct.
+        // Clear any cached config and re-read the roles from disk so the seeder
+        // never runs against an empty roles map. Mirrors the staleness remedy
+        // already applied to verification and the config display.
+        $this->callSilent('config:clear');
+        $this->ensureRolesConfigLoaded();
+
         try {
             $this->laravel->make(AccountRoleSeeder::class)->run();
         } catch (Throwable $e) {
@@ -567,7 +577,44 @@ final class AuthInstallCommand extends Command
             return false;
         }
 
+        $roleKeys = array_keys((array) config('jamesgifford.auth.roles', []));
+        $this->line(sprintf(
+            '  Seeded %d account %s (%s).',
+            count($roleKeys),
+            count($roleKeys) === 1 ? 'role' : 'roles',
+            implode(', ', $roleKeys),
+        ));
+
         return true;
+    }
+
+    /**
+     * Guarantee config('jamesgifford.auth.roles') reflects the real roles before
+     * seeding. When the live config is empty (cached/stale in-process config),
+     * re-read the roles straight from the published config on disk — or the
+     * package default — so seeding uses the actual values, not stale defaults.
+     */
+    private function ensureRolesConfigLoaded(): void
+    {
+        $roles = config('jamesgifford.auth.roles');
+        if (is_array($roles) && $roles !== []) {
+            return;
+        }
+
+        foreach ([$this->publishedConfigPath(), __DIR__.'/../../../config/auth.php'] as $path) {
+            if (! is_file($path)) {
+                continue;
+            }
+
+            // require (not require_once) re-evaluates and returns the config
+            // array each call, so this is immune to the boot-time include cache.
+            $loaded = require $path;
+            if (is_array($loaded) && isset($loaded['roles']) && is_array($loaded['roles']) && $loaded['roles'] !== []) {
+                config(['jamesgifford.auth.roles' => $loaded['roles']]);
+
+                return;
+            }
+        }
     }
 
     private function executeModifyUserModel(): bool

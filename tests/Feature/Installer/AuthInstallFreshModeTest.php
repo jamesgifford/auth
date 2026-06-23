@@ -82,6 +82,19 @@ class AuthInstallFreshModeTest extends TestCase
         $this->assertTrue(Schema::hasColumn('users', 'public_id'));
     }
 
+    public function test_fresh_reseeds_account_roles(): void
+    {
+        $this->stagePostInstallState();
+
+        // Teardown drops account_roles (and the harness-seeded rows with it),
+        // so roles present afterward must come from install's own re-seed.
+        Artisan::call('jamesgifford:auth:install', ['--fresh' => true, '--force' => true]);
+
+        $this->assertTrue(Schema::hasTable('account_roles'));
+        $this->assertSame(4, DB::table('account_roles')->where('system', true)->count());
+        $this->assertTrue(DB::table('account_roles')->where('key', 'owner')->exists());
+    }
+
     public function test_fresh_with_force_skips_confirmation_prompt(): void
     {
         $this->stagePostInstallState();

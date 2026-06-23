@@ -6,12 +6,15 @@ namespace JamesGifford\Auth\Tests\Feature\Installer;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\PublicId\PublicId;
+use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\TestCase;
 
@@ -286,6 +289,79 @@ class AuthInstallCommandTest extends TestCase
         $this->assertFileExists($target);
     }
 
+    // ---- Role seeding ----
+    //
+    // These tests deliberately do NOT use the harness's own role seeding —
+    // they start from an UNseeded account_roles table so they actually
+    // exercise (and would catch a regression in) install's seeding step.
+
+    public function test_install_seeds_account_roles_from_an_unseeded_table(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertTrue(DB::table('account_roles')->exists(), 'account_roles should be seeded.');
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+        $this->assertSame(4, DB::table('account_roles')->count());
+        $this->assertStringContainsString('Seeded 4 account roles (owner, admin, member, viewer).', $output);
+    }
+
+    public function test_install_seeds_roles_despite_stale_in_process_config(): void
+    {
+        // Correct config on disk, but the live config repository is stale/empty
+        // (the cached-config scenario where mergeConfigFrom was skipped). The
+        // seeder must re-read the real roles rather than seed nothing.
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        if (! is_dir(dirname($target))) {
+            mkdir(dirname($target), 0777, true);
+        }
+        copy(__DIR__.'/../../../config/auth.php', $target);
+        $this->loadLaravelMigrations();
+
+        config(['jamesgifford.auth.roles' => []]);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $this->assertSame(0, $exit, 'Install should succeed even with stale in-process roles config.');
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+        $this->assertSame(4, DB::table('account_roles')->count());
+    }
+
+    public function test_install_reads_overridden_roles_from_published_config_when_in_process_config_is_stale(): void
+    {
+        // A published config that adds a custom (non-system) role, with stale
+        // in-process config. Seeding must reflect the file on disk.
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        if (! is_dir(dirname($target))) {
+            mkdir(dirname($target), 0777, true);
+        }
+        file_put_contents($target, $this->configWithCustomRole('auditor'));
+        $this->loadLaravelMigrations();
+
+        config(['jamesgifford.auth.roles' => []]);
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $auditor = AccountRole::findByKey('auditor');
+        $this->assertNotNull($auditor, 'The custom role from the published config should be seeded.');
+        $this->assertFalse((bool) $auditor->system);
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+    }
+
+    public function test_running_install_twice_does_not_duplicate_roles(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $this->assertSame(4, DB::table('account_roles')->count());
+
+        // Second run is idempotent (seeder uses updateOrCreate keyed on key).
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $this->assertSame(4, DB::table('account_roles')->count());
+    }
+
     public function test_completion_prints_conditional_boost_reminder(): void
     {
         $this->loadLaravelMigrations();
@@ -508,6 +584,23 @@ class AuthInstallCommandTest extends TestCase
         }
 
         return null;
+    }
+
+    private function configWithCustomRole(string $key): string
+    {
+        return <<<PHP
+        <?php
+
+        return [
+            'roles' => [
+                'owner' => ['name' => 'Owner', 'system' => true, 'sort_order' => 1],
+                'admin' => ['name' => 'Administrator', 'system' => true, 'sort_order' => 2],
+                'member' => ['name' => 'Member', 'system' => true, 'sort_order' => 3],
+                'viewer' => ['name' => 'Viewer', 'system' => true, 'sort_order' => 4],
+                '{$key}' => ['name' => 'Auditor', 'system' => false, 'sort_order' => 5],
+            ],
+        ];
+        PHP;
     }
 
     private function userModelSource(string $class, bool $withTraits): string
