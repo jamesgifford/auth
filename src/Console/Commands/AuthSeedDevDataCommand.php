@@ -38,13 +38,22 @@ final class AuthSeedDevDataCommand extends Command
         $this->info('Seeding dev data...');
         $this->newLine();
 
+        // Guard FIRST so a refused (e.g. production) run writes nothing — no
+        // published file, no database changes.
         try {
-            $counts = $this->seeder->seed();
+            $this->seeder->assertEnvironmentAllowed();
         } catch (DevDataSeedingNotAllowedException $e) {
             $this->error($e->getMessage());
 
             return self::FAILURE;
         }
+
+        // Publish the dev-data config so the consumer has a file to customize,
+        // unless they already have one (then it's left untouched).
+        $this->ensureDevDataConfigPublished();
+
+        // seed() re-asserts the guard (cheap, no side effects) before any query.
+        $counts = $this->seeder->seed();
 
         $this->line(sprintf(
             '  Seeded %d user(s), %d account(s), %d membership(s).',
@@ -58,5 +67,33 @@ final class AuthSeedDevDataCommand extends Command
         $this->line('start above these dev ids. (This command does not run it for you.)');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Publish config/jamesgifford/dev-data.php on first run so the consumer has
+     * an editable cast. Never overwrites an existing file (vendor:publish skips
+     * it, and we only announce a publish that actually happened).
+     */
+    private function ensureDevDataConfigPublished(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+
+        if (is_file($target)) {
+            return;
+        }
+
+        $this->callSilent('vendor:publish', ['--tag' => 'jamesgifford-auth-dev-data']);
+
+        if (is_file($target)) {
+            $this->line('  Published dev-data config to '.$this->displayPath($target).' — edit it to customize the cast.');
+            $this->newLine();
+        }
+    }
+
+    private function displayPath(string $path): string
+    {
+        $base = $this->laravel->basePath().DIRECTORY_SEPARATOR;
+
+        return str_starts_with($path, $base) ? substr($path, strlen($base)) : $path;
     }
 }

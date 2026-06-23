@@ -52,6 +52,49 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
         $this->assertFileDoesNotExist(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php'));
     }
 
+    public function test_seeding_publishes_the_dev_data_config_on_first_run(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        @unlink($target);
+
+        $this->artisan('jamesgifford:auth:seed-dev-data')
+            ->expectsOutputToContain('Published dev-data config')
+            ->assertSuccessful();
+
+        $this->assertFileExists($target);
+    }
+
+    public function test_seeding_does_not_overwrite_an_existing_dev_data_config(): void
+    {
+        $dir = config_path('jamesgifford');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $target = $dir.DIRECTORY_SEPARATOR.'dev-data.php';
+        file_put_contents($target, "<?php\n\n// consumer dev marker keep-me-77\nreturn [];\n");
+
+        Artisan::call('jamesgifford:auth:seed-dev-data');
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('keep-me-77', (string) file_get_contents($target));
+        $this->assertStringNotContainsString('Published dev-data config', $output);
+    }
+
+    public function test_a_refused_run_does_not_publish_the_dev_data_config(): void
+    {
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        @unlink($target);
+        $this->app['env'] = 'production';
+
+        $code = Artisan::call('jamesgifford:auth:seed-dev-data');
+
+        $this->app['env'] = 'testing';
+
+        // Refused = write nothing: neither the config file nor the database.
+        $this->assertSame(1, $code);
+        $this->assertFileDoesNotExist($target);
+    }
+
     // ---- Environment guard (fails-closed allowlist + unconditional production) ----
 
     public function test_refuses_in_production_and_makes_no_database_changes(): void
