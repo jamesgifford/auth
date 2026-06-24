@@ -266,6 +266,44 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertFalse(Schema::hasColumn('users', 'current_account_id'));
     }
 
+    public function test_removes_public_id_even_when_schema_was_already_partially_torn_down(): void
+    {
+        // Regression: a partial schema state — package tables and
+        // users.current_account_id already gone, but every package migration
+        // still recorded as run. Previously the current_account_id migration's
+        // down() threw (dropping a missing FK/index/column), aborting the whole
+        // rollback before users.public_id (which rolls back last) was reached —
+        // stranding public_id and breaking the next install. The teardown must
+        // now be idempotent and complete regardless.
+        $this->stageInstall();
+
+        // Simulate the partial teardown: drop the package tables and the
+        // current_account_id column, leaving public_id and the migration
+        // records in place.
+        Schema::table('users', function ($table): void {
+            $table->dropForeign(['current_account_id']);
+            $table->dropIndex(['current_account_id']);
+            $table->dropColumn('current_account_id');
+        });
+        Schema::dropIfExists('account_user');
+        Schema::dropIfExists('accounts');
+        Schema::dropIfExists('account_roles');
+
+        $this->assertTrue(Schema::hasColumn('users', 'public_id'), 'precondition: public_id present');
+        $this->assertSame(5, $this->packageMigrationRecordCount(), 'precondition: all package migrations recorded');
+
+        $exitCode = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode, "Uninstall should complete; output:\n".$output);
+        $this->assertFalse(
+            Schema::hasColumn('users', 'public_id'),
+            'public_id must be removed even though an earlier migration had nothing to roll back'
+        );
+        $this->assertSame(0, $this->packageMigrationRecordCount(), 'all package migration records should be cleared');
+        $this->assertStringNotContainsString('Migration rollback failed', $output);
+    }
+
     public function test_deletes_published_migration_files(): void
     {
         $this->stageInstall();
@@ -543,6 +581,18 @@ class AuthUninstallCommandTest extends TestCase
         foreach ((array) glob($source.DIRECTORY_SEPARATOR.'*.php') as $file) {
             copy((string) $file, $this->migrationsDir.DIRECTORY_SEPARATOR.basename((string) $file));
         }
+    }
+
+    private function packageMigrationRecordCount(): int
+    {
+        return DB::table('migrations')
+            ->where(function ($query): void {
+                $query->where('migration', 'like', '%jamesgifford%')
+                    ->orWhere('migration', 'like', '%_account_%')
+                    ->orWhere('migration', 'like', '%_accounts_%')
+                    ->orWhere('migration', 'like', '%_current_account_%');
+            })
+            ->count();
     }
 
     private function insertUser(string $publicId): int
