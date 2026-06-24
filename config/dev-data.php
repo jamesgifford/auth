@@ -41,9 +41,9 @@ return [
     'environments' => ['local', 'staging'],
 
     // Shared password for every seeded dev user. Sourced from the environment
-    // (DEV_USER_PASSWORD in your .env) so no credential is committed here; it is
-    // hashed at seed time and never stored in plaintext.
-    'password' => env('DEV_USER_PASSWORD', 'password'),
+    // (JAMESGIFFORD_AUTH_DEV_PASSWORD in your .env) so no credential is committed
+    // here; it is hashed at seed time and never stored in plaintext.
+    'password' => env('JAMESGIFFORD_AUTH_DEV_PASSWORD', 'password'),
 
     // The default dev cast — ready to seed. Each entry is idempotent
     // (updateOrCreate on email). Optional 'account' creates an account owned by

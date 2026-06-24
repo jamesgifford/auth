@@ -180,12 +180,12 @@ return [
     | AFTER migrating and after any role/dev-data seeding, so the counter lands
     | above existing records.
     |
-    | Each value may be declared here as a literal, OR supplied per-environment
-    | via an environment variable that OVERRIDES this value (and supplements it
-    | when it is null):
+    | Each value may be supplied per-environment via its environment variable
+    | (below), or set as a literal here instead (a literal you write here takes
+    | precedence over the env var):
     |
-    |     JAMESGIFFORD_AUTH_ID_OFFSET_USERS=11
-    |     JAMESGIFFORD_AUTH_ID_OFFSET_ACCOUNTS=1001
+    |     JAMESGIFFORD_AUTH_USERS_ID_OFFSET=11
+    |     JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET=1001
     |
     | Note: 'users' targets the consuming application's users table, NOT a
     | package-owned table. Supported on MySQL/MariaDB and PostgreSQL; a no-op
@@ -194,10 +194,10 @@ return [
     */
 
     'id_offsets' => [
-        // Literal here, or set JAMESGIFFORD_AUTH_ID_OFFSET_USERS in .env.
-        'users' => null,      // e.g. 11
-        // Literal here, or set JAMESGIFFORD_AUTH_ID_OFFSET_ACCOUNTS in .env.
-        'accounts' => null,   // e.g. 1001
+        // From JAMESGIFFORD_AUTH_USERS_ID_OFFSET, or replace with a literal (e.g. 11).
+        'users' => env('JAMESGIFFORD_AUTH_USERS_ID_OFFSET'),
+        // From JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET, or replace with a literal (e.g. 1001).
+        'accounts' => env('JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET'),
     ],
 
     /*

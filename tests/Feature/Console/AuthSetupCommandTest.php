@@ -289,23 +289,20 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringNotContainsString('no offset configured', $output);
     }
 
-    public function test_offsets_supplied_via_env_are_read_and_applied_non_interactively(): void
+    public function test_env_sourced_string_offsets_are_read_and_applied_non_interactively(): void
     {
-        // Config leaves both null; the environment supplies them.
-        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
-        $_SERVER[IdOffsetManager::envKeyFor('users')] = '12345';
-        $_SERVER[IdOffsetManager::envKeyFor('accounts')] = '6789';
+        // config/auth.php reads the JAMESGIFFORD_AUTH_*_ID_OFFSET env vars, which
+        // arrive as STRINGS. Simulate that env-sourced config and confirm the
+        // command reads + applies them without prompting. (See the dedicated
+        // config test for the env var name → config value wiring.)
+        config(['jamesgifford.auth.id_offsets' => ['users' => '12345', 'accounts' => '6789']]);
 
-        try {
-            $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
-            $output = Artisan::output();
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
 
-            $this->assertSame(0, $exit, $output);
-            $this->assertStringContainsString('does not support id offsets', $output);
-            $this->assertStringNotContainsString('no offset configured', $output);
-        } finally {
-            unset($_SERVER[IdOffsetManager::envKeyFor('users')], $_SERVER[IdOffsetManager::envKeyFor('accounts')]);
-        }
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('does not support id offsets', $output);
+        $this->assertStringNotContainsString('no offset configured', $output);
     }
 
     // ---- --fresh preserves existing config files (and their values) ----
@@ -321,8 +318,12 @@ class AuthSetupCommandTest extends TestCase
         $configFile = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
         $this->assertFileExists($configFile);
 
-        // Customize it with a literal offset.
-        $contents = str_replace("'users' => null", "'users' => 4242", (string) file_get_contents($configFile));
+        // Customize it with a literal offset, replacing the env() default.
+        $contents = str_replace(
+            "'users' => env('JAMESGIFFORD_AUTH_USERS_ID_OFFSET')",
+            "'users' => 4242",
+            (string) file_get_contents($configFile),
+        );
         file_put_contents($configFile, $contents);
         $this->assertStringContainsString("'users' => 4242", (string) file_get_contents($configFile));
 

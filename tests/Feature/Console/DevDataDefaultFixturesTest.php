@@ -59,7 +59,7 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
         $contents = (string) file_get_contents(config_path(self::PUBLISHED));
 
         // Password comes from the environment, never a stored literal.
-        $this->assertStringContainsString("env('DEV_USER_PASSWORD'", $contents);
+        $this->assertStringContainsString("env('JAMESGIFFORD_AUTH_DEV_PASSWORD'", $contents);
         $this->assertStringNotContainsString("'password' => '", $contents);
     }
 
@@ -123,7 +123,7 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
 
         $owner = User::query()->where('email', 'owner@dev.test')->firstOrFail();
 
-        // Default fallback for DEV_USER_PASSWORD is 'password'; hashed at seed time.
+        // Default fallback for JAMESGIFFORD_AUTH_DEV_PASSWORD is 'password'; hashed at seed time.
         $this->assertTrue(Hash::check('password', $owner->password));
         $this->assertNotSame('password', $owner->password);
         $this->assertTrue(Hash::isHashed($owner->password));

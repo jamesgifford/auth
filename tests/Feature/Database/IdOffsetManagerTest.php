@@ -140,36 +140,24 @@ class IdOffsetManagerTest extends AccountsTestCase
         $this->assertSame(1001, $results[1]['offset']);
     }
 
-    // ---- Environment variable resolution (override / supplement) ----
+    // ---- Env-sourced (string) config values ----
 
-    public function test_offset_is_supplied_by_an_environment_variable_when_config_is_null(): void
+    public function test_string_config_offsets_are_cast_to_int(): void
     {
-        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
-        $_SERVER[IdOffsetManager::envKeyFor('users')] = '10000'; // env vars are strings
+        // config('...id_offsets') reads env vars (see config/auth.php), which
+        // arrive as STRINGS. The manager must cast an integer-looking string.
+        config(['jamesgifford.auth.id_offsets' => ['users' => '10000', 'accounts' => '500']]);
 
-        try {
-            $users = $this->resultFor($this->manager()->apply(), 'users');
+        $results = $this->manager()->apply();
 
-            // String env value is cast to int and used (supplements null config).
-            $this->assertSame(10000, $users['offset']);
-        } finally {
-            unset($_SERVER[IdOffsetManager::envKeyFor('users')]);
-        }
+        $this->assertSame(10000, $this->resultFor($results, 'users')['offset']);
+        $this->assertSame(500, $this->resultFor($results, 'accounts')['offset']);
     }
 
-    public function test_environment_variable_overrides_a_config_declared_offset(): void
+    public function test_env_var_name_uses_the_prefixed_convention(): void
     {
-        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => null]]);
-        $_SERVER[IdOffsetManager::envKeyFor('users')] = '99999';
-
-        try {
-            $users = $this->resultFor($this->manager()->apply(), 'users');
-
-            // Env wins over the config literal.
-            $this->assertSame(99999, $users['offset']);
-        } finally {
-            unset($_SERVER[IdOffsetManager::envKeyFor('users')]);
-        }
+        $this->assertSame('JAMESGIFFORD_AUTH_USERS_ID_OFFSET', IdOffsetManager::envKeyFor('users'));
+        $this->assertSame('JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET', IdOffsetManager::envKeyFor('accounts'));
     }
 
     private function manager(): IdOffsetManager

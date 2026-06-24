@@ -52,20 +52,22 @@ final class IdOffsetManager
 
         $results = [];
         foreach (self::TABLES as $table) {
-            $results[] = $this->applyToTable($table, $this->resolveOffset($table, $offsets[$table] ?? null));
+            $results[] = $this->applyToTable($table, $this->normalizeOffset($offsets[$table] ?? null));
         }
 
         return $results;
     }
 
     /**
-     * The environment variable name an offset can be supplied/overridden with,
-     * e.g. JAMESGIFFORD_AUTH_ID_OFFSET_USERS. Public so the setup command's
-     * educational copy and the tests stay in sync with the real resolution.
+     * The environment variable name an offset is read from in the package
+     * config, e.g. JAMESGIFFORD_AUTH_USERS_ID_OFFSET. The env() call itself
+     * lives in config/auth.php (env must only be read in config); this method is
+     * the single source of the NAME, so the setup command's educational copy and
+     * the tests stay in sync with the config.
      */
     public static function envKeyFor(string $table): string
     {
-        return 'JAMESGIFFORD_AUTH_ID_OFFSET_'.strtoupper($table);
+        return 'JAMESGIFFORD_AUTH_'.strtoupper($table).'_ID_OFFSET';
     }
 
     /**
@@ -83,17 +85,13 @@ final class IdOffsetManager
     }
 
     /**
-     * Resolve a table's offset. An environment variable OVERRIDES the config
-     * value when set and SUPPLEMENTS it when config is null, so offsets can be
-     * declared in config (committed) or supplied per-environment via .env. Env
-     * vars are always strings, so an integer-looking value is cast to int;
-     * anything else is passed through untouched for validation to reject.
+     * Normalize a configured offset. The value comes from config (which may
+     * have read it from an environment variable, so it arrives as a string):
+     * an integer-looking string is cast to int; anything else is passed through
+     * untouched for validation to accept (int) or reject.
      */
-    private function resolveOffset(string $table, mixed $configValue): mixed
+    private function normalizeOffset(mixed $value): mixed
     {
-        $env = env(self::envKeyFor($table));
-        $value = ($env === null || $env === '') ? $configValue : $env;
-
         if (is_string($value) && preg_match('/^-?\d+$/', trim($value)) === 1) {
             return (int) trim($value);
         }
