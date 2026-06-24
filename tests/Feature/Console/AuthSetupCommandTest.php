@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\TestCase;
 
@@ -240,6 +241,99 @@ class AuthSetupCommandTest extends TestCase
         $this->assertSame(1, $exit);
         $this->assertStringContainsString('Setup aborted', $output);
         $this->assertFalse(Schema::hasTable('accounts'), 'install must not run after migrate is blocked');
+    }
+
+    // ---- Interactive educational pause (after config publish, before lock) ----
+
+    public function test_interactive_run_pauses_with_educational_offset_guidance_before_the_lock(): void
+    {
+        // No --force, non-production env: the command publishes config, then
+        // pauses to teach the public_id lock + offset options before install
+        // performs the irreversible lock. Simulated input continues.
+        $this->artisan('jamesgifford:auth:setup')
+            ->expectsOutputToContain('Before the public_id format is locked')
+            ->expectsOutputToContain("'id_offsets' => [")
+            ->expectsOutputToContain(IdOffsetManager::envKeyFor('users').'=11')
+            ->expectsOutputToContain(IdOffsetManager::envKeyFor('accounts').'=1001')
+            ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
+            ->assertExitCode(0);
+
+        // The lock still completed AFTER the pause was acknowledged.
+        $this->assertTrue(Schema::hasColumn('users', 'public_id'));
+        $this->assertTrue(Schema::hasTable('accounts'));
+    }
+
+    public function test_force_run_shows_no_educational_pause(): void
+    {
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringNotContainsString('Before the public_id format is locked', $output);
+        $this->assertStringNotContainsString('Press ENTER to continue', $output);
+    }
+
+    // ---- ID offsets: read from config AND from env, applied non-interactively ----
+
+    public function test_offsets_declared_in_config_are_read_and_applied_non_interactively(): void
+    {
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        // On SQLite the ALTER can't run, but the offsets were READ from config
+        // (the report says the driver can't honor them, NOT "no offset configured").
+        $this->assertStringContainsString('does not support id offsets', $output);
+        $this->assertStringNotContainsString('no offset configured', $output);
+    }
+
+    public function test_offsets_supplied_via_env_are_read_and_applied_non_interactively(): void
+    {
+        // Config leaves both null; the environment supplies them.
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
+        $_SERVER[IdOffsetManager::envKeyFor('users')] = '12345';
+        $_SERVER[IdOffsetManager::envKeyFor('accounts')] = '6789';
+
+        try {
+            $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+            $output = Artisan::output();
+
+            $this->assertSame(0, $exit, $output);
+            $this->assertStringContainsString('does not support id offsets', $output);
+            $this->assertStringNotContainsString('no offset configured', $output);
+        } finally {
+            unset($_SERVER[IdOffsetManager::envKeyFor('users')], $_SERVER[IdOffsetManager::envKeyFor('accounts')]);
+        }
+    }
+
+    // ---- --fresh preserves existing config files (and their values) ----
+
+    public function test_fresh_preserves_an_existing_config_file_and_its_custom_offset(): void
+    {
+        $this->app['env'] = 'local';
+
+        // Establish a migrated database with a published config.
+        $this->assertSame(0, Artisan::call('jamesgifford:auth:setup', ['--force' => true]));
+        Artisan::output();
+
+        $configFile = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+        $this->assertFileExists($configFile);
+
+        // Customize it with a literal offset.
+        $contents = str_replace("'users' => null", "'users' => 4242", (string) file_get_contents($configFile));
+        file_put_contents($configFile, $contents);
+        $this->assertStringContainsString("'users' => 4242", (string) file_get_contents($configFile));
+
+        // --fresh resets the DATABASE but must not delete or overwrite config.
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--fresh' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertFileExists($configFile);
+        $this->assertStringContainsString("'users' => 4242", (string) file_get_contents($configFile));
+        $this->assertStringContainsString('config already present (left untouched)', $output);
     }
 
     protected function defineEnvironment($app): void

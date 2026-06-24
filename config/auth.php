@@ -180,6 +180,13 @@ return [
     | AFTER migrating and after any role/dev-data seeding, so the counter lands
     | above existing records.
     |
+    | Each value may be declared here as a literal, OR supplied per-environment
+    | via an environment variable that OVERRIDES this value (and supplements it
+    | when it is null):
+    |
+    |     JAMESGIFFORD_AUTH_ID_OFFSET_USERS=11
+    |     JAMESGIFFORD_AUTH_ID_OFFSET_ACCOUNTS=1001
+    |
     | Note: 'users' targets the consuming application's users table, NOT a
     | package-owned table. Supported on MySQL/MariaDB and PostgreSQL; a no-op
     | on SQLite (which can't honor this cleanly).
@@ -187,7 +194,9 @@ return [
     */
 
     'id_offsets' => [
+        // Literal here, or set JAMESGIFFORD_AUTH_ID_OFFSET_USERS in .env.
         'users' => null,      // e.g. 11
+        // Literal here, or set JAMESGIFFORD_AUTH_ID_OFFSET_ACCOUNTS in .env.
         'accounts' => null,   // e.g. 1001
     ],
 

@@ -140,6 +140,38 @@ class IdOffsetManagerTest extends AccountsTestCase
         $this->assertSame(1001, $results[1]['offset']);
     }
 
+    // ---- Environment variable resolution (override / supplement) ----
+
+    public function test_offset_is_supplied_by_an_environment_variable_when_config_is_null(): void
+    {
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
+        $_SERVER[IdOffsetManager::envKeyFor('users')] = '10000'; // env vars are strings
+
+        try {
+            $users = $this->resultFor($this->manager()->apply(), 'users');
+
+            // String env value is cast to int and used (supplements null config).
+            $this->assertSame(10000, $users['offset']);
+        } finally {
+            unset($_SERVER[IdOffsetManager::envKeyFor('users')]);
+        }
+    }
+
+    public function test_environment_variable_overrides_a_config_declared_offset(): void
+    {
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => null]]);
+        $_SERVER[IdOffsetManager::envKeyFor('users')] = '99999';
+
+        try {
+            $users = $this->resultFor($this->manager()->apply(), 'users');
+
+            // Env wins over the config literal.
+            $this->assertSame(99999, $users['offset']);
+        } finally {
+            unset($_SERVER[IdOffsetManager::envKeyFor('users')]);
+        }
+    }
+
     private function manager(): IdOffsetManager
     {
         return $this->app->make(IdOffsetManager::class);

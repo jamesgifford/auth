@@ -52,10 +52,20 @@ final class IdOffsetManager
 
         $results = [];
         foreach (self::TABLES as $table) {
-            $results[] = $this->applyToTable($table, $offsets[$table] ?? null);
+            $results[] = $this->applyToTable($table, $this->resolveOffset($table, $offsets[$table] ?? null));
         }
 
         return $results;
+    }
+
+    /**
+     * The environment variable name an offset can be supplied/overridden with,
+     * e.g. JAMESGIFFORD_AUTH_ID_OFFSET_USERS. Public so the setup command's
+     * educational copy and the tests stay in sync with the real resolution.
+     */
+    public static function envKeyFor(string $table): string
+    {
+        return 'JAMESGIFFORD_AUTH_ID_OFFSET_'.strtoupper($table);
     }
 
     /**
@@ -70,6 +80,25 @@ final class IdOffsetManager
             'pgsql' => 'ALTER SEQUENCE "'.$table.'_id_seq" RESTART WITH '.$offset,
             default => null,
         };
+    }
+
+    /**
+     * Resolve a table's offset. An environment variable OVERRIDES the config
+     * value when set and SUPPLEMENTS it when config is null, so offsets can be
+     * declared in config (committed) or supplied per-environment via .env. Env
+     * vars are always strings, so an integer-looking value is cast to int;
+     * anything else is passed through untouched for validation to reject.
+     */
+    private function resolveOffset(string $table, mixed $configValue): mixed
+    {
+        $env = env(self::envKeyFor($table));
+        $value = ($env === null || $env === '') ? $configValue : $env;
+
+        if (is_string($value) && preg_match('/^-?\d+$/', trim($value)) === 1) {
+            return (int) trim($value);
+        }
+
+        return $value;
     }
 
     /**
