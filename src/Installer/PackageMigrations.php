@@ -42,7 +42,10 @@ final class PackageMigrations
     /**
      * Roll back ONLY the package's own migrations, in reverse order, so tables
      * drop and columns are removed while non-package migrations are left
-     * untouched. Migrations that aren't recorded as run are skipped gracefully.
+     * untouched. The (idempotent) down() runs for every package migration even
+     * if it is not recorded as run, so leftover schema from a broken teardown
+     * — a migrations table out of sync with the actual columns/tables — is
+     * still removed; the migrations-table row is only deleted when present.
      *
      * The down() logic is resolved from the package's OWN source migrations,
      * not the consumer's published copies. The published copies can be stale
@@ -83,23 +86,31 @@ final class PackageMigrations
         $failures = [];
 
         foreach (array_reverse($this->names()) as $name) {
-            if (! in_array($name, $ran, true)) {
-                $log("  - {$name} (not run; skipped)");
-
-                continue;
-            }
+            $recorded = in_array($name, $ran, true);
 
             try {
                 $migration = $resolve($this->sourceDir().DIRECTORY_SEPARATOR.$name.'.php');
                 if (is_object($migration) && method_exists($migration, 'down')) {
+                    // down() is idempotent (drops only what exists), so we run
+                    // it whether or not the migration is recorded as run. A
+                    // broken teardown can leave the schema physically present
+                    // while the migrations table lost its row — and uninstall
+                    // must still remove that leftover schema (e.g. a stranded
+                    // users.public_id column) rather than skip it.
                     $migration->down();
                 }
-                $repository->delete((object) ['migration' => $name]);
-                $log("  - rolled back {$name}");
+
+                if ($recorded) {
+                    $repository->delete((object) ['migration' => $name]);
+                    $log("  - rolled back {$name}");
+                } else {
+                    $log("  - {$name} (not recorded; dropped any leftover schema)");
+                }
             } catch (Throwable $e) {
                 // Keep going: a later migration (e.g. the one that removes
-                // users.public_id) must still get its chance to roll back. The
-                // record is left in place since its rollback did not complete.
+                // users.public_id) must still get its chance to roll back. A
+                // recorded row is left in place since its rollback did not
+                // complete.
                 $failures[$name] = $e->getMessage();
                 $warn("  - {$name}: rollback failed ({$e->getMessage()}); continuing");
             }

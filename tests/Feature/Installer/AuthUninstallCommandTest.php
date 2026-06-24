@@ -304,6 +304,38 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertStringNotContainsString('Migration rollback failed', $output);
     }
 
+    public function test_removes_public_id_when_schema_exists_but_migrations_are_not_recorded(): void
+    {
+        // Regression: the package columns/tables are physically present, but the
+        // migrations table lost their rows (a residue of an earlier broken
+        // teardown). The rollback used to skip every "unrecorded" migration and
+        // report success while leaving public_id behind — so the next install
+        // (and --fresh) failed re-adding a column that was never dropped. The
+        // idempotent down() must run regardless of the migration record.
+        $this->stageInstall();
+
+        DB::table('migrations')
+            ->where('migration', 'like', '%jamesgifford%')
+            ->orWhere('migration', 'like', '%_account_%')
+            ->orWhere('migration', 'like', '%_accounts_%')
+            ->orWhere('migration', 'like', '%_current_account_%')
+            ->delete();
+
+        $this->assertTrue(Schema::hasColumn('users', 'public_id'), 'precondition: public_id present');
+        $this->assertSame(0, $this->packageMigrationRecordCount(), 'precondition: records lost');
+
+        $exitCode = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exitCode, "Uninstall should complete; output:\n".$output);
+        $this->assertFalse(Schema::hasColumn('users', 'public_id'), 'public_id must be dropped even without a migration record');
+        $this->assertFalse(Schema::hasColumn('users', 'current_account_id'));
+        $this->assertFalse(Schema::hasTable('accounts'));
+        $this->assertFalse(Schema::hasTable('account_roles'));
+        $this->assertFalse(Schema::hasTable('account_user'));
+        $this->assertStringNotContainsString('Migration rollback failed', $output);
+    }
+
     public function test_deletes_published_migration_files(): void
     {
         $this->stageInstall();
