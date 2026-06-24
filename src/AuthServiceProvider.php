@@ -13,6 +13,7 @@ use JamesGifford\Auth\Console\Commands\AuthApplyIdOffsetsCommand;
 use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
 use JamesGifford\Auth\Console\Commands\AuthPublishModelsCommand;
 use JamesGifford\Auth\Console\Commands\AuthSeedDevDataCommand;
+use JamesGifford\Auth\Console\Commands\AuthSetupCommand;
 use JamesGifford\Auth\Console\Commands\AuthUninstallCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdCheckCommand;
 use JamesGifford\Auth\Console\Commands\PublicIdResetCommand;
@@ -165,6 +166,7 @@ class AuthServiceProvider extends ServiceProvider
                 PublicIdCheckCommand::class,
                 AuthInstallCommand::class,
                 AuthUninstallCommand::class,
+                AuthSetupCommand::class,
                 AuthPublishModelsCommand::class,
                 AuthApplyIdOffsetsCommand::class,
                 AuthSeedDevDataCommand::class,
