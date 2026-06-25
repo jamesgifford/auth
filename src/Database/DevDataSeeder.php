@@ -9,7 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Exceptions\DevDataSeedingNotAllowedException;
+use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\SystemRole;
+use Throwable;
 
 /**
  * Seeds deterministic LOCAL dev fixtures (users, accounts, memberships) from
@@ -73,6 +77,18 @@ final class DevDataSeeder
 
         /** @var class-string<Model> $userClass */
         $userClass = config('jamesgifford.auth.models.user');
+        /** @var class-string<Model> $accountClass */
+        $accountClass = config('jamesgifford.auth.models.account');
+        /** @var class-string<Model> $accountUserClass */
+        $accountUserClass = config('jamesgifford.auth.models.account_user');
+
+        // When the in-process User model lacks an ACTIVE HasPublicId trait — e.g.
+        // setup's install step just added it to the file, but the already-loaded
+        // class is stale and PHP can't reload it — its public_id won't
+        // auto-populate. Detect that so we can set it explicitly and seeding
+        // works in the SAME process as the model edit, instead of crashing with
+        // "Field 'public_id' doesn't have a default value".
+        $userAutoGeneratesPublicId = in_array(HasPublicId::class, class_uses_recursive($userClass), true);
 
         /** @var list<array<string, mixed>> $declarations */
         $declarations = $config['users'] ?? [];
@@ -85,16 +101,28 @@ final class DevDataSeeder
         foreach ($declarations as $declaration) {
             $email = (string) $declaration['email'];
 
-            $user = $userClass::query()->updateOrCreate(
-                ['email' => $email],
-                ['name' => $declaration['name'] ?? $email, 'password' => $password],
-            );
+            $user = $userClass::query()->firstOrNew(['email' => $email]);
+            $user->name = $declaration['name'] ?? $email;
+            $user->password = $password;
+
+            if (! $user->exists
+                && empty($user->public_id)
+                && ! $userAutoGeneratesPublicId
+                && $user->getConnection()->getSchemaBuilder()->hasColumn($user->getTable(), 'public_id')
+            ) {
+                $user->public_id = PublicId::generate($this->resolveUserPrefix($userClass));
+            }
+
+            $user->save();
 
             $usersByEmail[$email] = $user;
             $counts['users']++;
         }
 
-        // Pass 2: accounts + memberships, via the real services.
+        // Pass 2: accounts + memberships, via the real services. Idempotency is
+        // checked through the package Account/AccountUser models (NOT the User
+        // model's HasAccounts trait), so seeding never depends on the consumer
+        // User model being loaded with its traits in this process.
         foreach ($declarations as $declaration) {
             $accountName = $declaration['account'] ?? null;
             if (! is_string($accountName) || $accountName === '') {
@@ -103,8 +131,10 @@ final class DevDataSeeder
 
             $owner = $usersByEmail[(string) $declaration['email']];
 
-            // Idempotent: reuse an existing owned account with the same name.
-            $account = $owner->ownedAccounts()->where('name', $accountName)->first();
+            $account = $accountClass::query()
+                ->where('owner_id', $owner->getKey())
+                ->where('name', $accountName)
+                ->first();
             if ($account === null) {
                 $account = $this->accounts->create($owner, $accountName);
                 $counts['accounts']++;
@@ -114,7 +144,15 @@ final class DevDataSeeder
             $members = $declaration['members'] ?? [];
             foreach ($members as $member) {
                 $memberUser = $usersByEmail[(string) ($member['email'] ?? '')] ?? null;
-                if ($memberUser === null || $memberUser->belongsToAccount($account)) {
+                if ($memberUser === null) {
+                    continue;
+                }
+
+                $alreadyMember = $accountUserClass::query()
+                    ->where('account_id', $account->getKey())
+                    ->where('user_id', $memberUser->getKey())
+                    ->exists();
+                if ($alreadyMember) {
                     continue;
                 }
 
@@ -124,5 +162,19 @@ final class DevDataSeeder
         }
 
         return $counts;
+    }
+
+    /**
+     * The public_id prefix for the user model, used only when its in-process
+     * class can't auto-generate one. Falls back to 'user' if the model isn't
+     * registered (its publicIdPrefix()/config entry is unavailable).
+     */
+    private function resolveUserPrefix(string $userClass): string
+    {
+        try {
+            return $this->app->make(PrefixRegistry::class)->prefixFor($userClass);
+        } catch (Throwable) {
+            return 'user';
+        }
     }
 }

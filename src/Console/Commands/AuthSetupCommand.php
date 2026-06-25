@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
-use JamesGifford\Auth\Concerns\HasAccounts;
 use JamesGifford\Auth\Database\IdOffsetManager;
-use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
 use Throwable;
@@ -94,7 +92,9 @@ final class AuthSetupCommand extends Command
 
         // install is always invoked non-interactively: the pause above is this
         // command's single interactive touch-point, so install never re-prompts.
-        $code = $this->call('jamesgifford:auth:install', ['--force' => true]);
+        // --publish-models so a full setup also writes the editable App\Models
+        // subclasses (install skips publishing under --force without this).
+        $code = $this->call('jamesgifford:auth:install', ['--force' => true, '--publish-models' => true]);
         if ($code !== self::SUCCESS) {
             return $this->abort('jamesgifford:auth:install', $code);
         }
@@ -103,28 +103,13 @@ final class AuthSetupCommand extends Command
         // seeder's own environment check).
         if ($withDevData) {
             $this->step(3, 'Seeding local dev data (jamesgifford:auth:seed-dev-data)');
-
-            // If install just added the package traits to the User model, that
-            // change only takes effect in a NEW process — the class is already
-            // loaded WITHOUT the traits here, so seeding (which relies on
-            // HasPublicId/HasAccounts) would fail. Defer it with instructions
-            // rather than crash; a fresh run picks the traits up automatically.
-            if (! $this->userModelTraitsAreActive()) {
+            $code = $this->call('jamesgifford:auth:seed-dev-data');
+            if ($code !== self::SUCCESS) {
+                // The seeder declined (e.g. production) or errored; either way it
+                // made no changes. Dev data is an optional convenience, so report
+                // it and continue rather than failing the whole setup.
                 $this->newLine();
-                $this->warn('  Skipped: your User model was just modified by the install step, and');
-                $this->warn('  that change only takes effect in a NEW process. Seed your dev data');
-                $this->warn('  now by running:');
-                $this->newLine();
-                $this->line('      php artisan jamesgifford:auth:seed-dev-data');
-            } else {
-                $code = $this->call('jamesgifford:auth:seed-dev-data');
-                if ($code !== self::SUCCESS) {
-                    // The seeder declined (e.g. production) or errored; either way
-                    // it made no changes. Dev data is an optional convenience, so
-                    // report it and continue rather than failing the whole setup.
-                    $this->newLine();
-                    $this->warn('  Dev data was not seeded — the seeder declined (see its message above).');
-                }
+                $this->warn('  Dev data was not seeded — the seeder declined (see its message above).');
             }
         } else {
             $this->step(3, 'Seeding local dev data — skipped (pass --with-dev-data to include it)');
@@ -261,26 +246,6 @@ final class AuthSetupCommand extends Command
         } catch (Throwable) {
             return null;
         }
-    }
-
-    /**
-     * Whether the configured User model class has the package traits ACTIVE in
-     * THIS process. Install edits the model file, but if the class was already
-     * loaded (e.g. to resolve its path) the loaded class is stale — its boot
-     * hooks (public_id generation) and HasAccounts helpers won't be available
-     * until a fresh process loads the edited file.
-     */
-    private function userModelTraitsAreActive(): bool
-    {
-        $userClass = config('jamesgifford.auth.models.user');
-        if (! is_string($userClass) || ! class_exists($userClass)) {
-            return false;
-        }
-
-        $traits = class_uses_recursive($userClass);
-
-        return in_array(HasPublicId::class, $traits, true)
-            && in_array(HasAccounts::class, $traits, true);
     }
 
     /**

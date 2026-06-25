@@ -116,14 +116,15 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('Seeding local dev data', $output);
     }
 
-    public function test_with_dev_data_defers_seeding_when_user_model_was_just_modified(): void
+    public function test_with_dev_data_seeds_even_when_user_model_was_just_modified(): void
     {
         $this->app['env'] = 'local';
 
         // A User model WITHOUT the package traits, loaded now — simulating the
         // real flow where install edits the model file but the already-loaded,
-        // trait-less class is what this same process keeps using. Seeding relies
-        // on HasPublicId/HasAccounts, so it must be DEFERRED, not crash.
+        // trait-less class is what this same process keeps using. Seeding must
+        // still work in-process (public_id set explicitly; account idempotency
+        // queried via package models), NOT crash with a no-default public_id.
         $class = 'StaleSetupUser'.str_replace('.', '', uniqid('', true));
         $namespace = 'JamesGifford\\Auth\\Tests\\Support\\Tmp';
         $file = $this->tmpDir.DIRECTORY_SEPARATOR.$class.'.php';
@@ -139,13 +140,28 @@ class AuthSetupCommandTest extends TestCase
         $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
         $output = Artisan::output();
 
-        // No crash: setup completes and seeding is deferred with an instruction.
         $this->assertSame(0, $exit, $output);
-        $this->assertStringContainsString('only takes effect in a NEW process', $output);
-        $this->assertStringContainsString('php artisan jamesgifford:auth:seed-dev-data', $output);
         $this->assertStringContainsString('Setup complete.', $output);
-        // Deferred — no dev users created (creating one would have crashed).
-        $this->assertSame(0, DB::table('users')->count());
+        // Dev cast was actually seeded, and the explicitly-set public_id is valid.
+        $owner = DB::table('users')->where('email', 'owner@dev.test')->first();
+        $this->assertNotNull($owner, 'dev users should be seeded even with a stale User model');
+        $this->assertNotNull($owner->public_id);
+        $this->assertStringStartsWith('user_', (string) $owner->public_id);
+        $this->assertGreaterThan(0, DB::table('accounts')->count());
+    }
+
+    public function test_publishes_the_app_model_subclasses(): void
+    {
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        foreach (['Account', 'AccountRole', 'AccountUser'] as $model) {
+            $this->assertFileExists(
+                $this->app->path('Models'.DIRECTORY_SEPARATOR.$model.'.php'),
+                "setup should publish App\\Models\\{$model}"
+            );
+        }
     }
 
     // ---- --with-dev-data in production is refused by the SEEDER'S own guard ----
