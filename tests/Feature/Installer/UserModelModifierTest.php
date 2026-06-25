@@ -274,7 +274,7 @@ class UserModelModifierTest extends TestCase
 
         $analysis = $this->modifier->analyze($tmpFile);
         $mod = $this->modifier->modify($tmpFile, $analysis);
-        $this->modifier->write($tmpFile, $mod, createBackup: false);
+        $this->modifier->applyTransient($tmpFile, $mod->modifiedCode);
 
         require $tmpFile;
 
@@ -285,68 +285,157 @@ class UserModelModifierTest extends TestCase
         $this->assertSame('user', $instance->publicIdPrefix());
     }
 
-    // ---- write() / restore() ----
+    // ---- applyTransient() (transient backup) ----
 
-    public function test_write_creates_backup_when_create_backup_is_true(): void
+    public function test_apply_transient_leaves_no_backup_after_success(): void
     {
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
-        $originalContent = (string) file_get_contents($file);
-
         $analysis = $this->modifier->analyze($file);
         $mod = $this->modifier->modify($file, $analysis);
 
-        $this->modifier->write($file, $mod, createBackup: true);
+        $this->modifier->applyTransient($file, $mod->modifiedCode);
 
-        $this->assertFileExists($file.'.bak');
-        $this->assertSame($originalContent, file_get_contents($file.'.bak'));
+        $this->assertSame($mod->modifiedCode, file_get_contents($file));
+        $this->assertFileDoesNotExist($file.'.bak', 'the transient backup must be deleted on success');
     }
 
-    public function test_write_skips_backup_when_create_backup_is_false(): void
+    public function test_apply_transient_restores_and_cleans_up_when_edit_fails(): void
     {
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
+        $original = (string) file_get_contents($file);
 
+        // Invalid PHP fails the validity gate inside applyTransient.
+        try {
+            $this->modifier->applyTransient($file, '<?php this is not valid php {{{');
+            $this->fail('Expected applyTransient to throw on invalid PHP.');
+        } catch (RuntimeException) {
+            // expected
+        }
+
+        $this->assertSame($original, file_get_contents($file), 'the model must be restored to its pre-edit state');
+        $this->assertFileDoesNotExist($file.'.bak', 'no backup may remain after a failed edit');
+    }
+
+    public function test_apply_transient_restores_when_verify_callback_throws(): void
+    {
+        $file = $this->copyFixtureToTmp('StandardLaravelUser');
+        $original = (string) file_get_contents($file);
         $analysis = $this->modifier->analyze($file);
         $mod = $this->modifier->modify($file, $analysis);
 
-        $this->modifier->write($file, $mod, createBackup: false);
+        try {
+            $this->modifier->applyTransient($file, $mod->modifiedCode, verify: function (): void {
+                throw new RuntimeException('semantic check failed');
+            });
+            $this->fail('Expected applyTransient to rethrow the verify failure.');
+        } catch (RuntimeException) {
+            // expected
+        }
 
+        $this->assertSame($original, file_get_contents($file));
         $this->assertFileDoesNotExist($file.'.bak');
     }
 
-    public function test_write_produces_file_matching_modified_code(): void
+    // ---- reverseModify() (surgical un-install) ----
+
+    public function test_reverse_modify_removes_only_package_additions(): void
     {
-        $file = $this->copyFixtureToTmp('StandardLaravelUser');
+        // Fixture has HasAccounts + HasFactory + HasPublicId + Notifiable and a
+        // publicIdPrefix() returning 'usr', plus fillable/hidden.
+        $file = $this->copyFixtureToTmp('UserWithBothPackageTraits');
         $analysis = $this->modifier->analyze($file);
-        $mod = $this->modifier->modify($file, $analysis);
 
-        $this->modifier->write($file, $mod, createBackup: false);
+        $reversion = $this->modifier->reverseModify($file, $analysis);
+        $code = $reversion->modifiedCode;
 
-        $this->assertSame($mod->modifiedCode, file_get_contents($file));
+        // Package additions gone.
+        $this->assertStringNotContainsString('HasPublicId', $code);
+        $this->assertStringNotContainsString('HasAccounts', $code);
+        $this->assertStringNotContainsString('publicIdPrefix', $code);
+
+        // Everything else preserved.
+        $this->assertStringContainsString('use HasFactory;', $code);
+        $this->assertStringContainsString('use Notifiable;', $code);
+        $this->assertStringContainsString('protected $fillable', $code);
+        $this->assertStringContainsString('protected $hidden', $code);
+
+        // Result metadata.
+        $this->assertEqualsCanonicalizing(['HasPublicId', 'HasAccounts'], $reversion->removedTraits);
+        $this->assertTrue($reversion->removedPublicIdPrefixMethod);
+        $this->assertFalse($reversion->removedPrefixWasCustomized);
+        $this->assertSame('usr', $reversion->removedPrefixReturnValue);
     }
 
-    public function test_restore_reads_backup_and_overwrites_modified_file(): void
+    public function test_forward_then_reverse_returns_user_model_to_a_clean_state(): void
     {
+        // Round-trip via the real combined `use HasPublicId, HasAccounts;` line
+        // that forward modification produces.
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
-        $originalContent = (string) file_get_contents($file);
 
-        $analysis = $this->modifier->analyze($file);
-        $mod = $this->modifier->modify($file, $analysis);
-        $this->modifier->write($file, $mod, createBackup: true);
-        $this->assertNotSame($originalContent, file_get_contents($file));
+        $forward = $this->modifier->modify($file, $this->modifier->analyze($file));
+        $this->modifier->applyTransient($file, $forward->modifiedCode);
+        $afterForward = $this->modifier->analyze($file);
+        $this->assertTrue($afterForward->hasHasPublicIdTrait);
+        $this->assertTrue($afterForward->hasHasAccountsTrait);
+        $this->assertTrue($afterForward->hasPublicIdPrefixMethod);
 
-        $this->modifier->restore($file);
+        $reversion = $this->modifier->reverseModify($file, $afterForward);
+        $this->modifier->applyTransient($file, $reversion->modifiedCode);
 
-        $this->assertSame($originalContent, file_get_contents($file));
+        $afterReverse = $this->modifier->analyze($file);
+        $this->assertFalse($afterReverse->hasHasPublicIdTrait);
+        $this->assertFalse($afterReverse->hasHasAccountsTrait);
+        $this->assertFalse($afterReverse->hasPublicIdPrefixMethod);
+
+        $code = (string) file_get_contents($file);
+        $this->assertStringContainsString('Notifiable', $code);
+        $this->assertStringContainsString('protected $fillable', $code);
+        $this->assertFileDoesNotExist($file.'.bak');
     }
 
-    public function test_restore_throws_when_no_backup_exists(): void
+    public function test_reverse_modify_flags_a_customized_prefix_method_with_logic(): void
     {
-        $file = $this->copyFixtureToTmp('StandardLaravelUser');
+        $code = <<<'PHP'
+            <?php
+
+            namespace App\Models;
+
+            use Illuminate\Foundation\Auth\User as Authenticatable;
+            use JamesGifford\Auth\Concerns\HasAccounts;
+            use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
+
+            class User extends Authenticatable
+            {
+                use HasPublicId, HasAccounts;
+
+                public function publicIdPrefix(): string
+                {
+                    return $this->is_admin ? 'adm' : 'usr';
+                }
+            }
+            PHP;
+        $file = $this->tmpDir.DIRECTORY_SEPARATOR.'CustomLogicUser.php';
+        file_put_contents($file, $code);
+        $this->createdFiles[] = $file;
+
+        $reversion = $this->modifier->reverseModify($file, $this->modifier->analyze($file));
+
+        $this->assertTrue($reversion->removedPublicIdPrefixMethod);
+        $this->assertTrue($reversion->removedPrefixWasCustomized, 'a body with logic must be flagged customized');
+        $this->assertNull($reversion->removedPrefixReturnValue);
+        $this->assertStringNotContainsString('publicIdPrefix', $reversion->modifiedCode);
+    }
+
+    public function test_reverse_modify_throws_for_an_unmodifiable_model(): void
+    {
+        $file = $this->fixturePath('UserWithUnusualStructure');
+        $analysis = $this->modifier->analyze($file);
+        $this->assertFalse($analysis->isModifiable());
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('No backup file found');
+        $this->expectExceptionMessage('Cannot reverse-modify');
 
-        $this->modifier->restore($file);
+        $this->modifier->reverseModify($file, $analysis);
     }
 
     private function fixturePath(string $name): string

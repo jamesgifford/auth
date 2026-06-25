@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Installer;
 
+use Closure;
 use PhpParser\BuilderFactory;
 use PhpParser\Node;
 use PhpParser\Node\Name;
@@ -21,9 +22,10 @@ use Throwable;
  *
  * Splits work into:
  *  - {@see analyze()} (read-only inspection),
- *  - {@see modify()} (produce a modification plan without touching disk),
- *  - {@see write()} (commit the modification, optionally backing up first),
- *  - {@see restore()} (roll back from .bak).
+ *  - {@see modify()} (plan the forward install modification, no disk writes),
+ *  - {@see reverseModify()} (plan a surgical un-install removal, no disk writes),
+ *  - {@see applyTransient()} (commit code with a transient backup: created
+ *    before the edit, restored on failure, deleted on success — never orphaned).
  *
  * Uses nikic/php-parser's format-preserving printer so unchanged regions of
  * the file keep their original formatting (whitespace, comments, alignment).
@@ -327,22 +329,224 @@ final class UserModelModifier
         );
     }
 
-    public function write(string $filePath, UserModelModification $modification, bool $createBackup = true): void
+    /**
+     * Plan a SURGICAL reverse-modification: remove ONLY the package's additions
+     * (the HasPublicId/HasAccounts imports + trait usage, and the
+     * publicIdPrefix() method), preserving every other trait, method, and line.
+     *
+     * This is the un-install counterpart to {@see modify()}. It does NOT restore
+     * from a .bak — a stale backup would clobber the consumer's later edits;
+     * surgical removal is the mechanism.
+     */
+    public function reverseModify(string $filePath, UserModelAnalysis $analysis): UserModelReversion
     {
-        if ($createBackup) {
-            file_put_contents($filePath.'.bak', $modification->originalCode);
+        if (! $analysis->isModifiable()) {
+            throw new RuntimeException(
+                'Cannot reverse-modify User model: '.($analysis->unusualReason ?? 'unknown reason')
+            );
         }
 
-        file_put_contents($filePath, $modification->modifiedCode);
+        $originalCode = (string) file_get_contents($filePath);
+
+        $oldStmts = $this->parser->parse($originalCode);
+        $oldTokens = $this->parser->getTokens();
+
+        $traverser = new NodeTraverser;
+        $traverser->addVisitor(new CloningVisitor);
+        $newStmts = $traverser->traverse($oldStmts);
+
+        [$namespace, $importMap] = $this->resolveContext($newStmts);
+
+        $visitor = new class($namespace, $importMap) extends NodeVisitorAbstract
+        {
+            /** @var list<string> */
+            public array $removedImports = [];
+
+            /** @var list<string> */
+            public array $removedTraits = [];
+
+            public bool $removedMethod = false;
+
+            public ?string $removedReturnValue = null;
+
+            public bool $removedCustomized = false;
+
+            private const PACKAGE_FQCNS = [
+                'JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId',
+                'JamesGifford\\Auth\\Concerns\\HasAccounts',
+            ];
+
+            /**
+             * @param  array<string, string>  $importMap  short name => FQCN
+             */
+            public function __construct(
+                private readonly ?string $namespace,
+                private readonly array $importMap,
+            ) {}
+
+            public function leaveNode(Node $node): int|Node|null
+            {
+                if ($node instanceof Stmt\Use_) {
+                    $kept = [];
+                    foreach ($node->uses as $useItem) {
+                        if (in_array($useItem->name->toString(), self::PACKAGE_FQCNS, true)) {
+                            $this->removedImports[] = $useItem->name->toString();
+                        } else {
+                            $kept[] = $useItem;
+                        }
+                    }
+                    if ($kept === []) {
+                        return NodeTraverser::REMOVE_NODE;
+                    }
+                    $node->uses = $kept;
+
+                    return $node;
+                }
+
+                if ($node instanceof Stmt\TraitUse) {
+                    $kept = [];
+                    foreach ($node->traits as $traitName) {
+                        if ($this->isPackageTrait($traitName)) {
+                            $this->removedTraits[] = $traitName->getLast();
+                        } else {
+                            $kept[] = $traitName;
+                        }
+                    }
+                    if ($kept === []) {
+                        return NodeTraverser::REMOVE_NODE;
+                    }
+                    $node->traits = $kept;
+
+                    return $node;
+                }
+
+                if ($node instanceof Stmt\ClassMethod && $node->name->toString() === 'publicIdPrefix') {
+                    $this->captureRemovedMethod($node);
+                    $this->removedMethod = true;
+
+                    return NodeTraverser::REMOVE_NODE;
+                }
+
+                return null;
+            }
+
+            private function isPackageTrait(Name $name): bool
+            {
+                $short = $name->getLast();
+                $fqcn = $this->importMap[$short] ?? ($this->namespace !== null ? $this->namespace.'\\'.$short : $short);
+                if (count($name->getParts()) > 1) {
+                    $fqcn = $name->toString();
+                }
+
+                return in_array($fqcn, self::PACKAGE_FQCNS, true);
+            }
+
+            private function captureRemovedMethod(Stmt\ClassMethod $method): void
+            {
+                $stmts = $method->stmts ?? [];
+                if (count($stmts) === 1
+                    && $stmts[0] instanceof Stmt\Return_
+                    && $stmts[0]->expr instanceof Node\Scalar\String_
+                ) {
+                    $this->removedReturnValue = $stmts[0]->expr->value;
+                    $this->removedCustomized = false;
+
+                    return;
+                }
+
+                // The body is not the plain install-generated `return '<prefix>';`
+                // — treat it as a consumer customization worth flagging.
+                $this->removedReturnValue = null;
+                $this->removedCustomized = true;
+            }
+        };
+
+        $removalTraverser = new NodeTraverser;
+        $removalTraverser->addVisitor($visitor);
+        $newStmts = $removalTraverser->traverse($newStmts);
+
+        $modifiedCode = $this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens);
+
+        return new UserModelReversion(
+            originalCode: $originalCode,
+            modifiedCode: $modifiedCode,
+            removedImports: $visitor->removedImports,
+            removedTraits: $visitor->removedTraits,
+            removedPublicIdPrefixMethod: $visitor->removedMethod,
+            removedPrefixReturnValue: $visitor->removedReturnValue,
+            removedPrefixWasCustomized: $visitor->removedCustomized,
+        );
     }
 
-    public function restore(string $filePath): void
+    /**
+     * Commit new code to the model with a TRANSIENT backup: copy the file to
+     * .bak first, write, verify the result is valid PHP (plus an optional
+     * caller check), then DELETE the .bak on success. On any failure the file
+     * is restored from the backup and the .bak removed — so the model returns
+     * to its exact pre-edit state and NO .bak is ever left behind.
+     *
+     * @param  ?Closure():void  $verify  Optional semantic check; should throw on failure.
+     */
+    public function applyTransient(string $filePath, string $newCode, ?Closure $verify = null): void
     {
         $backupPath = $filePath.'.bak';
-        if (! file_exists($backupPath)) {
-            throw new RuntimeException("No backup file found at {$backupPath}.");
+        copy($filePath, $backupPath);
+
+        try {
+            file_put_contents($filePath, $newCode);
+
+            // Validity gate: the written file must still parse as PHP.
+            $written = (string) file_get_contents($filePath);
+            if ($this->parser->parse($written) === null) {
+                throw new RuntimeException('the edited User model did not parse as valid PHP');
+            }
+
+            if ($verify !== null) {
+                $verify();
+            }
+        } catch (Throwable $e) {
+            if (is_file($backupPath)) {
+                file_put_contents($filePath, (string) file_get_contents($backupPath));
+            }
+            @unlink($backupPath);
+
+            throw $e;
         }
-        file_put_contents($filePath, (string) file_get_contents($backupPath));
+
+        @unlink($backupPath);
+    }
+
+    /**
+     * Resolve the file's namespace and short-name => FQCN import map from a
+     * parsed statement list (mirrors the first half of {@see analyze()}).
+     *
+     * @param  array<int, Stmt>  $stmts
+     * @return array{0: ?string, 1: array<string, string>}
+     */
+    private function resolveContext(array $stmts): array
+    {
+        $namespace = null;
+        $importMap = [];
+        $scan = $stmts;
+
+        foreach ($stmts as $top) {
+            if ($top instanceof Stmt\Namespace_) {
+                $namespace = $top->name?->toString();
+                $scan = $top->stmts;
+                break;
+            }
+        }
+
+        foreach ($scan as $stmt) {
+            if ($stmt instanceof Stmt\Use_) {
+                foreach ($stmt->uses as $useItem) {
+                    $short = $useItem->alias?->toString() ?? $useItem->name->getLast();
+                    $importMap[$short] = $useItem->name->toString();
+                }
+            }
+        }
+
+        return [$namespace, $importMap];
     }
 
     /**

@@ -253,6 +253,34 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString('skipped via flag', $output);
     }
 
+    public function test_forward_user_model_modification_leaves_no_backup_file(): void
+    {
+        $this->writeLockFile();
+        $this->copyPackageMigrationsToTestbenchPath();
+        $this->loadLaravelMigrations();
+        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
+
+        // A temp User model WITHOUT the package traits, so install modifies it.
+        $class = 'TransientBakUser'.str_replace('.', '', uniqid('', true));
+        $fqcn = 'JamesGifford\\Auth\\Tests\\Support\\Tmp\\'.$class;
+        $this->userModelPath = $this->tmpDir.DIRECTORY_SEPARATOR.$class.'.php';
+        file_put_contents($this->userModelPath, $this->userModelSource($class, withTraits: false));
+        require $this->userModelPath;
+        config(['jamesgifford.auth.models.user' => $fqcn]);
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true]);
+        $output = Artisan::output();
+
+        $code = (string) file_get_contents($this->userModelPath);
+        // The model was modified...
+        $this->assertStringContainsString('HasPublicId', $code);
+        $this->assertStringContainsString('HasAccounts', $code);
+        $this->assertStringContainsString('publicIdPrefix', $code);
+        // ...and the transient backup was removed on success.
+        $this->assertFileDoesNotExist($this->userModelPath.'.bak');
+        $this->assertStringContainsString('No backup file is left behind', $output);
+    }
+
     // ---- Config surfacing + auto-publish ----
 
     public function test_install_publishes_config_when_absent(): void

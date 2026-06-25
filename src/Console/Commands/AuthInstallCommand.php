@@ -23,6 +23,7 @@ use JamesGifford\Auth\PublicId\Generator;
 use JamesGifford\Auth\PublicId\Validator;
 use JamesGifford\Auth\SystemRole;
 use ReflectionClass;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -699,21 +700,26 @@ final class AuthInstallCommand extends Command
         }
 
         try {
-            $this->modifier->write($file, $modification, createBackup: true);
+            // Transient backup: created before the edit, deleted on success;
+            // on failure the model is restored and the .bak removed. No orphan.
+            $this->modifier->applyTransient(
+                $file,
+                $modification->modifiedCode,
+                verify: function () use ($file): void {
+                    $check = $this->modifier->analyze($file);
+                    if (! ($check->hasHasPublicIdTrait && $check->hasHasAccountsTrait && $check->hasPublicIdPrefixMethod)) {
+                        throw new RuntimeException('the expected traits/method were not present after modification');
+                    }
+                },
+            );
         } catch (Throwable $e) {
-            $this->error('Failed to write modified User model: '.$e->getMessage());
-
-            try {
-                $this->modifier->restore($file);
-                $this->line('Restored from backup.');
-            } catch (Throwable) {
-                // best effort
-            }
+            $this->error('Failed to modify User model: '.$e->getMessage());
+            $this->line('Your User model was left unchanged (no backup file remains).');
 
             return false;
         }
 
-        $this->info('✓ User model updated. Backup saved to '.$file.'.bak');
+        $this->info('✓ User model updated. (No backup file is left behind.)');
 
         return true;
     }

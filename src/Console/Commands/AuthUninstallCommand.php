@@ -7,10 +7,13 @@ namespace JamesGifford\Auth\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
+use JamesGifford\Auth\Installer\UserModelAnalysis;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use ReflectionClass;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -32,6 +35,7 @@ final class AuthUninstallCommand extends Command
 {
     protected $signature = 'jamesgifford:auth:uninstall
         {--keep-config : Keep the published config file (config/jamesgifford/auth.php) instead of deleting it}
+        {--remove-published-models : Also delete the published App\Models subclasses (non-interactive opt-in; interactive runs prompt instead)}
         {--force-production : Permit uninstall to run in a production environment}
         {--force : Skip the interactive confirmation prompt (for non-interactive use)}';
 
@@ -43,6 +47,7 @@ final class AuthUninstallCommand extends Command
         private readonly UserModelModifier $modifier,
         private readonly LockFile $lockFile,
         private readonly PackageMigrations $packageMigrations,
+        private readonly ModelPublisher $modelPublisher,
     ) {
         parent::__construct();
     }
@@ -72,40 +77,88 @@ final class AuthUninstallCommand extends Command
             return self::FAILURE;
         }
 
-        $this->displayUserModelInstructions();
-        $this->displayPublishedModelsNotice();
+        $this->revertUserModel();
+        $this->handlePublishedModels();
         $this->displayCompletion();
 
         return self::SUCCESS;
     }
 
     /**
-     * Published model subclasses are consumer-owned code, so uninstall NEVER
-     * deletes them. If any are present, note that they remain for manual
-     * cleanup.
+     * Offer to remove the package's published App\Models subclasses. These
+     * extend the package base models that uninstall just removed, so they will
+     * be broken afterwards. Deleting consumer-app files is gated: interactive
+     * runs PROMPT (default NO); non-interactive runs leave them and advise,
+     * UNLESS --remove-published-models is passed.
      */
-    private function displayPublishedModelsNotice(): void
+    private function handlePublishedModels(): void
     {
-        $modelsDir = $this->laravel->path('Models');
-        $present = [];
-        foreach (['Account', 'AccountUser', 'AccountRole'] as $name) {
-            $path = $modelsDir.DIRECTORY_SEPARATOR.$name.'.php';
-            if (is_file($path)) {
-                $present[] = $this->displayPath($path);
-            }
-        }
-
+        $present = $this->detectPublishedModels();
         if ($present === []) {
             return;
         }
 
         $this->newLine();
-        $this->line('Published model subclasses were left in place (they are your code):');
-        foreach ($present as $path) {
-            $this->line('  • '.$path);
+        $this->line('These published model subclasses extend package base models that have now');
+        $this->line('been removed, so they will be broken after uninstall:');
+        foreach ($present as $model) {
+            $this->line('  • '.$this->displayPath($model['path']));
         }
-        $this->line('Remove them manually if you no longer want them, and undo the');
-        $this->line('models config in config/jamesgifford/auth.php if you wired them.');
+        $this->newLine();
+
+        if (! $this->shouldRemovePublishedModels()) {
+            $this->line('Left in place (they are your code). Delete or rewire them by hand, and undo');
+            $this->line('the models config in config/jamesgifford/auth.php if you pointed it at them.');
+
+            return;
+        }
+
+        foreach ($present as $model) {
+            @unlink($model['path']);
+            $this->line('  - removed '.$this->displayPath($model['path']));
+        }
+        $this->line('Remember to undo the models config in config/jamesgifford/auth.php if you');
+        $this->line('wired it to these classes.');
+    }
+
+    /**
+     * The package's published model files that actually exist AND are genuinely
+     * the package's subclasses (they import the package base model) — so an
+     * unrelated App\Models\Account is never mistaken for ours.
+     *
+     * @return list<array{name: string, path: string, baseClass: string}>
+     */
+    private function detectPublishedModels(): array
+    {
+        $present = [];
+        foreach ($this->modelPublisher->candidatePaths() as $candidate) {
+            if (! is_file($candidate['path'])) {
+                continue;
+            }
+            $contents = (string) file_get_contents($candidate['path']);
+            if (str_contains($contents, $candidate['baseClass'])) {
+                $present[] = $candidate;
+            }
+        }
+
+        return $present;
+    }
+
+    /**
+     * Whether to delete the published models: the explicit flag forces yes; a
+     * non-interactive run without it is a safe no; otherwise prompt (default no).
+     */
+    private function shouldRemovePublishedModels(): bool
+    {
+        if ($this->option('remove-published-models')) {
+            return true;
+        }
+
+        if ($this->option('force') || ! $this->input->isInteractive()) {
+            return false;
+        }
+
+        return $this->confirm('Delete these published model files? (they will be broken after uninstall)', false);
     }
 
     // ---- Step 1: production guard ----
@@ -429,14 +482,20 @@ final class AuthUninstallCommand extends Command
         }
     }
 
-    // ---- Step 5: User model manual instructions ----
+    // ---- Step 5: surgical User-model reversion ----
 
-    private function displayUserModelInstructions(): void
+    /**
+     * Surgically reverse the install modification of the User model: remove ONLY
+     * the package's additions (HasPublicId/HasAccounts imports + trait usage and
+     * the publicIdPrefix() method), preserving everything else. Falls back to
+     * printed manual instructions when the model can't be safely auto-edited.
+     * Also removes any pre-existing orphan `.bak` left by older installs.
+     */
+    private function revertUserModel(): void
     {
-        $file = $this->resolveUserModelFile();
-
         $this->newLine();
 
+        $file = $this->resolveUserModelFile();
         if ($file === null) {
             $this->line('Could not resolve your User model file from');
             $this->line('config(\'jamesgifford.auth.models.user\'). If you added the package\'s');
@@ -446,6 +505,9 @@ final class AuthUninstallCommand extends Command
             return;
         }
 
+        // Clean up any persistent backup left behind by older package versions.
+        $this->removeOrphanBackup($file);
+
         $analysis = $this->modifier->analyze($file);
 
         $hasAnything = $analysis->hasHasPublicIdTrait
@@ -453,46 +515,113 @@ final class AuthUninstallCommand extends Command
             || $analysis->hasPublicIdPrefixMethod;
 
         if (! $hasAnything) {
-            $this->line('Your User model ('.$file.')');
-            $this->line('no longer references the package\'s traits, so no manual changes are');
-            $this->line('needed there.');
+            $this->line('Your User model no longer references the package\'s traits, so no');
+            $this->line('changes are needed there.');
 
             return;
         }
 
-        $this->line('One manual step remains. The package cannot safely edit your User');
-        $this->line('model automatically, so remove these by hand from');
-        $this->line('  '.$file.':');
+        // Unusual structure (custom base, multiple classes, unparseable) — the
+        // surgical editor refuses; fall back to manual instructions.
+        if (! $analysis->isModifiable()) {
+            $this->line('The package can\'t safely auto-edit your User model');
+            $this->line('('.($analysis->unusualReason ?? 'unusual structure').'). Remove these by hand:');
+            $this->printManualUserModelSteps($analysis);
+
+            return;
+        }
+
+        $reversion = $this->modifier->reverseModify($file, $analysis);
+
+        try {
+            // Transient backup: created before the edit, restored on failure,
+            // deleted on success — the model is never left with a stray .bak.
+            $this->modifier->applyTransient(
+                $file,
+                $reversion->modifiedCode,
+                verify: function () use ($file): void {
+                    $check = $this->modifier->analyze($file);
+                    if ($check->hasHasPublicIdTrait || $check->hasHasAccountsTrait || $check->hasPublicIdPrefixMethod) {
+                        throw new RuntimeException('package additions were still present after reversion');
+                    }
+                },
+            );
+        } catch (Throwable $e) {
+            $this->warn('Could not auto-revert your User model: '.$e->getMessage());
+            $this->line('It was left unchanged. Remove the package additions by hand:');
+            $this->printManualUserModelSteps($analysis);
+
+            return;
+        }
+
+        $this->info('✓ Reverted your User model ('.$this->displayPath($file).'):');
+        $removedTraits = [];
+        if ($analysis->hasHasPublicIdTrait) {
+            $removedTraits[] = 'HasPublicId';
+        }
+        if ($analysis->hasHasAccountsTrait) {
+            $removedTraits[] = 'HasAccounts';
+        }
+        if ($removedTraits !== []) {
+            $this->line('  • removed the '.implode(' and ', $removedTraits).' trait'.(count($removedTraits) === 1 ? '' : 's').' and their imports');
+        }
+        if ($reversion->removedPublicIdPrefixMethod) {
+            if ($reversion->removedPrefixWasCustomized) {
+                $this->line('  • removed your publicIdPrefix() method');
+                $this->warn('    Note: that method contained custom logic — it has been removed as');
+                $this->warn('    part of the full uninstall; re-add it elsewhere if you still need it.');
+            } else {
+                $value = $reversion->removedPrefixReturnValue;
+                $this->line('  • removed the publicIdPrefix() method'.($value !== null ? " (it returned '{$value}')" : ''));
+            }
+        }
+        $this->line('  All other code in the model was preserved. No backup file was left behind.');
+    }
+
+    /**
+     * Print the by-hand removal steps for when auto-reversion isn't safe.
+     */
+    private function printManualUserModelSteps(UserModelAnalysis $analysis): void
+    {
         $this->newLine();
 
         $imports = [];
+        $traitNames = [];
         if ($analysis->hasHasPublicIdTrait) {
             $imports[] = 'use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;';
+            $traitNames[] = 'HasPublicId';
         }
         if ($analysis->hasHasAccountsTrait) {
             $imports[] = 'use JamesGifford\\Auth\\Concerns\\HasAccounts;';
+            $traitNames[] = 'HasAccounts';
         }
+
         if ($imports !== []) {
             $this->line('  • Remove the import'.(count($imports) === 1 ? '' : 's').':');
             foreach ($imports as $import) {
                 $this->line('        '.$import);
             }
             $this->newLine();
-
-            $traitNames = [];
-            if ($analysis->hasHasPublicIdTrait) {
-                $traitNames[] = 'HasPublicId';
-            }
-            if ($analysis->hasHasAccountsTrait) {
-                $traitNames[] = 'HasAccounts';
-            }
             $this->line('  • Remove the trait'.(count($traitNames) === 1 ? '' : 's').' from the class:');
             $this->line('        use '.implode(', ', $traitNames).';');
             $this->newLine();
         }
 
         if ($analysis->hasPublicIdPrefixMethod) {
-            $this->line('  • Remove the publicIdPrefix() method, if you are no longer using it.');
+            $this->line('  • Remove the publicIdPrefix() method.');
+        }
+    }
+
+    /**
+     * Remove a persistent `User.php.bak` left behind by an older install (the
+     * backup is no longer created or used — current edits are transient).
+     */
+    private function removeOrphanBackup(string $userModelFile): void
+    {
+        $backup = $userModelFile.'.bak';
+        if (is_file($backup)) {
+            @unlink($backup);
+            $this->line('  - removed a leftover backup file ('.$this->displayPath($backup).')');
         }
     }
 
@@ -503,9 +632,9 @@ final class AuthUninstallCommand extends Command
         $this->newLine();
         $this->info('Uninstall complete.');
         $this->newLine();
-        $this->line('  The package\'s tables, columns, migration files, and public ID lock');
-        $this->line('  have been removed. Any remaining manual step for your User model is');
-        $this->line('  described above.');
+        $this->line('  The package\'s tables, columns, migration files, public ID lock, and');
+        $this->line('  User-model additions have been removed. Anything that needed your');
+        $this->line('  attention (published models, an unusual User model) is noted above.');
 
         if ($this->configDirRemoved) {
             $this->newLine();

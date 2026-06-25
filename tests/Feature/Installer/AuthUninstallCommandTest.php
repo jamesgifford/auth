@@ -14,7 +14,6 @@ use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\TestCase;
-use ReflectionClass;
 
 class AuthUninstallCommandTest extends TestCase
 {
@@ -23,6 +22,8 @@ class AuthUninstallCommandTest extends TestCase
     private string $lockFilePath;
 
     private string $migrationsDir;
+
+    private string $userModelFile;
 
     protected function setUp(): void
     {
@@ -33,6 +34,10 @@ class AuthUninstallCommandTest extends TestCase
         }
         parent::setUp();
         Model::clearBootedModels();
+
+        // Point models.user at a TEMP, editable copy — never the shared fixture,
+        // since uninstall now surgically edits the configured User model on disk.
+        $this->configureEditableUserModel();
     }
 
     protected function tearDown(): void
@@ -54,25 +59,57 @@ class AuthUninstallCommandTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_does_not_delete_published_models_and_prints_manual_notice(): void
+    public function test_published_models_are_left_with_an_advisory_when_not_opted_in(): void
     {
         $this->stageInstall();
+        $file = $this->writePublishedModel('Account');
 
-        $dir = $this->app->path('Models');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $file = $dir.DIRECTORY_SEPARATOR.'Account.php';
-        file_put_contents($file, "<?php\n// published model marker uninst-keep\n");
-
+        // Non-interactive (--force), no flag → safe default: leave + advise.
         Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
-        // Consumer-owned: never auto-deleted, but flagged for manual cleanup.
         $this->assertFileExists($file);
-        $this->assertStringContainsString('uninst-keep', (string) file_get_contents($file));
-        $this->assertStringContainsString('Published model subclasses were left in place', $output);
+        $this->assertStringContainsString('will be broken after uninstall', $output);
         $this->assertStringContainsString('Account.php', $output);
+    }
+
+    public function test_published_models_are_removed_with_the_explicit_flag(): void
+    {
+        $this->stageInstall();
+        $file = $this->writePublishedModel('Account');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true, '--remove-published-models' => true]);
+        $output = Artisan::output();
+
+        $this->assertFileDoesNotExist($file);
+        $this->assertStringContainsString('- removed', $output);
+        $this->assertStringContainsString('Account.php', $output);
+    }
+
+    public function test_published_models_prompt_defaults_to_no_and_keeps_them(): void
+    {
+        $this->stageInstall();
+        $file = $this->writePublishedModel('Account');
+
+        $this->artisan('jamesgifford:auth:uninstall')
+            ->expectsQuestion('Type "uninstall" to confirm, or anything else to cancel', 'uninstall')
+            ->expectsConfirmation('Delete these published model files? (they will be broken after uninstall)', 'no')
+            ->assertExitCode(0);
+
+        $this->assertFileExists($file);
+    }
+
+    public function test_published_models_prompt_deletes_when_accepted(): void
+    {
+        $this->stageInstall();
+        $file = $this->writePublishedModel('Account');
+
+        $this->artisan('jamesgifford:auth:uninstall')
+            ->expectsQuestion('Type "uninstall" to confirm, or anything else to cancel', 'uninstall')
+            ->expectsConfirmation('Delete these published model files? (they will be broken after uninstall)', 'yes')
+            ->assertExitCode(0);
+
+        $this->assertFileDoesNotExist($file);
     }
 
     // ---- Warning + prompt (no flag gate) ----
@@ -471,7 +508,9 @@ class AuthUninstallCommandTest extends TestCase
     public function test_no_error_when_config_directory_absent(): void
     {
         $this->stageInstall();
-        // No config file/dir written at all.
+        // Establish this test's precondition (other test classes may leave an
+        // empty config/jamesgifford dir behind): no config file/dir at all.
+        $this->rmTree(config_path('jamesgifford'));
         $this->assertDirectoryDoesNotExist(config_path('jamesgifford'));
 
         $exit = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
@@ -498,24 +537,73 @@ class AuthUninstallCommandTest extends TestCase
 
     // ---- User model ----
 
-    public function test_does_not_modify_user_model_and_prints_manual_instructions(): void
+    public function test_reverts_user_model_surgically_removing_only_package_additions(): void
     {
         $this->stageInstall();
 
-        $userFile = (new ReflectionClass(User::class))->getFileName();
-        $before = (string) file_get_contents((string) $userFile);
+        $before = (string) file_get_contents($this->userModelFile);
+        $this->assertStringContainsString('HasPublicId', $before);
 
         Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();
 
-        // The User model file is untouched.
-        $this->assertSame($before, (string) file_get_contents((string) $userFile));
+        $after = (string) file_get_contents($this->userModelFile);
 
-        // Instructions name the real file and the traits to remove.
-        $this->assertStringContainsString('One manual step remains', $output);
-        $this->assertStringContainsString((string) $userFile, $output);
+        // Only the package additions are gone.
+        $this->assertStringNotContainsString('HasPublicId', $after);
+        $this->assertStringNotContainsString('HasAccounts', $after);
+        $this->assertStringNotContainsString('publicIdPrefix', $after);
+
+        // The rest of the model is preserved, and it is still valid PHP.
+        $this->assertStringStartsWith('<?php', $after);
+        $this->assertStringContainsString("protected \$table = 'users';", $after);
+        $this->assertStringContainsString('extends Authenticatable', $after);
+
+        // Surgical, transient: no .bak left behind, and the run reports it.
+        $this->assertFileDoesNotExist($this->userModelFile.'.bak');
+        $this->assertStringContainsString('Reverted your User model', $output);
+    }
+
+    public function test_falls_back_to_manual_instructions_for_an_unusual_user_model(): void
+    {
+        $this->stageInstall();
+
+        // A model that carries the package traits but extends a non-Authenticatable
+        // base — the surgical editor refuses, so it must advise instead of editing.
+        $class = 'UnusualUninstallUser'.str_replace('.', '', uniqid('', true));
+        $file = $this->tmpDir.DIRECTORY_SEPARATOR.$class.'.php';
+        $code = "<?php\n\nnamespace JamesGifford\\Auth\\Tests\\Support\\Tmp;\n\n".
+            "use Illuminate\\Database\\Eloquent\\Model;\n".
+            "use JamesGifford\\Auth\\Concerns\\HasAccounts;\n".
+            "use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;\n\n".
+            "class {$class} extends Model\n{\n    use HasPublicId, HasAccounts;\n\n".
+            "    public function publicIdPrefix(): string\n    {\n        return 'usr';\n    }\n}\n";
+        file_put_contents($file, $code);
+        require $file;
+        config(['jamesgifford.auth.models.user' => 'JamesGifford\\Auth\\Tests\\Support\\Tmp\\'.$class]);
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        // Left unchanged; clear manual instructions printed.
+        $this->assertSame($code, (string) file_get_contents($file));
+        $this->assertStringContainsString("can't safely auto-edit", $output);
         $this->assertStringContainsString('use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;', $output);
-        $this->assertStringContainsString('use JamesGifford\\Auth\\Concerns\\HasAccounts;', $output);
+    }
+
+    public function test_removes_a_pre_existing_orphan_user_model_backup(): void
+    {
+        $this->stageInstall();
+
+        // An orphan left by an older install that persisted the backup.
+        file_put_contents($this->userModelFile.'.bak', "<?php\n// stale backup from an older install\n");
+        $this->assertFileExists($this->userModelFile.'.bak');
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertFileDoesNotExist($this->userModelFile.'.bak');
+        $this->assertStringContainsString('removed a leftover backup file', $output);
     }
 
     public function test_user_model_instructions_tailor_to_absent_traits(): void
@@ -545,7 +633,7 @@ class AuthUninstallCommandTest extends TestCase
         $output = Artisan::output();
 
         $this->assertStringContainsString('Uninstall complete.', $output);
-        $this->assertStringContainsString('tables, columns, migration files, and public ID lock', $output);
+        $this->assertStringContainsString('tables, columns, migration files, public ID lock, and', $output);
     }
 
     // ---- Setup helpers ----
@@ -562,6 +650,40 @@ class AuthUninstallCommandTest extends TestCase
 
         $connection = $app['config']->get('database.default');
         $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
+    }
+
+    /**
+     * Write + load a unique, editable User model (with the package traits) in
+     * the temp dir and point config at it, so reverse-modification edits this
+     * throwaway file rather than the shared User fixture.
+     */
+    private function configureEditableUserModel(bool $withTraits = true): string
+    {
+        $class = 'EditableUninstallUser'.str_replace('.', '', uniqid('', true));
+        $namespace = 'JamesGifford\\Auth\\Tests\\Support\\Tmp';
+
+        $imports = $withTraits
+            ? "use JamesGifford\\Auth\\Concerns\\HasAccounts;\nuse JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;\n"
+            : '';
+        $body = $withTraits
+            ? "    use HasPublicId, HasAccounts;\n\n".
+              "    protected \$table = 'users';\n\n".
+              "    public function publicIdPrefix(): string\n    {\n        return 'usr';\n    }\n"
+            : "    protected \$table = 'users';\n";
+
+        $code = "<?php\n\nnamespace {$namespace};\n\n".
+            "use Illuminate\\Foundation\\Auth\\User as Authenticatable;\n".
+            $imports.
+            "\nclass {$class} extends Authenticatable\n{\n".
+            $body.
+            "}\n";
+
+        $this->userModelFile = $this->tmpDir.DIRECTORY_SEPARATOR.$class.'.php';
+        file_put_contents($this->userModelFile, $code);
+        require $this->userModelFile;
+        config(['jamesgifford.auth.models.user' => $namespace.'\\'.$class]);
+
+        return $this->userModelFile;
     }
 
     private function stageInstall(): void
@@ -673,6 +795,26 @@ class AuthUninstallCommandTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * Write a realistic published model subclass (App\Models\{Short}) that
+     * extends the package base model, so uninstall detects it as ours.
+     */
+    private function writePublishedModel(string $short): string
+    {
+        $dir = $this->app->path('Models');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $base = 'JamesGifford\\Auth\\Models\\'.$short;
+        $file = $dir.DIRECTORY_SEPARATOR.$short.'.php';
+        file_put_contents(
+            $file,
+            "<?php\n\nnamespace App\\Models;\n\nuse {$base} as Base{$short};\n\nclass {$short} extends Base{$short}\n{\n}\n"
+        );
+
+        return $file;
     }
 
     private function plainUserSource(string $class): string

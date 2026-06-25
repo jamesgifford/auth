@@ -94,6 +94,31 @@ final class ModelPublisher
     }
 
     /**
+     * The published-model files this package CAN create in the app, with the
+     * base class each extends. Used by uninstall to detect which actually
+     * exist (and are genuinely the package's published subclasses) before
+     * offering to remove them.
+     *
+     * @return list<array{name: string, path: string, baseClass: string}>
+     */
+    public function candidatePaths(): array
+    {
+        $directory = $this->modelDirectory();
+
+        $candidates = [];
+        foreach (self::MODELS as $baseClass => $configKey) {
+            $short = class_basename($baseClass);
+            $candidates[] = [
+                'name' => $short,
+                'path' => $directory.DIRECTORY_SEPARATOR.$short.'.php',
+                'baseClass' => $baseClass,
+            ];
+        }
+
+        return $candidates;
+    }
+
+    /**
      * Model-resolution config map (key => published FQCN) for wiring.
      *
      * @return array<string, string>
