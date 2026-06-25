@@ -13,6 +13,7 @@ use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelBadPrefix;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelEmptyPrefix;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelNoTrait;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
 use JamesGifford\Auth\Tests\Support\PublicIdConfigFactory;
@@ -71,6 +72,17 @@ class PrefixRegistryTest extends TestCase
 
         $this->expectException(InvalidPrefixException::class);
         $registry->prefixFor(FixtureModelBadPrefix::class);
+    }
+
+    public function test_prefix_for_throws_invalid_prefix_when_override_returns_empty_string(): void
+    {
+        // A prefix must be at least one character — an empty publicIdPrefix()
+        // is rejected (the prefix would be indistinguishable from the body).
+        $registry = new PrefixRegistry(PublicIdConfigFactory::default());
+
+        $this->expectException(InvalidPrefixException::class);
+        $this->expectExceptionMessage('must be 1 to');
+        $registry->prefixFor(FixtureModelEmptyPrefix::class);
     }
 
     public function test_prefix_for_caches_results(): void

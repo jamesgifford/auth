@@ -80,6 +80,17 @@ class PublicIdConfigTest extends TestCase
         new PublicIdConfig($base, $this->registry());
     }
 
+    public function test_prefixes_map_empty_value_throws(): void
+    {
+        // A configured prefix must be at least one character.
+        $base = $this->baseConfig();
+        $base['prefixes'] = ['App\\Models\\Thing' => ''];
+
+        $this->expectException(InvalidPublicIdConfigException::class);
+        $this->expectExceptionMessage('must be 1 to 7 lowercase ASCII letters');
+        new PublicIdConfig($base, $this->registry());
+    }
+
     public function test_separator_two_chars_throws(): void
     {
         $base = $this->baseConfig();
