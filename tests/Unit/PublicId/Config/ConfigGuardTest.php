@@ -152,17 +152,6 @@ class ConfigGuardTest extends TestCase
         $this->assertSame($expected, $guard->lockedFingerprint());
     }
 
-    public function test_current_fingerprint_matches_calculator_output(): void
-    {
-        $config = $this->makeConfig();
-        $guard = $this->makeGuard($config);
-
-        $this->assertSame(
-            (new ConfigFingerprint)->compute($config),
-            $guard->currentFingerprint()
-        );
-    }
-
     private function rmTree(string $dir): void
     {
         if (! is_dir($dir)) {

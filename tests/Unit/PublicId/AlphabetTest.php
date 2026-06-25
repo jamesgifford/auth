@@ -9,6 +9,7 @@ use JamesGifford\Auth\PublicId\Alphabet;
 use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use JamesGifford\Auth\Tests\TestCase;
 use OutOfBoundsException;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class AlphabetTest extends TestCase
 {
@@ -19,48 +20,25 @@ class AlphabetTest extends TestCase
         $this->assertSame(2, $alphabet->size());
     }
 
-    public function test_constructs_with_lowercase_alpha_size_26(): void
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function provideInvalidConstructorInputs(): array
     {
-        $alphabet = new Alphabet('abcdefghijklmnopqrstuvwxyz');
-
-        $this->assertSame(26, $alphabet->size());
+        return [
+            'empty string' => ['', 'too short'],
+            'single character' => ['a', 'too short'],
+            'duplicate characters' => ['aab', 'duplicate'],
+        ];
     }
 
-    public function test_constructs_with_lowercase_alphanumeric_size_36(): void
-    {
-        $alphabet = new Alphabet('abcdefghijklmnopqrstuvwxyz0123456789');
-
-        $this->assertSame(36, $alphabet->size());
-    }
-
-    public function test_constructs_with_mixed_alphanumeric_size_62(): void
-    {
-        $alphabet = new Alphabet(
-            'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        );
-
-        $this->assertSame(62, $alphabet->size());
-    }
-
-    public function test_construct_rejects_empty_string(): void
+    #[DataProvider('provideInvalidConstructorInputs')]
+    public function test_construct_rejects_invalid_input(string $characters, string $expectedMessage): void
     {
         $this->expectException(InvalidAlphabetException::class);
+        $this->expectExceptionMessage($expectedMessage);
 
-        new Alphabet('');
-    }
-
-    public function test_construct_rejects_single_character(): void
-    {
-        $this->expectException(InvalidAlphabetException::class);
-
-        new Alphabet('a');
-    }
-
-    public function test_construct_rejects_duplicate_characters(): void
-    {
-        $this->expectException(InvalidAlphabetException::class);
-
-        new Alphabet('aab');
+        new Alphabet($characters);
     }
 
     public function test_contains_returns_true_for_present_chars(): void

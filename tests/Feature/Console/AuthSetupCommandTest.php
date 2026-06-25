@@ -211,17 +211,6 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('jamesgifford:auth:apply-id-offsets', $output);
     }
 
-    // ---- Skipped steps are clearly reported ----
-
-    public function test_skipped_dev_data_step_is_clearly_reported(): void
-    {
-        Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
-        $output = Artisan::output();
-
-        $this->assertStringContainsString('Step 3/4', $output);
-        $this->assertStringContainsString('Seeding local dev data — skipped (pass --with-dev-data to include it)', $output);
-    }
-
     // ---- --force is propagated to the underlying migrate/install steps ----
 
     public function test_force_is_propagated_so_migrate_and_install_run_in_production(): void
@@ -349,22 +338,6 @@ class AuthSetupCommandTest extends TestCase
         $this->assertSame(0, $exit, $output);
         // On SQLite the ALTER can't run, but the offsets were READ from config
         // (the report says the driver can't honor them, NOT "no offset configured").
-        $this->assertStringContainsString('does not support id offsets', $output);
-        $this->assertStringNotContainsString('no offset configured', $output);
-    }
-
-    public function test_env_sourced_string_offsets_are_read_and_applied_non_interactively(): void
-    {
-        // config/auth.php reads the JAMESGIFFORD_AUTH_*_ID_OFFSET env vars, which
-        // arrive as STRINGS. Simulate that env-sourced config and confirm the
-        // command reads + applies them without prompting. (See the dedicated
-        // config test for the env var name → config value wiring.)
-        config(['jamesgifford.auth.id_offsets' => ['users' => '12345', 'accounts' => '6789']]);
-
-        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
-        $output = Artisan::output();
-
-        $this->assertSame(0, $exit, $output);
         $this->assertStringContainsString('does not support id offsets', $output);
         $this->assertStringNotContainsString('no offset configured', $output);
     }

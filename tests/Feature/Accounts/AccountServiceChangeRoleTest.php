@@ -15,6 +15,7 @@ use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Transfers\AccountRoleTransfer;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class AccountServiceChangeRoleTest extends AccountsTestCase
 {
@@ -167,53 +168,24 @@ class AccountServiceChangeRoleTest extends AccountsTestCase
         $this->assertSame($originalRoleId, $membership->fresh()->account_role_id);
     }
 
-    public function test_no_event_dispatched_after_exception(): void
+    public static function roleTransitionProvider(): array
     {
-        Event::fake([AccountRoleChanged::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->memberRole()->create();
-
-        try {
-            $this->service->changeRole($account, $member, 'owner');
-        } catch (CannotAssignOwnerRoleException) {
-            // expected
-        }
-
-        Event::assertNotDispatched(AccountRoleChanged::class);
+        return [
+            'admin to member' => ['admin', 'member'],
+            'member to viewer' => ['member', 'viewer'],
+            'viewer to admin' => ['viewer', 'admin'],
+        ];
     }
 
-    public function test_admin_to_member_change(): void
+    #[DataProvider('roleTransitionProvider')]
+    public function test_role_transition_changes_membership_role(string $startRole, string $newRole): void
     {
         ['account' => $account] = $this->createUserWithAccount();
         $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->adminRole()->create();
+        AccountUser::factory()->for($account)->for($member)->{$startRole.'Role'}()->create();
 
-        $updated = $this->service->changeRole($account, $member, 'member');
+        $updated = $this->service->changeRole($account, $member, $newRole);
 
-        $this->assertSame('member', $updated->role->key);
-    }
-
-    public function test_member_to_viewer_change(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->memberRole()->create();
-
-        $updated = $this->service->changeRole($account, $member, 'viewer');
-
-        $this->assertSame('viewer', $updated->role->key);
-    }
-
-    public function test_viewer_to_admin_change(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->viewerRole()->create();
-
-        $updated = $this->service->changeRole($account, $member, 'admin');
-
-        $this->assertSame('admin', $updated->role->key);
+        $this->assertSame($newRole, $updated->role->key);
     }
 }

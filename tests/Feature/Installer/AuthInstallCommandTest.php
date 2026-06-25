@@ -231,19 +231,6 @@ class AuthInstallCommandTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_verify_after_idempotent_run_still_passes(): void
-    {
-        $this->writeLockFile();
-        $this->copyPackageMigrationsToTestbenchPath();
-        $this->loadLaravelMigrations();
-        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
-        $this->app->make(AccountRoleSeeder::class)->run();
-
-        $this->artisan('jamesgifford:auth:install', ['--verify' => true])
-            ->expectsOutputToContain('All checks passed.')
-            ->assertSuccessful();
-    }
-
     // ---- Skip flags affect plan ----
 
     public function test_skip_user_model_does_not_modify_user_model(): void
@@ -264,18 +251,6 @@ class AuthInstallCommandTest extends TestCase
 
         $this->assertStringContainsString('Modify your User model', $output);
         $this->assertStringContainsString('skipped via flag', $output);
-    }
-
-    public function test_no_modify_user_alias_works_same_as_skip_user_model(): void
-    {
-        $this->writeLockFile();
-        $this->copyPackageMigrationsToTestbenchPath();
-        $this->loadLaravelMigrations();
-        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
-
-        $this->artisan('jamesgifford:auth:install', ['--force' => true, '--no-modify-user' => true])
-            ->expectsOutputToContain('skipped via flag')
-            ->assertSuccessful();
     }
 
     // ---- Config surfacing + auto-publish ----

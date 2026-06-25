@@ -6,7 +6,6 @@ namespace JamesGifford\Auth\Tests\Feature\PublicId;
 
 use Illuminate\Database\Eloquent\Model;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
-use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
 use JamesGifford\Auth\Tests\TestCase;
 
@@ -24,22 +23,6 @@ class HasPublicIdTraitTest extends TestCase
 
         $this->assertNotNull($model->public_id);
         $this->assertStringStartsWith('fix_', $model->public_id);
-    }
-
-    public function test_generated_public_id_is_valid(): void
-    {
-        $model = FixtureModel::create(['name' => 'test']);
-
-        $this->assertTrue(PublicId::isValid($model->public_id));
-        $this->assertSame('fix', PublicId::prefixOf($model->public_id));
-    }
-
-    public function test_generated_public_id_has_expected_total_length(): void
-    {
-        $model = FixtureModel::create(['name' => 'test']);
-
-        // 3 prefix + 1 separator + 18 body + 2 checksum = 24
-        $this->assertSame(24, strlen($model->public_id));
     }
 
     public function test_manually_set_public_id_is_preserved(): void

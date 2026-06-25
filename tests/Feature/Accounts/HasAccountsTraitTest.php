@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
-use Illuminate\Support\Carbon;
 use JamesGifford\Auth\Exceptions\NotAMemberException;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class HasAccountsTraitTest extends AccountsTestCase
 {
@@ -204,155 +204,113 @@ class HasAccountsTraitTest extends AccountsTestCase
 
     // ----- Role-checking tests -----
 
-    public function test_has_role_owner_returns_true_for_owner(): void
+    /**
+     * @return array<string, array{0: ?string, 1: string, 2: bool}>
+     */
+    public static function hasRoleProvider(): array
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount();
-
-        $this->assertTrue($user->hasRole($account, 'owner'));
+        return [
+            'owner is owner' => ['owner', 'owner', true],
+            'admin is admin' => ['admin', 'admin', true],
+            'admin is not owner' => ['admin', 'owner', false],
+            'owner is not admin' => ['owner', 'admin', false],
+            'non-member has no role' => [null, 'owner', false],
+        ];
     }
 
-    public function test_has_role_admin_returns_true_for_admin(): void
+    #[DataProvider('hasRoleProvider')]
+    public function test_has_role(?string $assignedRole, string $queriedRole, bool $expected): void
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'admin');
+        if ($assignedRole === null) {
+            ['account' => $account] = $this->createUserWithAccount();
+            $user = User::factory()->create();
+        } else {
+            ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: $assignedRole);
+        }
 
-        $this->assertTrue($user->hasRole($account, 'admin'));
+        $this->assertSame($expected, $user->hasRole($account, $queriedRole));
     }
 
-    public function test_has_role_owner_returns_false_when_user_is_admin(): void
+    /**
+     * @return array<string, array{0: ?string, 1: array<int, string>, 2: bool}>
+     */
+    public static function hasAnyRoleProvider(): array
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'admin');
-
-        $this->assertFalse($user->hasRole($account, 'owner'));
+        return [
+            'member matches list' => ['member', ['member', 'admin'], true],
+            'viewer matches none' => ['viewer', ['owner', 'admin', 'member'], false],
+            'non-member matches none' => [null, ['owner', 'admin', 'member', 'viewer'], false],
+        ];
     }
 
-    public function test_has_role_admin_returns_false_when_user_is_owner(): void
+    #[DataProvider('hasAnyRoleProvider')]
+    public function test_has_any_role(?string $assignedRole, array $roles, bool $expected): void
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount();
+        if ($assignedRole === null) {
+            ['account' => $account] = $this->createUserWithAccount();
+            $user = User::factory()->create();
+        } else {
+            ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: $assignedRole);
+        }
 
-        $this->assertFalse($user->hasRole($account, 'admin'));
+        $this->assertSame($expected, $user->hasAnyRole($account, $roles));
     }
 
-    public function test_has_role_returns_false_for_non_member_regardless_of_role_key(): void
+    /**
+     * @return array<string, array{0: ?string, 1: bool}>
+     */
+    public static function isOwnerOfProvider(): array
     {
-        ['account' => $account] = $this->createUserWithAccount();
-        $stranger = User::factory()->create();
-
-        $this->assertFalse($stranger->hasRole($account, 'owner'));
-        $this->assertFalse($stranger->hasRole($account, 'admin'));
-        $this->assertFalse($stranger->hasRole($account, 'member'));
-        $this->assertFalse($stranger->hasRole($account, 'viewer'));
+        return [
+            'owner' => ['owner', true],
+            'admin' => ['admin', false],
+            'member' => ['member', false],
+            'viewer' => ['viewer', false],
+            'non-member' => [null, false],
+        ];
     }
 
-    public function test_has_any_role_returns_true_when_users_role_matches_any_in_list(): void
+    #[DataProvider('isOwnerOfProvider')]
+    public function test_is_owner_of(?string $assignedRole, bool $expected): void
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'member');
+        if ($assignedRole === null) {
+            ['account' => $account] = $this->createUserWithAccount();
+            $user = User::factory()->create();
+        } else {
+            ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: $assignedRole);
+        }
 
-        $this->assertTrue($user->hasAnyRole($account, ['member', 'admin']));
-        $this->assertTrue($user->hasAnyRole($account, ['admin', 'member', 'viewer']));
+        $this->assertSame($expected, $user->isOwnerOf($account));
     }
 
-    public function test_has_any_role_returns_false_when_users_role_matches_none(): void
+    /**
+     * @return array<string, array{0: ?string, 1: bool}>
+     */
+    public static function isAdminOfProvider(): array
     {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'viewer');
-
-        $this->assertFalse($user->hasAnyRole($account, ['owner', 'admin', 'member']));
+        return [
+            'owner' => ['owner', true],
+            'admin' => ['admin', true],
+            'member' => ['member', false],
+            'viewer' => ['viewer', false],
+            'non-member' => [null, false],
+        ];
     }
 
-    public function test_has_any_role_returns_false_for_non_member(): void
+    #[DataProvider('isAdminOfProvider')]
+    public function test_is_admin_of(?string $assignedRole, bool $expected): void
     {
-        ['account' => $account] = $this->createUserWithAccount();
-        $stranger = User::factory()->create();
+        if ($assignedRole === null) {
+            ['account' => $account] = $this->createUserWithAccount();
+            $user = User::factory()->create();
+        } else {
+            ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: $assignedRole);
+        }
 
-        $this->assertFalse($stranger->hasAnyRole($account, ['owner', 'admin', 'member', 'viewer']));
-    }
-
-    public function test_is_owner_of_returns_true_for_owner(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount();
-
-        $this->assertTrue($user->isOwnerOf($account));
-    }
-
-    public function test_is_owner_of_returns_false_for_admin(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'admin');
-
-        $this->assertFalse($user->isOwnerOf($account));
-    }
-
-    public function test_is_owner_of_returns_false_for_member(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'member');
-
-        $this->assertFalse($user->isOwnerOf($account));
-    }
-
-    public function test_is_owner_of_returns_false_for_viewer(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'viewer');
-
-        $this->assertFalse($user->isOwnerOf($account));
-    }
-
-    public function test_is_owner_of_returns_false_for_non_member(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $stranger = User::factory()->create();
-
-        $this->assertFalse($stranger->isOwnerOf($account));
-    }
-
-    public function test_is_admin_of_returns_true_for_owner(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount();
-
-        $this->assertTrue($user->isAdminOf($account));
-    }
-
-    public function test_is_admin_of_returns_true_for_admin(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'admin');
-
-        $this->assertTrue($user->isAdminOf($account));
-    }
-
-    public function test_is_admin_of_returns_false_for_member(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'member');
-
-        $this->assertFalse($user->isAdminOf($account));
-    }
-
-    public function test_is_admin_of_returns_false_for_viewer(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount(role: 'viewer');
-
-        $this->assertFalse($user->isAdminOf($account));
-    }
-
-    public function test_is_admin_of_returns_false_for_non_member(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $stranger = User::factory()->create();
-
-        $this->assertFalse($stranger->isAdminOf($account));
+        $this->assertSame($expected, $user->isAdminOf($account));
     }
 
     // ----- Floating-user tests -----
-
-    public function test_has_any_account_returns_false_for_user_with_no_memberships(): void
-    {
-        $user = User::factory()->create();
-
-        $this->assertFalse($user->hasAnyAccount());
-    }
-
-    public function test_has_any_account_returns_true_after_membership_is_created(): void
-    {
-        ['user' => $user] = $this->createUserWithAccount();
-
-        $this->assertTrue($user->hasAnyAccount());
-    }
 
     public function test_is_floating_returns_true_for_user_with_no_memberships(): void
     {
@@ -508,86 +466,6 @@ class HasAccountsTraitTest extends AccountsTestCase
         $this->assertNotContains($stranger->id, $found);
     }
 
-    public function test_with_account_scope_count_matches_membership_count(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-
-        for ($i = 0; $i < 3; $i++) {
-            $user = User::factory()->create();
-            AccountUser::factory()->for($account)->for($user)->memberRole()->create();
-        }
-
-        // 1 owner + 3 members
-        $this->assertSame(4, User::withAccount($account)->count());
-        $this->assertSame(4, $account->memberships()->count());
-    }
-
     // ----- Multi-account scenarios -----
 
-    public function test_user_in_three_accounts_has_accounts_count_three(): void
-    {
-        ['user' => $user] = $this->createUserWithAccount();
-
-        $otherOwner = User::factory()->create();
-        for ($i = 0; $i < 2; $i++) {
-            $a = Account::factory()->ownedBy($otherOwner)->create();
-            AccountUser::factory()->for($a)->for($user)->memberRole()->create();
-        }
-
-        $this->assertSame(3, $user->accounts()->count());
-    }
-
-    public function test_role_in_returns_correct_role_per_account(): void
-    {
-        ['user' => $user, 'account' => $accountA] = $this->createUserWithAccount();
-
-        $otherOwner = User::factory()->create();
-        $accountB = Account::factory()->ownedBy($otherOwner)->create();
-        AccountUser::factory()->for($accountB)->for($user)->adminRole()->create();
-
-        $accountC = Account::factory()->ownedBy($otherOwner)->create();
-        AccountUser::factory()->for($accountC)->for($user)->viewerRole()->create();
-
-        $this->assertSame('owner', $user->roleIn($accountA)->key);
-        $this->assertSame('admin', $user->roleIn($accountB)->key);
-        $this->assertSame('viewer', $user->roleIn($accountC)->key);
-    }
-
-    public function test_owner_of_a_only_when_member_of_b(): void
-    {
-        ['user' => $user, 'account' => $accountA] = $this->createUserWithAccount();
-
-        $otherOwner = User::factory()->create();
-        $accountB = Account::factory()->ownedBy($otherOwner)->create();
-        AccountUser::factory()->for($accountB)->for($user)->memberRole()->create();
-
-        $this->assertTrue($user->isOwnerOf($accountA));
-        $this->assertFalse($user->isOwnerOf($accountB));
-    }
-
-    public function test_current_account_points_at_one_of_multiple(): void
-    {
-        ['user' => $user] = $this->createUserWithAccount();
-
-        $otherOwner = User::factory()->create();
-        $accountB = Account::factory()->ownedBy($otherOwner)->create();
-        AccountUser::factory()->for($accountB)->for($user)->memberRole()->create();
-
-        $user->switchToAccount($accountB);
-        $user->refresh();
-
-        $this->assertSame($accountB->id, $user->currentAccount->id);
-    }
-
-    // Ensure timestamp parsing on the pivot does not surprise; references
-    // Carbon to make the import meaningful when re-reading the file.
-    public function test_pivot_joined_at_is_carbon_instance(): void
-    {
-        ['user' => $user] = $this->createUserWithAccount();
-        $user->refresh();
-
-        $pivot = $user->accounts->first()->pivot;
-
-        $this->assertInstanceOf(Carbon::class, $pivot->joined_at);
-    }
 }

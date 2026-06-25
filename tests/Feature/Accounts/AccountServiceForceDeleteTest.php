@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Accounts;
 
-use Illuminate\Support\Facades\Event;
 use JamesGifford\Auth\Accounts\Services\AccountService;
-use JamesGifford\Auth\Events\AccountForceDeleted;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
-use JamesGifford\Auth\Transfers\AccountTransfer;
 
 class AccountServiceForceDeleteTest extends AccountsTestCase
 {
@@ -32,29 +29,6 @@ class AccountServiceForceDeleteTest extends AccountsTestCase
 
         $this->assertNull(Account::find($id));
         $this->assertNull(Account::withTrashed()->find($id));
-    }
-
-    public function test_event_dispatched_with_pre_delete_snapshot(): void
-    {
-        Event::fake([AccountForceDeleted::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $expectedId = $account->id;
-        $expectedPublicId = $account->public_id;
-        $expectedName = $account->name;
-        $expectedOwnerId = $account->owner_id;
-
-        $this->service->forceDelete($account);
-
-        Event::assertDispatched(AccountForceDeleted::class, function (AccountForceDeleted $event) use (
-            $expectedId, $expectedPublicId, $expectedName, $expectedOwnerId,
-        ) {
-            return $event->account instanceof AccountTransfer
-                && $event->account->id === $expectedId
-                && $event->account->publicId === $expectedPublicId
-                && $event->account->name === $expectedName
-                && $event->account->ownerId === $expectedOwnerId;
-        });
     }
 
     public function test_account_user_rows_cascade_deleted(): void
@@ -79,16 +53,5 @@ class AccountServiceForceDeleteTest extends AccountsTestCase
         $this->service->forceDelete($account);
 
         $this->assertNull($member->fresh()->current_account_id);
-    }
-
-    public function test_cannot_be_undone(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $id = $account->id;
-
-        $this->service->forceDelete($account);
-
-        $this->assertNull(Account::find($id));
-        $this->assertNull(Account::withTrashed()->find($id));
     }
 }

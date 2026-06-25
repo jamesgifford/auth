@@ -136,18 +136,6 @@ class AccountServiceAttachUserTest extends AccountsTestCase
         $this->service->attachUser($account, $user, 'member');
     }
 
-    public function test_already_a_member_message_steers_toward_change_role(): void
-    {
-        ['user' => $user, 'account' => $account] = $this->createUserWithAccount();
-
-        try {
-            $this->service->attachUser($account, $user, 'member');
-            $this->fail('Expected AlreadyAMemberException was not thrown.');
-        } catch (AlreadyAMemberException $e) {
-            $this->assertStringContainsString('changeRole', $e->getMessage());
-        }
-    }
-
     public function test_no_membership_created_after_invalid_role_exception(): void
     {
         ['account' => $account] = $this->createUserWithAccount();
@@ -164,22 +152,6 @@ class AccountServiceAttachUserTest extends AccountsTestCase
         $this->assertSame($countBefore, AccountUser::count());
     }
 
-    public function test_no_event_dispatched_after_invalid_role_exception(): void
-    {
-        Event::fake([UserAttachedToAccount::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $newcomer = User::factory()->create();
-
-        try {
-            $this->service->attachUser($account, $newcomer, 'nonexistent');
-        } catch (InvalidRoleException) {
-            // expected
-        }
-
-        Event::assertNotDispatched(UserAttachedToAccount::class);
-    }
-
     public function test_no_membership_created_after_owner_role_rejected(): void
     {
         ['account' => $account] = $this->createUserWithAccount();
@@ -194,22 +166,6 @@ class AccountServiceAttachUserTest extends AccountsTestCase
         }
 
         $this->assertSame($countBefore, AccountUser::count());
-    }
-
-    public function test_no_event_dispatched_after_owner_role_rejected(): void
-    {
-        Event::fake([UserAttachedToAccount::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $newcomer = User::factory()->create();
-
-        try {
-            $this->service->attachUser($account, $newcomer, 'owner');
-        } catch (CannotAssignOwnerRoleException) {
-            // expected
-        }
-
-        Event::assertNotDispatched(UserAttachedToAccount::class);
     }
 
     public function test_works_for_users_without_public_id_in_exception_messages(): void

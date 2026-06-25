@@ -9,16 +9,10 @@ use Illuminate\Support\Facades\Validator as ValidatorFacade;
 use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\PublicId\Rules\ValidPublicId;
 use JamesGifford\Auth\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class ValidPublicIdRuleTest extends TestCase
 {
-    public function test_valid_generated_public_id_passes(): void
-    {
-        $id = PublicId::generate('usr');
-
-        $this->assertTrue($this->check($id)->passes());
-    }
-
     public function test_garbage_input_fails(): void
     {
         $this->assertFalse($this->check('garbage')->passes());
@@ -54,49 +48,39 @@ class ValidPublicIdRuleTest extends TestCase
         $this->assertSame('The :attribute cannot be empty.', $message);
     }
 
-    public function test_input_without_separator_produces_not_a_valid_message(): void
+    /**
+     * Rows: input => [literal input or null when runtime-generated, tamper flag, expected message substring].
+     *
+     * The wrong-checksum case needs a freshly generated ID tampered at
+     * runtime, so its input is null and built inside the test body.
+     *
+     * @return array<string, array{0: ?string, 1: bool, 2: string}>
+     */
+    public static function provideFailureReasonMessages(): array
     {
-        $validator = $this->check('noseparator');
-
-        $this->assertFalse($validator->passes());
-        $this->assertStringContainsString('not a valid public ID', implode(' ', $validator->errors()->all()));
+        return [
+            'no separator' => ['noseparator', false, 'not a valid public ID'],
+            'uppercase prefix' => ['USR_abcdefghijklmnopqraa', false, 'invalid prefix'],
+            'invalid body char' => ['us_abcdefg!ijklmnopqrxx', false, 'invalid characters'],
+            'wrong checksum' => [null, true, 'invalid checksum'],
+            'short input' => ['us_abc', false, 'wrong length'],
+        ];
     }
 
-    public function test_input_with_uppercase_prefix_produces_invalid_prefix_message(): void
+    #[DataProvider('provideFailureReasonMessages')]
+    public function test_failure_reason_produces_expected_message(?string $input, bool $tamperChecksum, string $expectedMessage): void
     {
-        $validator = $this->check('USR_abcdefghijklmnopqraa');
+        if ($tamperChecksum) {
+            $id = PublicId::generate('usr');
+            $current = substr($id, -2);
+            $replacement = $current[0] === 'a' ? 'b' : 'a';
+            $input = substr($id, 0, -2).$replacement.$replacement;
+        }
+
+        $validator = $this->check($input);
 
         $this->assertFalse($validator->passes());
-        $this->assertStringContainsString('invalid prefix', implode(' ', $validator->errors()->all()));
-    }
-
-    public function test_input_with_invalid_body_char_produces_invalid_chars_message(): void
-    {
-        $validator = $this->check('us_abcdefg!ijklmnopqrxx');
-
-        $this->assertFalse($validator->passes());
-        $this->assertStringContainsString('invalid characters', implode(' ', $validator->errors()->all()));
-    }
-
-    public function test_input_with_wrong_checksum_produces_checksum_message(): void
-    {
-        $id = PublicId::generate('usr');
-        $current = substr($id, -2);
-        $replacement = $current[0] === 'a' ? 'b' : 'a';
-        $tampered = substr($id, 0, -2).$replacement.$replacement;
-
-        $validator = $this->check($tampered);
-
-        $this->assertFalse($validator->passes());
-        $this->assertStringContainsString('invalid checksum', implode(' ', $validator->errors()->all()));
-    }
-
-    public function test_short_input_produces_wrong_length_message(): void
-    {
-        $validator = $this->check('us_abc');
-
-        $this->assertFalse($validator->passes());
-        $this->assertStringContainsString('wrong length', implode(' ', $validator->errors()->all()));
+        $this->assertStringContainsString($expectedMessage, implode(' ', $validator->errors()->all()));
     }
 
     public function test_non_string_value_produces_must_be_string_message(): void

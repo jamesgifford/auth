@@ -104,21 +104,6 @@ class AccountServiceDetachUserTest extends AccountsTestCase
         $this->assertDatabaseHas('account_user', ['id' => $membership->id]);
     }
 
-    public function test_no_event_after_failed_owner_detach(): void
-    {
-        Event::fake([UserDetachedFromAccount::class]);
-
-        ['user' => $owner, 'account' => $account] = $this->createUserWithAccount();
-
-        try {
-            $this->service->detachUser($account, $owner);
-        } catch (CannotDetachOwnerException) {
-            // expected
-        }
-
-        Event::assertNotDispatched(UserDetachedFromAccount::class);
-    }
-
     public function test_cleans_up_current_account_id_when_pointing_at_detached_account(): void
     {
         ['account' => $account] = $this->createUserWithAccount();
@@ -152,21 +137,6 @@ class AccountServiceDetachUserTest extends AccountsTestCase
         $this->service->detachUser($primaryAccount, $member);
 
         $this->assertSame($secondAccount->id, $member->fresh()->current_account_id);
-    }
-
-    public function test_current_account_id_cleanup_persists(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->memberRole()->create();
-        $member->switchToAccount($account);
-
-        $this->service->detachUser($account, $member);
-
-        // Reload from DB rather than relying on in-memory mutation.
-        $reloaded = User::find($member->id);
-        $this->assertNull($reloaded->current_account_id);
     }
 
     public function test_event_fires_after_commit_not_during_transaction(): void

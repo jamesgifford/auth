@@ -9,43 +9,31 @@ use JamesGifford\Auth\PublicId\AlphabetRegistry;
 use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use JamesGifford\Auth\Tests\TestCase;
 use OutOfBoundsException;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class AlphabetRegistryTest extends TestCase
 {
-    public function test_resolve_returns_alphabet_for_lowercase_alpha_preset(): void
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function provideBuiltInPresets(): array
     {
-        $registry = new AlphabetRegistry;
-
-        $alphabet = $registry->resolve('lowercase_alpha');
-
-        $this->assertSame('abcdefghijklmnopqrstuvwxyz', $alphabet->toString());
+        return [
+            'lowercase_alpha' => ['lowercase_alpha', 'abcdefghijklmnopqrstuvwxyz'],
+            'lowercase_alphanumeric' => ['lowercase_alphanumeric', 'abcdefghijklmnopqrstuvwxyz0123456789'],
+            'uppercase_alpha' => ['uppercase_alpha', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
+            'uppercase_alphanumeric' => ['uppercase_alphanumeric', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'],
+        ];
     }
 
-    public function test_resolve_returns_alphabet_for_lowercase_alphanumeric_preset(): void
+    #[DataProvider('provideBuiltInPresets')]
+    public function test_resolve_returns_alphabet_for_built_in_preset(string $preset, string $expected): void
     {
         $registry = new AlphabetRegistry;
 
-        $alphabet = $registry->resolve('lowercase_alphanumeric');
+        $alphabet = $registry->resolve($preset);
 
-        $this->assertSame('abcdefghijklmnopqrstuvwxyz0123456789', $alphabet->toString());
-    }
-
-    public function test_resolve_returns_alphabet_for_uppercase_alpha_preset(): void
-    {
-        $registry = new AlphabetRegistry;
-
-        $alphabet = $registry->resolve('uppercase_alpha');
-
-        $this->assertSame('ABCDEFGHIJKLMNOPQRSTUVWXYZ', $alphabet->toString());
-    }
-
-    public function test_resolve_returns_alphabet_for_uppercase_alphanumeric_preset(): void
-    {
-        $registry = new AlphabetRegistry;
-
-        $alphabet = $registry->resolve('uppercase_alphanumeric');
-
-        $this->assertSame('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', $alphabet->toString());
+        $this->assertSame($expected, $alphabet->toString());
     }
 
     public function test_resolve_returns_alphabet_for_mixed_alphanumeric_preset(): void

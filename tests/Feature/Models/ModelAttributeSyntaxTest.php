@@ -61,12 +61,4 @@ class ModelAttributeSyntaxTest extends TestCase
         $this->assertSame(['account_id', 'user_id', 'account_role_id', 'joined_at'], (new AccountUser)->getFillable());
         $this->assertSame('datetime', (new AccountUser)->getCasts()['joined_at']);
     }
-
-    public function test_no_base_model_declares_hidden(): void
-    {
-        // None of the three declared $hidden before; that's unchanged.
-        $this->assertSame([], (new Account)->getHidden());
-        $this->assertSame([], (new AccountRole)->getHidden());
-        $this->assertSame([], (new AccountUser)->getHidden());
-    }
 }

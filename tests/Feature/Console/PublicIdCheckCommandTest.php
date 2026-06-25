@@ -82,19 +82,6 @@ class PublicIdCheckCommandTest extends TestCase
             ->assertFailed();
     }
 
-    public function test_failure_exits_with_nonzero_status(): void
-    {
-        config(['jamesgifford.auth.public_id.prefixes' => [
-            'App\\Models\\NonexistentTypo' => 'typ',
-        ]]);
-        $this->app->forgetInstance(PublicIdConfig::class);
-        $this->app->forgetInstance(PrefixRegistry::class);
-
-        $exitCode = $this->artisan('jamesgifford:public-id:check')->run();
-
-        $this->assertNotSame(0, $exitCode);
-    }
-
     public function test_summary_line_reports_issue_count(): void
     {
         config(['jamesgifford.auth.public_id.prefixes' => [

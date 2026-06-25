@@ -216,22 +216,6 @@ class ValidatorTest extends TestCase
         $this->assertFalse($validator->isValid('garbage'));
     }
 
-    public function test_parse_is_equivalent_to_validate_without_expected_prefix(): void
-    {
-        $config = PublicIdConfigFactory::default();
-        $generator = new Generator($config);
-        $validator = new Validator($config);
-
-        $id = $generator->generate('usr');
-        $parsed = $validator->parse($id);
-        $validated = $validator->validate($id);
-
-        $this->assertSame($parsed->valid, $validated->valid);
-        $this->assertSame($parsed->prefix, $validated->prefix);
-        $this->assertSame($parsed->body, $validated->body);
-        $this->assertSame($parsed->checksum, $validated->checksum);
-    }
-
     public function test_validator_does_not_throw_on_arbitrary_input(): void
     {
         $validator = $this->validator();

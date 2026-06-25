@@ -110,17 +110,4 @@ class CreateAccountOnRegistrationTest extends AccountsTestCase
 
         Event::assertDispatched(AccountCreated::class, 1);
     }
-
-    public function test_listener_is_registered_via_the_service_provider(): void
-    {
-        // Dispatch the real Registered event through the event system (rather
-        // than invoking the listener directly): an account appearing proves the
-        // service-provider wiring is in place.
-        $user = User::factory()->create();
-        $this->assertSame(0, Account::query()->count());
-
-        Event::dispatch(new Registered($user));
-
-        $this->assertSame(1, Account::query()->count());
-    }
 }

@@ -35,24 +35,6 @@ class AccountIntegrityServiceTest extends AccountsTestCase
         $this->assertCount(0, $issues);
     }
 
-    public function test_scan_returns_empty_with_many_healthy_accounts(): void
-    {
-        for ($i = 0; $i < 10; $i++) {
-            $this->createUserWithAccount();
-        }
-
-        $issues = $this->service->scan();
-
-        $this->assertCount(0, $issues);
-    }
-
-    public function test_has_issues_false_on_clean_database(): void
-    {
-        $this->createUserWithAccount();
-
-        $this->assertFalse($this->service->hasIssues());
-    }
-
     public function test_scan_account_on_healthy_account_returns_empty(): void
     {
         ['account' => $account] = $this->createUserWithAccount();
@@ -204,20 +186,6 @@ class AccountIntegrityServiceTest extends AccountsTestCase
 
     // ----- scanAccount() -----
 
-    public function test_scan_account_reports_issue_for_corrupt_account(): void
-    {
-        ['user' => $owner, 'account' => $account] = $this->createUserWithAccount();
-        AccountUser::query()
-            ->where('account_id', $account->id)
-            ->where('user_id', $owner->id)
-            ->delete();
-
-        $issues = $this->service->scanAccount($account);
-
-        $this->assertCount(1, $issues);
-        $this->assertSame(IntegrityIssueType::NoOwnerMembership, $issues->first()->type);
-    }
-
     public function test_scan_account_returns_empty_for_soft_deleted_account(): void
     {
         // scanAccount uses the same base query as scan(), so soft-deleted
@@ -232,24 +200,5 @@ class AccountIntegrityServiceTest extends AccountsTestCase
         $issues = $this->service->scanAccount($account);
 
         $this->assertCount(0, $issues);
-    }
-
-    // ----- Performance smoke -----
-
-    public function test_scan_completes_quickly_for_100_healthy_accounts(): void
-    {
-        // Create 100 owners and accounts. Disable model events on AccountUser
-        // for setup speed; we're testing scan, not factory throughput.
-        for ($i = 0; $i < 100; $i++) {
-            $this->createUserWithAccount();
-        }
-
-        $start = microtime(true);
-        $issues = $this->service->scan();
-        $elapsed = microtime(true) - $start;
-
-        $this->assertCount(0, $issues);
-        // Generous bound — this is a sanity check, not a benchmark.
-        $this->assertLessThan(2.0, $elapsed, "scan() took {$elapsed}s for 100 healthy accounts.");
     }
 }

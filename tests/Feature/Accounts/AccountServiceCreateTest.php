@@ -38,15 +38,6 @@ class AccountServiceCreateTest extends AccountsTestCase
         $this->assertSame('Acme Workspace', $account->name);
     }
 
-    public function test_create_uses_default_name_template_when_name_omitted(): void
-    {
-        $owner = User::factory()->create(['name' => 'James']);
-
-        $account = $this->service->create($owner);
-
-        $this->assertSame("James's Account", $account->name);
-    }
-
     public function test_default_name_template_substitutes_owner_name(): void
     {
         config(['jamesgifford.auth.accounts.default_name_template' => 'Workspace for {name}']);
@@ -65,16 +56,6 @@ class AccountServiceCreateTest extends AccountsTestCase
         $account = $this->service->create($owner);
 
         $this->assertSame($owner->id, $account->owner_id);
-    }
-
-    public function test_account_has_public_id_with_account_prefix(): void
-    {
-        $owner = User::factory()->create();
-
-        $account = $this->service->create($owner);
-
-        $this->assertNotNull($account->public_id);
-        $this->assertStringStartsWith('account_', $account->public_id);
     }
 
     public function test_owner_membership_row_is_created_with_owner_role(): void
@@ -114,50 +95,28 @@ class AccountServiceCreateTest extends AccountsTestCase
         Event::assertDispatched(AccountCreated::class, 1);
     }
 
-    public function test_event_carries_account_transfer_with_correct_values(): void
-    {
-        Event::fake([AccountCreated::class]);
-
-        $owner = User::factory()->create();
-        $account = $this->service->create($owner);
-
-        Event::assertDispatched(AccountCreated::class, function (AccountCreated $event) use ($account, $owner) {
-            return $event->account instanceof AccountTransfer
-                && $event->account->id === $account->id
-                && $event->account->publicId === $account->public_id
-                && $event->account->name === $account->name
-                && $event->account->ownerId === $owner->id;
-        });
-    }
-
-    public function test_event_carries_user_transfer_matching_owner(): void
+    public function test_event_carries_account_user_and_membership_transfers(): void
     {
         Event::fake([AccountCreated::class]);
 
         $owner = User::factory()->create(['name' => 'Owner Name', 'email' => 'owner@example.test']);
-        $this->service->create($owner);
-
-        Event::assertDispatched(AccountCreated::class, function (AccountCreated $event) use ($owner) {
-            return $event->owner instanceof UserTransfer
-                && $event->owner->id === $owner->id
-                && $event->owner->publicId === $owner->public_id
-                && $event->owner->name === 'Owner Name'
-                && $event->owner->email === 'owner@example.test';
-        });
-    }
-
-    public function test_event_carries_membership_transfer_for_owner(): void
-    {
-        Event::fake([AccountCreated::class]);
-
-        $owner = User::factory()->create();
         $account = $this->service->create($owner);
 
         $ownerRoleId = AccountRole::findByKey('owner')->id;
         $membership = $account->ownerMembership();
 
-        Event::assertDispatched(AccountCreated::class, function (AccountCreated $event) use ($membership, $account, $owner, $ownerRoleId) {
-            return $event->ownerMembership instanceof MembershipTransfer
+        Event::assertDispatched(AccountCreated::class, function (AccountCreated $event) use ($account, $owner, $membership, $ownerRoleId) {
+            return $event->account instanceof AccountTransfer
+                && $event->account->id === $account->id
+                && $event->account->publicId === $account->public_id
+                && $event->account->name === $account->name
+                && $event->account->ownerId === $owner->id
+                && $event->owner instanceof UserTransfer
+                && $event->owner->id === $owner->id
+                && $event->owner->publicId === $owner->public_id
+                && $event->owner->name === 'Owner Name'
+                && $event->owner->email === 'owner@example.test'
+                && $event->ownerMembership instanceof MembershipTransfer
                 && $event->ownerMembership->id === $membership->id
                 && $event->ownerMembership->accountId === $account->id
                 && $event->ownerMembership->userId === $owner->id

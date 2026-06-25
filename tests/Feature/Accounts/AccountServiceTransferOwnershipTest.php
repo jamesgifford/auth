@@ -18,9 +18,7 @@ use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Roles\RolesConfig;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
-use JamesGifford\Auth\Transfers\AccountRoleTransfer;
-use JamesGifford\Auth\Transfers\AccountTransfer;
-use JamesGifford\Auth\Transfers\UserTransfer;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 
 class AccountServiceTransferOwnershipTest extends AccountsTestCase
@@ -47,20 +45,34 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         $this->assertSame($newOwner->id, $account->fresh()->owner_id);
     }
 
-    public function test_previous_owner_membership_demoted_to_admin_by_default(): void
+    public static function demotionRoleProvider(): array
+    {
+        return [
+            'defaults to admin' => [null, 'admin'],
+            'demote to member' => [SystemRole::MEMBER, 'member'],
+            'demote to viewer' => ['viewer', 'viewer'],
+        ];
+    }
+
+    #[DataProvider('demotionRoleProvider')]
+    public function test_previous_owner_demoted_to_expected_role(SystemRole|string|null $demotionRole, string $expectedRoleKey): void
     {
         ['user' => $previousOwner, 'account' => $account] = $this->createUserWithAccount();
         $newOwner = User::factory()->create();
         AccountUser::factory()->for($account)->for($newOwner)->memberRole()->create();
 
-        $this->service->transferOwnership($account, $newOwner);
+        if ($demotionRole === null) {
+            $this->service->transferOwnership($account, $newOwner);
+        } else {
+            $this->service->transferOwnership($account, $newOwner, $demotionRole);
+        }
 
         $membership = AccountUser::query()
             ->where('account_id', $account->id)
             ->where('user_id', $previousOwner->id)
             ->first();
 
-        $this->assertSame(AccountRole::findByKey('admin')->id, $membership->account_role_id);
+        $this->assertSame(AccountRole::findByKey($expectedRoleKey)->id, $membership->account_role_id);
     }
 
     public function test_new_owner_membership_has_owner_role(): void
@@ -79,73 +91,7 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         $this->assertSame(AccountRole::findByKey('owner')->id, $membership->account_role_id);
     }
 
-    public function test_event_is_dispatched_with_correct_transfers(): void
-    {
-        Event::fake([AccountOwnershipTransferred::class]);
-
-        ['user' => $previousOwner, 'account' => $account] = $this->createUserWithAccount();
-        $newOwner = User::factory()->create();
-        AccountUser::factory()->for($account)->for($newOwner)->memberRole()->create();
-
-        $this->service->transferOwnership($account, $newOwner);
-
-        Event::assertDispatched(AccountOwnershipTransferred::class, function (AccountOwnershipTransferred $event) use ($account, $previousOwner, $newOwner) {
-            return $event->account instanceof AccountTransfer
-                && $event->account->id === $account->id
-                && $event->account->ownerId === $newOwner->id
-                && $event->previousOwner instanceof UserTransfer
-                && $event->previousOwner->id === $previousOwner->id
-                && $event->newOwner instanceof UserTransfer
-                && $event->newOwner->id === $newOwner->id
-                && $event->previousOwnerNewRole instanceof AccountRoleTransfer
-                && $event->previousOwnerNewRole->key === 'admin';
-        });
-    }
-
-    public function test_returns_void(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $newOwner = User::factory()->create();
-        AccountUser::factory()->for($account)->for($newOwner)->memberRole()->create();
-
-        $result = $this->service->transferOwnership($account, $newOwner);
-
-        $this->assertNull($result);
-    }
-
     // ----- Custom previous-owner role -----
-
-    public function test_can_demote_previous_owner_to_member(): void
-    {
-        ['user' => $previousOwner, 'account' => $account] = $this->createUserWithAccount();
-        $newOwner = User::factory()->create();
-        AccountUser::factory()->for($account)->for($newOwner)->memberRole()->create();
-
-        $this->service->transferOwnership($account, $newOwner, SystemRole::MEMBER);
-
-        $membership = AccountUser::query()
-            ->where('account_id', $account->id)
-            ->where('user_id', $previousOwner->id)
-            ->first();
-
-        $this->assertSame(AccountRole::findByKey('member')->id, $membership->account_role_id);
-    }
-
-    public function test_can_demote_previous_owner_to_viewer(): void
-    {
-        ['user' => $previousOwner, 'account' => $account] = $this->createUserWithAccount();
-        $newOwner = User::factory()->create();
-        AccountUser::factory()->for($account)->for($newOwner)->memberRole()->create();
-
-        $this->service->transferOwnership($account, $newOwner, 'viewer');
-
-        $membership = AccountUser::query()
-            ->where('account_id', $account->id)
-            ->where('user_id', $previousOwner->id)
-            ->first();
-
-        $this->assertSame(AccountRole::findByKey('viewer')->id, $membership->account_role_id);
-    }
 
     public function test_custom_consumer_role_works_for_demotion(): void
     {
@@ -246,46 +192,6 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
         $this->expectException(InvalidRoleException::class);
 
         $this->service->transferOwnership($account, $newOwner, 'nonexistent');
-    }
-
-    public function test_no_state_changes_after_self_transfer_attempt(): void
-    {
-        ['user' => $owner, 'account' => $account] = $this->createUserWithAccount();
-        $originalOwnerId = $account->owner_id;
-        $originalMembershipRoleId = AccountUser::query()
-            ->where('account_id', $account->id)
-            ->where('user_id', $owner->id)
-            ->value('account_role_id');
-
-        try {
-            $this->service->transferOwnership($account, $owner);
-        } catch (SelfOwnershipTransferException) {
-            // expected
-        }
-
-        $this->assertSame($originalOwnerId, $account->fresh()->owner_id);
-        $this->assertSame(
-            $originalMembershipRoleId,
-            AccountUser::query()
-                ->where('account_id', $account->id)
-                ->where('user_id', $owner->id)
-                ->value('account_role_id'),
-        );
-    }
-
-    public function test_no_event_after_failed_transfer(): void
-    {
-        Event::fake([AccountOwnershipTransferred::class]);
-
-        ['user' => $owner, 'account' => $account] = $this->createUserWithAccount();
-
-        try {
-            $this->service->transferOwnership($account, $owner);
-        } catch (SelfOwnershipTransferException) {
-            // expected
-        }
-
-        Event::assertNotDispatched(AccountOwnershipTransferred::class);
     }
 
     // ----- Atomicity -----

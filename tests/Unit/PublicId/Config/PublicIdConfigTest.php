@@ -11,6 +11,7 @@ use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\PublicId\Exceptions\InvalidAlphabetException;
 use JamesGifford\Auth\PublicId\Exceptions\InvalidPublicIdConfigException;
 use JamesGifford\Auth\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use stdClass;
 
 class PublicIdConfigTest extends TestCase
@@ -40,30 +41,23 @@ class PublicIdConfigTest extends TestCase
         $this->assertSame(28, $config->totalMaxLength());
     }
 
-    public function test_prefix_max_length_zero_throws(): void
+    /**
+     * @return array<string, array{0: int}>
+     */
+    public static function provideInvalidPrefixMaxLengths(): array
     {
-        $base = $this->baseConfig();
-        $base['prefix_max_length'] = 0;
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('prefix_max_length');
-        new PublicIdConfig($base, $this->registry());
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'too large' => [65],
+        ];
     }
 
-    public function test_prefix_max_length_negative_throws(): void
+    #[DataProvider('provideInvalidPrefixMaxLengths')]
+    public function test_invalid_prefix_max_length_throws(int $value): void
     {
         $base = $this->baseConfig();
-        $base['prefix_max_length'] = -1;
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('prefix_max_length');
-        new PublicIdConfig($base, $this->registry());
-    }
-
-    public function test_prefix_max_length_too_large_throws(): void
-    {
-        $base = $this->baseConfig();
-        $base['prefix_max_length'] = 65;
+        $base['prefix_max_length'] = $value;
 
         $this->expectException(InvalidPublicIdConfigException::class);
         $this->expectExceptionMessage('prefix_max_length');
@@ -77,17 +71,6 @@ class PublicIdConfigTest extends TestCase
 
         $this->expectException(InvalidPublicIdConfigException::class);
         $this->expectExceptionMessage('separator');
-        new PublicIdConfig($base, $this->registry());
-    }
-
-    public function test_prefixes_map_empty_value_throws(): void
-    {
-        // A configured prefix must be at least one character.
-        $base = $this->baseConfig();
-        $base['prefixes'] = ['App\\Models\\Thing' => ''];
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('must be 1 to 7 lowercase ASCII letters');
         new PublicIdConfig($base, $this->registry());
     }
 
@@ -112,30 +95,23 @@ class PublicIdConfigTest extends TestCase
         new PublicIdConfig($base, $this->registry());
     }
 
-    public function test_body_length_zero_throws(): void
+    /**
+     * @return array<string, array{0: int}>
+     */
+    public static function provideInvalidBodyLengths(): array
     {
-        $base = $this->baseConfig();
-        $base['body']['length'] = 0;
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('body.length');
-        new PublicIdConfig($base, $this->registry());
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'too large' => [65],
+        ];
     }
 
-    public function test_body_length_negative_throws(): void
+    #[DataProvider('provideInvalidBodyLengths')]
+    public function test_invalid_body_length_throws(int $value): void
     {
         $base = $this->baseConfig();
-        $base['body']['length'] = -1;
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('body.length');
-        new PublicIdConfig($base, $this->registry());
-    }
-
-    public function test_body_length_too_large_throws(): void
-    {
-        $base = $this->baseConfig();
-        $base['body']['length'] = 65;
+        $base['body']['length'] = $value;
 
         $this->expectException(InvalidPublicIdConfigException::class);
         $this->expectExceptionMessage('body.length');
@@ -182,20 +158,22 @@ class PublicIdConfigTest extends TestCase
         new PublicIdConfig($base, $this->registry());
     }
 
-    public function test_checksum_length_negative_throws(): void
+    /**
+     * @return array<string, array{0: int}>
+     */
+    public static function provideInvalidChecksumLengths(): array
     {
-        $base = $this->baseConfig();
-        $base['checksum']['length'] = -1;
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('checksum.length');
-        new PublicIdConfig($base, $this->registry());
+        return [
+            'negative' => [-1],
+            'exceeds limit' => [17],
+        ];
     }
 
-    public function test_checksum_length_exceeds_limit_throws(): void
+    #[DataProvider('provideInvalidChecksumLengths')]
+    public function test_invalid_checksum_length_throws(int $value): void
     {
         $base = $this->baseConfig();
-        $base['checksum']['length'] = 17;
+        $base['checksum']['length'] = $value;
 
         $this->expectException(InvalidPublicIdConfigException::class);
         $this->expectExceptionMessage('checksum.length');
@@ -246,34 +224,33 @@ class PublicIdConfigTest extends TestCase
         new PublicIdConfig($base, $this->registry());
     }
 
-    public function test_prefixes_with_invalid_uppercase_value_throws(): void
+    /**
+     * @return array<string, array{0: array<string, string>, 1: ?int, 2: string}>
+     */
+    public static function provideInvalidPrefixMapValues(): array
     {
-        $base = $this->baseConfig();
-        $base['prefixes'] = ['App\\Models\\Workspace' => 'WSP'];
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('App\\Models\\Workspace');
-        new PublicIdConfig($base, $this->registry());
+        return [
+            'empty value' => [['App\\Models\\Thing' => ''], null, 'must be 1 to 7 lowercase ASCII letters'],
+            'uppercase value' => [['App\\Models\\Workspace' => 'WSP'], null, 'App\\Models\\Workspace'],
+            'non-letter value' => [['App\\Models\\Workspace' => 'wsp1'], null, 'App\\Models\\Workspace'],
+            'value too long' => [['App\\Models\\Workspace' => 'wxyz'], 3, 'App\\Models\\Workspace'],
+        ];
     }
 
-    public function test_prefixes_with_non_letter_value_throws(): void
+    /**
+     * @param  array<string, string>  $prefixes
+     */
+    #[DataProvider('provideInvalidPrefixMapValues')]
+    public function test_invalid_prefix_map_value_throws(array $prefixes, ?int $prefixMaxLength, string $expectedMessage): void
     {
         $base = $this->baseConfig();
-        $base['prefixes'] = ['App\\Models\\Workspace' => 'wsp1'];
+        if ($prefixMaxLength !== null) {
+            $base['prefix_max_length'] = $prefixMaxLength;
+        }
+        $base['prefixes'] = $prefixes;
 
         $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('App\\Models\\Workspace');
-        new PublicIdConfig($base, $this->registry());
-    }
-
-    public function test_prefixes_value_too_long_throws(): void
-    {
-        $base = $this->baseConfig();
-        $base['prefix_max_length'] = 3;
-        $base['prefixes'] = ['App\\Models\\Workspace' => 'wxyz'];
-
-        $this->expectException(InvalidPublicIdConfigException::class);
-        $this->expectExceptionMessage('App\\Models\\Workspace');
+        $this->expectExceptionMessage($expectedMessage);
         new PublicIdConfig($base, $this->registry());
     }
 

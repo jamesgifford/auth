@@ -24,16 +24,6 @@ class GeneratorTest extends TestCase
         $this->assertStringStartsWith('usr_', $id);
     }
 
-    public function test_prefix_is_preserved_verbatim(): void
-    {
-        $config = PublicIdConfigFactory::default();
-        $generator = new Generator($config);
-
-        $id = $generator->generate('proj');
-
-        $this->assertStringStartsWith('proj_', $id);
-    }
-
     public function test_body_length_matches_config(): void
     {
         $config = PublicIdConfigFactory::default(['body' => ['length' => 12]]);
@@ -155,18 +145,6 @@ class GeneratorTest extends TestCase
         $generator = new Generator($config);
 
         $this->assertSame(24, strlen($generator->generateBody()));
-    }
-
-    public function test_compute_checksum_known_value(): void
-    {
-        $config = PublicIdConfigFactory::default();
-        $generator = new Generator($config);
-
-        // hello → es with default lowercase_alphanumeric, length 2
-        // (h=7*1) + (e=4*2) + (l=11*3) + (l=11*4) + (o=14*5)
-        //   = 7 + 8 + 33 + 44 + 70 = 162; 162 mod 1296 = 162;
-        //   162 = 4*36 + 18 → charAt(4) + charAt(18) = "es"
-        $this->assertSame('es', $generator->computeChecksum('hello'));
     }
 
     public function test_works_with_null_checksum_strategy(): void

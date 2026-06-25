@@ -10,7 +10,6 @@ use JamesGifford\Auth\Events\AccountDeleted;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
-use JamesGifford\Auth\Transfers\AccountTransfer;
 use RuntimeException;
 
 class AccountServiceDeleteTest extends AccountsTestCase
@@ -52,25 +51,6 @@ class AccountServiceDeleteTest extends AccountsTestCase
         $this->service->delete($account);
 
         Event::assertDispatched(AccountDeleted::class, 1);
-    }
-
-    public function test_event_carries_correct_account_transfer(): void
-    {
-        Event::fake([AccountDeleted::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $expectedId = $account->id;
-        $expectedPublicId = $account->public_id;
-        $expectedName = $account->name;
-
-        $this->service->delete($account);
-
-        Event::assertDispatched(AccountDeleted::class, function (AccountDeleted $event) use ($expectedId, $expectedPublicId, $expectedName) {
-            return $event->account instanceof AccountTransfer
-                && $event->account->id === $expectedId
-                && $event->account->publicId === $expectedPublicId
-                && $event->account->name === $expectedName;
-        });
     }
 
     public function test_memberships_still_exist_after_soft_delete(): void

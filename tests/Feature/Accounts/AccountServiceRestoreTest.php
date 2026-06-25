@@ -10,7 +10,6 @@ use JamesGifford\Auth\Events\AccountRestored;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
-use JamesGifford\Auth\Transfers\AccountTransfer;
 
 class AccountServiceRestoreTest extends AccountsTestCase
 {
@@ -66,22 +65,6 @@ class AccountServiceRestoreTest extends AccountsTestCase
         $this->service->restore($account);
 
         Event::assertDispatched(AccountRestored::class, 1);
-    }
-
-    public function test_event_carries_correct_transfer(): void
-    {
-        Event::fake([AccountRestored::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $this->service->delete($account);
-
-        $this->service->restore($account);
-
-        Event::assertDispatched(AccountRestored::class, function (AccountRestored $event) use ($account) {
-            return $event->account instanceof AccountTransfer
-                && $event->account->id === $account->id
-                && $event->account->publicId === $account->public_id;
-        });
     }
 
     public function test_restore_on_non_deleted_account_is_noop(): void

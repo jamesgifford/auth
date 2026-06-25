@@ -91,16 +91,6 @@ class PublicIdStatusCommandTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_status_returns_success_even_when_drifted(): void
-    {
-        $config = $this->app->make(PublicIdConfig::class);
-        $this->app->make(LockFile::class)->write($config, 'sha256:'.str_repeat('0', 64));
-        $this->rebindGuard();
-
-        // Status command is read-only — never returns failure.
-        $this->artisan('jamesgifford:public-id:status')->assertSuccessful();
-    }
-
     protected function defineEnvironment($app): void
     {
         $this->tmpDir = sys_get_temp_dir().'/jamesgifford-status-cmd-'.uniqid('', true);

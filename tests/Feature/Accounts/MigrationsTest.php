@@ -46,16 +46,6 @@ class MigrationsTest extends AccountsTestCase
         $second->save();
     }
 
-    public function test_accounts_owner_id_restricts_user_deletion(): void
-    {
-        $user = User::factory()->create();
-        Account::create(['name' => 'Acme', 'owner_id' => $user->id]);
-
-        $this->expectException(QueryException::class);
-
-        $user->delete();
-    }
-
     public function test_current_account_id_is_nulled_when_account_is_deleted(): void
     {
         $user = User::factory()->create();

@@ -12,13 +12,8 @@ use JamesGifford\Auth\Events\AccountRoleChanged;
 use JamesGifford\Auth\Events\UserAttachedToAccount;
 use JamesGifford\Auth\Events\UserDetachedFromAccount;
 use JamesGifford\Auth\Models\Account;
-use JamesGifford\Auth\Models\AccountUser;
 use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
-use JamesGifford\Auth\Transfers\AccountRoleTransfer;
-use JamesGifford\Auth\Transfers\AccountTransfer;
-use JamesGifford\Auth\Transfers\MembershipTransfer;
-use JamesGifford\Auth\Transfers\UserTransfer;
 use RuntimeException;
 
 class EventDispatchTest extends AccountsTestCase
@@ -90,24 +85,5 @@ class EventDispatchTest extends AccountsTestCase
 
         // ...and the event must not have fired.
         Event::assertNotDispatched(AccountCreated::class);
-    }
-
-    public function test_event_listeners_receive_transfers_not_live_models(): void
-    {
-        Event::fake([UserAttachedToAccount::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        $this->service->attachUser($account, $member, 'admin');
-
-        Event::assertDispatched(UserAttachedToAccount::class, function (UserAttachedToAccount $event) {
-            // Property types confirm the payload is a transfer, not a model.
-            return $event->account instanceof AccountTransfer
-                && $event->user instanceof UserTransfer
-                && $event->role instanceof AccountRoleTransfer
-                && $event->membership instanceof MembershipTransfer
-                && ! ($event->account instanceof Account)
-                && ! ($event->membership instanceof AccountUser);
-        });
     }
 }

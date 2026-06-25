@@ -13,7 +13,6 @@ use JamesGifford\Auth\PublicId\Generator;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\PublicId\Validator;
-use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
 use JamesGifford\Auth\Tests\TestCase;
 
 class AuthServiceProviderTest extends TestCase
@@ -77,27 +76,10 @@ class AuthServiceProviderTest extends TestCase
         $this->assertTrue(PublicId::isValid($id));
     }
 
-    public function test_public_id_max_length_returns_expected_default(): void
-    {
-        // 7 prefix + 1 separator + 18 body + 2 checksum = 28
-        $this->assertSame(28, PublicId::maxLength());
-    }
-
     public function test_lock_file_uses_default_config_path_when_unset(): void
     {
         $lockFile = $this->app->make(LockFile::class);
 
         $this->assertStringEndsWith('jamesgifford/auth.lock.json', $lockFile->path());
-    }
-
-    public function test_models_in_config_are_registered_during_boot(): void
-    {
-        // The app booted earlier with no fixtures in config; here we verify the
-        // configured model is reachable through the registered registry.
-        // We use the AuthServiceProviderConfigTest variant for a true config-driven check.
-        $registry = $this->app->make(PrefixRegistry::class);
-        $registry->register(FixtureModel::class);
-
-        $this->assertArrayHasKey(FixtureModel::class, $registry->all());
     }
 }

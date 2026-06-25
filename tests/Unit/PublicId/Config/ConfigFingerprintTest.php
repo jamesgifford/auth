@@ -10,6 +10,7 @@ use JamesGifford\Auth\PublicId\Checksum\PositionalSumChecksum;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class ConfigFingerprintTest extends TestCase
 {
@@ -21,90 +22,75 @@ class ConfigFingerprintTest extends TestCase
         $this->assertSame($a, $b);
     }
 
-    public function test_changing_body_length_changes_fingerprint(): void
+    /**
+     * Each row provides a list of base mutations and a list of changed
+     * mutations. A mutation is [keyPath, value] applied to baseConfig().
+     *
+     * @return array<string, array{0: array<int, array{0: array<int, string>, 1: mixed}>, 1: array<int, array{0: array<int, string>, 1: mixed}>}>
+     */
+    public static function provideLockedFieldChanges(): array
     {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['body']['length'] = 16;
+        return [
+            'body.length' => [
+                [],
+                [[['body', 'length'], 16]],
+            ],
+            'body.alphabet' => [
+                [],
+                [[['body', 'alphabet'], 'crockford'], [['separator'], '-']],
+            ],
+            'checksum.enabled' => [
+                [],
+                [[['checksum', 'enabled'], false], [['checksum', 'strategy'], NullChecksum::class]],
+            ],
+            'checksum.length' => [
+                [],
+                [[['checksum', 'length'], 4]],
+            ],
+            'checksum.strategy' => [
+                [[['checksum', 'enabled'], false], [['checksum', 'strategy'], NullChecksum::class]],
+                [[['checksum', 'enabled'], false], [['checksum', 'strategy'], PositionalSumChecksum::class], [['checksum', 'enabled'], true], [['checksum', 'length'], 2]],
+            ],
+            'separator' => [
+                [],
+                [[['separator'], '-']],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<int, array{0: array<int, string>, 1: mixed}>  $baseMutations
+     * @param  array<int, array{0: array<int, string>, 1: mixed}>  $changedMutations
+     */
+    #[DataProvider('provideLockedFieldChanges')]
+    public function test_changing_locked_field_changes_fingerprint(array $baseMutations, array $changedMutations): void
+    {
+        $base = $this->applyMutations($this->baseConfig(), $baseMutations);
+        $changed = $this->applyMutations($this->baseConfig(), $changedMutations);
 
         $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
     }
 
-    public function test_changing_body_alphabet_changes_fingerprint(): void
+    /**
+     * @return array<string, array{0: array<int, string>, 1: mixed}>
+     */
+    public static function provideNonLockedFieldChanges(): array
     {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['body']['alphabet'] = 'crockford';
-        $changed['separator'] = '-';
-
-        $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
+        return [
+            'prefix_max_length' => [['prefix_max_length'], 16],
+            'prefixes' => [['prefixes'], ['App\\Models\\Workspace' => 'wsp']],
+            'custom_alphabet_presets' => [['custom_alphabet_presets'], ['unused' => 'xyz']],
+        ];
     }
 
-    public function test_changing_checksum_enabled_changes_fingerprint(): void
+    /**
+     * @param  array<int, string>  $keyPath
+     */
+    #[DataProvider('provideNonLockedFieldChanges')]
+    public function test_changing_non_locked_field_does_not_change_fingerprint(array $keyPath, mixed $value): void
     {
         $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['checksum']['enabled'] = false;
-        $changed['checksum']['strategy'] = NullChecksum::class;
-
-        $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_changing_checksum_length_changes_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['checksum']['length'] = 4;
-
-        $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_changing_checksum_strategy_changes_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $base['checksum']['enabled'] = false;
-        $base['checksum']['strategy'] = NullChecksum::class;
-
-        $changed = $base;
-        $changed['checksum']['strategy'] = PositionalSumChecksum::class;
-        $changed['checksum']['enabled'] = true;
-        $changed['checksum']['length'] = 2;
-
-        $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_changing_separator_changes_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['separator'] = '-';
-
-        $this->assertNotSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_changing_prefix_max_length_does_not_change_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['prefix_max_length'] = 16;
-
-        $this->assertSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_changing_prefixes_does_not_change_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['prefixes'] = ['App\\Models\\Workspace' => 'wsp'];
-
-        $this->assertSame($this->fingerprint($base), $this->fingerprint($changed));
-    }
-
-    public function test_unused_custom_alphabet_preset_does_not_change_fingerprint(): void
-    {
-        $base = $this->baseConfig();
-        $changed = $this->baseConfig();
-        $changed['custom_alphabet_presets'] = ['unused' => 'xyz'];
+        $changed = $this->applyMutations($this->baseConfig(), [[$keyPath, $value]]);
 
         $this->assertSame($this->fingerprint($base), $this->fingerprint($changed));
     }
@@ -117,6 +103,28 @@ class ConfigFingerprintTest extends TestCase
         $hex = substr($fingerprint, 7);
         $this->assertSame(64, strlen($hex));
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $hex);
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<int, array{0: array<int, string>, 1: mixed}>  $mutations
+     * @return array<string, mixed>
+     */
+    private function applyMutations(array $config, array $mutations): array
+    {
+        foreach ($mutations as [$keyPath, $value]) {
+            $ref = &$config;
+            foreach ($keyPath as $i => $key) {
+                if ($i === count($keyPath) - 1) {
+                    $ref[$key] = $value;
+                } else {
+                    $ref = &$ref[$key];
+                }
+            }
+            unset($ref);
+        }
+
+        return $config;
     }
 
     private function registry(): AlphabetRegistry
