@@ -68,13 +68,16 @@ return [
 
         // Map of model class FQCNs to their public_id prefix. Models that
         // implement publicIdPrefix() override this map. Not part of the
-        // locked fingerprint.
+        // locked fingerprint, but prefixes ARE part of the locked format —
+        // change them here BEFORE running setup/install (once IDs exist they
+        // cannot change).
         //
-        // Example:
+        // Add your own models the same way, e.g.:
         //   App\Models\Workspace::class => 'wsp',
         //   App\Models\Project::class => 'prj',
         'prefixes' => [
-            //
+            User::class => 'user',
+            Account::class => 'account',
         ],
 
         // Custom alphabet presets to register beyond the built-ins. Keys

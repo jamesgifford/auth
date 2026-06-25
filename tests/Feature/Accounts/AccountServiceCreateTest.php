@@ -67,14 +67,14 @@ class AccountServiceCreateTest extends AccountsTestCase
         $this->assertSame($owner->id, $account->owner_id);
     }
 
-    public function test_account_has_public_id_with_acc_prefix(): void
+    public function test_account_has_public_id_with_account_prefix(): void
     {
         $owner = User::factory()->create();
 
         $account = $this->service->create($owner);
 
         $this->assertNotNull($account->public_id);
-        $this->assertStringStartsWith('acc_', $account->public_id);
+        $this->assertStringStartsWith('account_', $account->public_id);
     }
 
     public function test_owner_membership_row_is_created_with_owner_role(): void

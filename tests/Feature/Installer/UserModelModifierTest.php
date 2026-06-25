@@ -171,7 +171,7 @@ class UserModelModifierTest extends TestCase
         $mod = $this->modifier->modify($file, $analysis);
 
         $this->assertStringContainsString('public function publicIdPrefix(): string', $mod->modifiedCode);
-        $this->assertStringContainsString("return 'usr';", $mod->modifiedCode);
+        $this->assertStringContainsString("return 'user';", $mod->modifiedCode);
         $this->assertTrue($mod->addedPublicIdPrefixMethod);
     }
 
@@ -182,9 +182,9 @@ class UserModelModifierTest extends TestCase
 
         $mod = $this->modifier->modify($file, $analysis);
 
-        // The original 'mbr' return must still be present; no 'usr' is added.
+        // The original 'mbr' return must still be present; no 'user' is added.
         $this->assertStringContainsString("return 'mbr';", $mod->modifiedCode);
-        $this->assertStringNotContainsString("return 'usr';", $mod->modifiedCode);
+        $this->assertStringNotContainsString("return 'user';", $mod->modifiedCode);
         $this->assertFalse($mod->addedPublicIdPrefixMethod);
     }
 
@@ -282,7 +282,7 @@ class UserModelModifierTest extends TestCase
         $this->assertTrue(class_exists($fqcn));
 
         $instance = new $fqcn;
-        $this->assertSame('usr', $instance->publicIdPrefix());
+        $this->assertSame('user', $instance->publicIdPrefix());
     }
 
     // ---- write() / restore() ----

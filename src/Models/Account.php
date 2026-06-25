@@ -36,7 +36,7 @@ class Account extends Model
 
     public function publicIdPrefix(): string
     {
-        return 'acc';
+        return 'account';
     }
 
     public function owner(): BelongsTo

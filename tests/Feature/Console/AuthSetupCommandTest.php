@@ -8,9 +8,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\Console\Commands\AuthSetupCommand;
 use JamesGifford\Auth\Database\IdOffsetManager;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\TestCase;
+use ReflectionClass;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
  * The setup command ORCHESTRATES the existing first-class commands (migrate,
@@ -245,13 +254,20 @@ class AuthSetupCommandTest extends TestCase
 
     // ---- Interactive educational pause (after config publish, before lock) ----
 
-    public function test_interactive_run_pauses_with_educational_offset_guidance_before_the_lock(): void
+    public function test_interactive_run_pauses_with_educational_guidance_before_the_lock(): void
     {
         // No --force, non-production env: the command publishes config, then
-        // pauses to teach the public_id lock + offset options before install
-        // performs the irreversible lock. Simulated input continues.
+        // pauses to teach the public_id lock, the editable prefixes, and the
+        // offset options before install performs the irreversible lock.
+        // Each expectsOutputToContain must match a DISTINCT output line (Mockery
+        // assigns one write per expectation), so assert one substring per line.
         $this->artisan('jamesgifford:auth:setup')
             ->expectsOutputToContain('Before the public_id format is locked')
+            // Prefix section: the configured prefixes are part of the locked
+            // format, shown with a sample id (the Account model's 'account').
+            ->expectsOutputToContain('Public ID prefixes are part of that locked format')
+            ->expectsOutputToContain('e.g. account_')
+            // Offset section.
             ->expectsOutputToContain("'id_offsets' => [")
             ->expectsOutputToContain(IdOffsetManager::envKeyFor('users').'=11')
             ->expectsOutputToContain(IdOffsetManager::envKeyFor('accounts').'=1001')
@@ -263,14 +279,62 @@ class AuthSetupCommandTest extends TestCase
         $this->assertTrue(Schema::hasTable('accounts'));
     }
 
-    public function test_force_run_shows_no_educational_pause(): void
+    public function test_force_run_shows_no_educational_pause_and_uses_configured_prefixes(): void
     {
         $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertSame(0, $exit, $output);
         $this->assertStringNotContainsString('Before the public_id format is locked', $output);
+        $this->assertStringNotContainsString('Public ID prefixes are part of that locked format', $output);
         $this->assertStringNotContainsString('Press ENTER to continue', $output);
+
+        // It proceeded with the configured prefixes (the Account model's
+        // 'account') without pausing: a created account uses that prefix.
+        $owner = User::factory()->create();
+        $account = Account::create(['name' => 'Acme', 'owner_id' => $owner->id]);
+        $this->assertStringStartsWith('account_', (string) $account->public_id);
+    }
+
+    public function test_prefix_reminder_is_shown_before_dev_data_is_seeded(): void
+    {
+        $this->app['env'] = 'local'; // dev-data allowlisted
+
+        // Interactive run with --with-dev-data: the pause (with the prefix
+        // reminder) is step 2 — before the public_id lock and before the
+        // step-3 dev-data seeding — so the user can adjust prefixes before any
+        // ids (including dev-data ids) are generated under them.
+        $this->artisan('jamesgifford:auth:setup', ['--with-dev-data' => true])
+            ->expectsOutputToContain('Public ID prefixes are part of that locked format')
+            ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
+            ->assertExitCode(0);
+
+        // Seeding ran (step 3) — i.e. AFTER the step-2 pause that showed the
+        // prefix reminder. (Step order itself is pinned by the ordering test.)
+        $this->assertTrue(DB::table('users')->where('email', 'owner@dev.test')->exists());
+    }
+
+    public function test_prefix_section_renders_default_user_and_account_prefixes_with_samples(): void
+    {
+        // Default resolution: a config-mapped user model (no override) => 'user',
+        // and the package Account model => 'account'. Rendered deterministically
+        // (not through the interactive Q&A), so the full section is asserted.
+        config([
+            'jamesgifford.auth.models.user' => FixtureModelWithoutOverride::class,
+            'jamesgifford.auth.public_id.prefixes' => [
+                FixtureModelWithoutOverride::class => 'user',
+                Account::class => 'account',
+            ],
+        ]);
+        $this->app->forgetInstance(PublicIdConfig::class);
+        $this->app->forgetInstance(PrefixRegistry::class);
+
+        $output = $this->renderPrefixSection();
+
+        $this->assertStringContainsString('Public ID prefixes are part of that locked format', $output);
+        $this->assertStringContainsString('config/jamesgifford/auth.php', $output);
+        $this->assertMatchesRegularExpression('/users\s+user\s+e\.g\. user_\w+/', $output);
+        $this->assertMatchesRegularExpression('/accounts\s+account\s+e\.g\. account_\w+/', $output);
     }
 
     // ---- ID offsets: read from config AND from env, applied non-interactively ----
@@ -362,6 +426,21 @@ class AuthSetupCommandTest extends TestCase
     }
 
     // ---- Helpers ----
+
+    private function renderPrefixSection(): string
+    {
+        $command = $this->app->make(AuthSetupCommand::class);
+        $input = new ArrayInput([]);
+        $input->setInteractive(false);
+        $buffer = new BufferedOutput;
+
+        $reflection = new ReflectionClass($command);
+        $reflection->getProperty('input')->setValue($command, $input);
+        $reflection->getProperty('output')->setValue($command, new SymfonyStyle($input, $buffer));
+        $reflection->getMethod('displayPrefixSection')->invoke($command);
+
+        return $buffer->fetch();
+    }
 
     private function writeUsersMigration(): void
     {

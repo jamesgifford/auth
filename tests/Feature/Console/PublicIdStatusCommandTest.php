@@ -69,6 +69,12 @@ class PublicIdStatusCommandTest extends TestCase
 
     public function test_status_shows_none_when_no_prefixes_registered(): void
     {
+        // Clear the package's shipped default prefixes (which boot eagerly
+        // registers, e.g. Account) so nothing is registered for this scenario.
+        config(['jamesgifford.auth.public_id.prefixes' => []]);
+        $this->app->forgetInstance(PublicIdConfig::class);
+        $this->app->forgetInstance(PrefixRegistry::class);
+
         $this->artisan('jamesgifford:public-id:status')
             ->expectsOutputToContain('Registered prefixes: (none)')
             ->assertSuccessful();

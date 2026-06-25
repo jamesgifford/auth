@@ -492,8 +492,9 @@ final class AuthInstallCommand extends Command
     private function sampleExamplePrefix(PublicIdConfig $config): string
     {
         $max = $config->prefixMaxLength();
+        $prefix = 'account';
 
-        return $max >= 3 ? 'acc' : substr('acc', 0, max(1, $max));
+        return strlen($prefix) <= $max ? $prefix : substr($prefix, 0, max(1, $max));
     }
 
     // ---- Execution ----
@@ -736,7 +737,7 @@ final class AuthInstallCommand extends Command
         $this->newLine();
         $this->line('      public function publicIdPrefix(): string');
         $this->line('      {');
-        $this->line("          return 'usr';");
+        $this->line("          return 'user';");
         $this->line('      }');
         $this->newLine();
         $this->line('Then run `php artisan jamesgifford:auth:install --verify` to confirm.');

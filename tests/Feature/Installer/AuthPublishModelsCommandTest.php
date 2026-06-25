@@ -43,7 +43,7 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
         $this->assertStringContainsString('use JamesGifford\\Auth\\Models\\Account as BaseAccount;', $account);
         $this->assertStringContainsString("#[Fillable(['name', 'owner_id'])]", $account);
         $this->assertStringContainsString('class Account extends BaseAccount', $account);
-        $this->assertStringContainsString("return 'acc';", $account);
+        $this->assertStringContainsString("return 'account';", $account);
 
         $role = (string) file_get_contents($dir.DIRECTORY_SEPARATOR.'AccountRole.php');
         $this->assertStringContainsString("#[Fillable(['key', 'name', 'description', 'system', 'sort_order'])]", $role);

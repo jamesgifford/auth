@@ -6,6 +6,9 @@ namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
 use JamesGifford\Auth\Database\IdOffsetManager;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
+use JamesGifford\Auth\PublicId\PublicId;
+use Throwable;
 
 /**
  * One-shot orchestration of a full auth setup. It does NOT reimplement any
@@ -163,6 +166,9 @@ final class AuthSetupCommand extends Command
         $this->line('be LOCKED. After locking, changing the format would invalidate every ID');
         $this->line('already generated — so review that file now if you have not.');
         $this->newLine();
+
+        $this->displayPrefixSection();
+
         $this->line('ID offsets make real records start above a chosen number (reserving the');
         $this->line('low id range for seeded dev data). Set them EITHER way — config reads');
         $this->line('the env vars, and a literal you write in config takes precedence:');
@@ -184,6 +190,60 @@ final class AuthSetupCommand extends Command
         $this->newLine();
 
         $this->ask('Press ENTER to continue (locking public_id and finishing setup)');
+    }
+
+    /**
+     * Show the configured public ID prefixes — which are part of the LOCKED
+     * format — with a sample generated id for each, so the user can change them
+     * before the lock (and before any dev-data ids are generated under them).
+     */
+    private function displayPrefixSection(): void
+    {
+        $models = [
+            'users' => (string) config('jamesgifford.auth.models.user'),
+            'accounts' => (string) config('jamesgifford.auth.models.account'),
+        ];
+
+        $this->line('Public ID prefixes are part of that locked format — once IDs exist they');
+        $this->line('cannot change. The configured prefixes (edit the <info>prefixes</info> map in');
+        $this->line("config/jamesgifford/auth.php, or each model's publicIdPrefix()) are:");
+        $this->newLine();
+
+        foreach ($models as $label => $modelClass) {
+            $sample = $this->prefixSample($modelClass);
+            if ($sample === null) {
+                $this->line(sprintf("        %-9s (no prefix configured — add it to the 'prefixes' map)", $label));
+
+                continue;
+            }
+
+            [$prefix, $id] = $sample;
+            $this->line(sprintf('        %-9s %-9s e.g. %s', $label, $prefix, $id));
+        }
+
+        $this->newLine();
+    }
+
+    /**
+     * Resolve a model's effective prefix and a sample id, or null if the prefix
+     * can't be resolved (e.g. the model isn't registered yet) — the pause must
+     * never fail setup over a display detail.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function prefixSample(string $modelClass): ?array
+    {
+        if ($modelClass === '' || ! class_exists($modelClass)) {
+            return null;
+        }
+
+        try {
+            $prefix = app(PrefixRegistry::class)->prefixFor($modelClass);
+
+            return [$prefix, PublicId::generate($prefix)];
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

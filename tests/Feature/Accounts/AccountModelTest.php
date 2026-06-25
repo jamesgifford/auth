@@ -30,14 +30,14 @@ class AccountModelTest extends AccountsTestCase
         ]);
     }
 
-    public function test_account_auto_generates_public_id_with_acc_prefix(): void
+    public function test_account_auto_generates_public_id_with_account_prefix(): void
     {
         $user = User::factory()->create();
 
         $account = Account::create(['name' => 'Acme', 'owner_id' => $user->id]);
 
         $this->assertNotNull($account->public_id);
-        $this->assertStringStartsWith('acc_', $account->public_id);
+        $this->assertStringStartsWith('account_', $account->public_id);
     }
 
     public function test_owner_returns_the_user(): void
@@ -138,6 +138,6 @@ class AccountModelTest extends AccountsTestCase
         $this->assertSame('Acme', $account->name);
         $this->assertSame($user->id, $account->owner_id);
         $this->assertNotSame('acc_should_be_ignored', $account->public_id);
-        $this->assertStringStartsWith('acc_', $account->public_id);
+        $this->assertStringStartsWith('account_', $account->public_id);
     }
 }

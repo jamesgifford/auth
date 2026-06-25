@@ -18,6 +18,14 @@ class PublicIdCheckCommandTest extends TestCase
     {
         parent::setUp();
         Model::clearBootedModels();
+
+        // The package ships default prefixes (App\Models\User => 'user',
+        // Account => 'account'); App\Models\User does not exist in the bare test
+        // app. Start each test from a clean prefix slate so it controls exactly
+        // which prefixes are registered.
+        config(['jamesgifford.auth.public_id.prefixes' => []]);
+        $this->app->forgetInstance(PublicIdConfig::class);
+        $this->app->forgetInstance(PrefixRegistry::class);
     }
 
     public function test_all_checks_pass_with_no_registered_prefixes(): void

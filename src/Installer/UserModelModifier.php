@@ -290,7 +290,7 @@ final class UserModelModifier
                     $method = $factory->method('publicIdPrefix')
                         ->makePublic()
                         ->setReturnType('string')
-                        ->addStmt(new Stmt\Return_(new Node\Scalar\String_('usr')))
+                        ->addStmt(new Stmt\Return_(new Node\Scalar\String_('user')))
                         ->getNode();
                     $bodyStmts[] = $method;
                 }
@@ -402,7 +402,7 @@ final class UserModelModifier
                 $method = $factory->method('publicIdPrefix')
                     ->makePublic()
                     ->setReturnType('string')
-                    ->addStmt(new Stmt\Return_(new Node\Scalar\String_('usr')))
+                    ->addStmt(new Stmt\Return_(new Node\Scalar\String_('user')))
                     ->getNode();
                 $bodyStmts[] = $method;
             }
