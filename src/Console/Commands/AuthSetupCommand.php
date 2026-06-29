@@ -29,9 +29,14 @@ use Throwable;
  * non-interactive terminal) skips the pause; install itself is always invoked
  * non-interactively, so the pause is the single human touch-point.
  *
- * Safety (NOT bypassed by --force):
+ * Safety (evaluated up front, before Step 1 and before any prompt):
  *  - --fresh runs migrate:fresh (drops ALL tables) and is therefore refused
- *    outright in production — the whole command stops before touching anything.
+ *    outright in production — even with --force — and the whole command stops
+ *    before touching anything.
+ *  - In production without --force the command aborts immediately: the migrate
+ *    step needs --force there (Laravel will not migrate a production database
+ *    unconfirmed), so setup decides that itself rather than letting migrate
+ *    pause for confirmation it can't satisfy unattended.
  *  - Dev-data seeding is double-guarded: it only runs when --with-dev-data is
  *    passed AND the seeder's own environment guard allows it (production is
  *    always refused by the seeder, even with the flag).
@@ -55,15 +60,38 @@ final class AuthSetupCommand extends Command
         $fresh = (bool) $this->option('fresh');
         $force = (bool) $this->option('force');
         $withDevData = (bool) $this->option('with-dev-data');
+        $isProduction = $this->laravel->environment() === 'production';
+
+        // Hard safety guards run FIRST — before Step 1 and before any interactive
+        // prompt or pause. The command must never prompt the user and only then
+        // discover it is in production; it decides up front and aborts cleanly.
 
         // --fresh is destructive (migrate:fresh drops every table). Refuse the
         // WHOLE command in production before anything runs — nothing dropped.
-        if ($fresh && $this->laravel->environment() === 'production') {
+        if ($fresh && $isProduction) {
             $this->error('Refusing to run --fresh in a production environment.');
             $this->newLine();
             $this->line('--fresh runs `migrate:fresh`, which DROPS ALL TABLES — a development-only');
             $this->line('convenience. Nothing has been changed. Re-run without --fresh to set up');
             $this->line('additively, or use a real migration to alter a production database.');
+
+            return self::FAILURE;
+        }
+
+        // In production the migrate step requires --force: Laravel's migrate
+        // command refuses to touch a production database without confirmation,
+        // and would PROMPT for it. Resolve that here, before the call, so the
+        // command aborts cleanly instead of stalling on migrate's interactive
+        // confirmation (and never reaches the educational pause either).
+        if ($isProduction && ! $force) {
+            $this->newLine();
+            $this->error('Setup aborted: running migrations in production requires --force.');
+            $this->newLine();
+            $this->line('Laravel will not migrate a production database without confirmation, so');
+            $this->line('setup cannot run unattended here. Re-run non-interactively with --force to');
+            $this->line('apply migrations, install, and offsets in one pass:');
+            $this->newLine();
+            $this->line('    php artisan jamesgifford:auth:setup --force');
 
             return self::FAILURE;
         }
