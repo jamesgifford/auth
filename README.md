@@ -2,8 +2,8 @@
 
 [![Tests](https://github.com/jamesgifford/auth/actions/workflows/tests.yml/badge.svg)](https://github.com/jamesgifford/auth/actions/workflows/tests.yml)
 [![Code Style](https://github.com/jamesgifford/auth/actions/workflows/code-style.yml/badge.svg)](https://github.com/jamesgifford/auth/actions/workflows/code-style.yml)
-[![PHP](https://img.shields.io/badge/PHP-8.3%2B-777BB4)](https://www.php.net/)
-[![Laravel](https://img.shields.io/badge/Laravel-12%20%7C%2013-FF2D20)](https://laravel.com/)
+[![PHP](https://img.shields.io/badge/PHP-8.4%2B-777BB4)](https://www.php.net/)
+[![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20)](https://laravel.com/)
 [![License](https://img.shields.io/badge/license-MIT-3DA639)](LICENSE)
 
 Reusable Laravel authentication scaffolding: prefixed public identifiers and multi-account memberships with configurable roles and enforced invariants.
@@ -18,8 +18,8 @@ The **accounts subsystem** models accounts, their members (through an explicit p
 
 ## Requirements
 
-- PHP 8.3+
-- Laravel 12 or 13
+- PHP 8.4+ (developed on PHP 8.5)
+- Laravel 13
 
 ## Installation
 

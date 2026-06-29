@@ -46,6 +46,15 @@ since 0.1.0, which shipped only the public ID subsystem.
 - `jamesgifford:auth:publish-models`: publishes editable `App\Models` subclasses (`Account`, `AccountUser`, `AccountRole`).
 - Laravel Boost skill (`resources/boost/skills/jamesgifford-auth/`) documenting the package's API and guardrails for AI tooling.
 
+### Changed
+
+- Narrowed the supported versions to PHP 8.4+ (developed on 8.5) and Laravel 13 only, dropping the earlier PHP and Laravel floors. The models use Laravel 13's `#[Fillable]` / `#[Hidden]` Eloquent attributes, which earlier Laravel does not honor.
+
+### Requirements
+
+- PHP 8.4+ (developed on PHP 8.5)
+- Laravel 13
+
 ## [0.1.0] - 2026-05-06
 
 Initial release. Public ID subsystem.
@@ -62,11 +71,6 @@ Initial release. Public ID subsystem.
 - Configuration locking via `config/jamesgifford/auth.lock.json`. Boot-time guard throws on configuration drift.
 - Console commands: `jamesgifford:public-id:setup`, `jamesgifford:public-id:status`, `jamesgifford:public-id:check`, `jamesgifford:public-id:reset`.
 - Configuration published to `config/jamesgifford/auth.php` with `vendor:publish --tag=jamesgifford-auth-config`.
-
-### Requirements
-
-- PHP 8.3+
-- Laravel 12 or 13
 
 [Unreleased]: https://github.com/jamesgifford/auth/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/jamesgifford/auth/compare/v0.1.0...v1.0.0
