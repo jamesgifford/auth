@@ -11,14 +11,14 @@ use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
 /**
- * Verifies the SHIPPED default dev-data config (config/dev-data.php) — these
- * tests deliberately do NOT override config('jamesgifford.dev-data'); they use
+ * Verifies the SHIPPED default dev-data config (config/jamesgifford/auth-dev.php) — these
+ * tests deliberately do NOT override config('jamesgifford.auth-dev'); they use
  * the merged package default, so they prove the default cast is real and
  * seedable out of the box.
  */
 class DevDataDefaultFixturesTest extends AccountsTestCase
 {
-    private const PUBLISHED = 'jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php';
+    private const PUBLISHED = 'jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php';
 
     protected function setUp(): void
     {
@@ -38,7 +38,7 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
     {
         @unlink(config_path(self::PUBLISHED));
 
-        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev-data', '--force' => true]);
+        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev', '--force' => true]);
 
         $contents = (string) file_get_contents(config_path(self::PUBLISHED));
 
@@ -54,7 +54,7 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
     public function test_published_config_keeps_the_password_env_sourced_with_no_literal(): void
     {
         @unlink(config_path(self::PUBLISHED));
-        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev-data', '--force' => true]);
+        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev', '--force' => true]);
 
         $contents = (string) file_get_contents(config_path(self::PUBLISHED));
 
@@ -107,8 +107,12 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
         $floating = User::query()->where('email', 'floating@dev.test')->firstOrFail();
 
         // Owns Beta LLC AND a member of Acme Inc == two accounts.
+        $beta = Account::query()->where('name', 'Beta LLC')->firstOrFail();
         $this->assertSame(2, $multi->accounts()->count());
-        $this->assertTrue($multi->isOwnerOf(Account::query()->where('name', 'Beta LLC')->firstOrFail()));
+        $this->assertTrue($multi->isOwnerOf($beta));
+
+        // The default cast declares multi's current_account as "Beta LLC".
+        $this->assertSame($beta->id, $multi->current_account_id);
 
         // Floating: belongs to nothing.
         $this->assertSame(0, $floating->accounts()->count());

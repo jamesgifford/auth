@@ -27,7 +27,7 @@ final class DevDataSeedingNotAllowedException extends RuntimeException
     {
         return new self(sprintf(
             "Refusing to seed dev data: environment '%s' is not in the allowed list [%s]. ".
-            'Add it to config(\'jamesgifford.dev-data.environments\') to permit it.',
+            'Add it to config(\'jamesgifford.auth-dev.environments\') to permit it.',
             $environment,
             $allowed === [] ? '(none)' : implode(', ', $allowed),
         ));

@@ -662,7 +662,7 @@ final class AuthUninstallCommand extends Command
 
         return [
             $dir.DIRECTORY_SEPARATOR.'auth.php',
-            $dir.DIRECTORY_SEPARATOR.'dev-data.php',
+            $dir.DIRECTORY_SEPARATOR.'auth-dev.php',
         ];
     }
 

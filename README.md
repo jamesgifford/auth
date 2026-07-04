@@ -320,7 +320,7 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read only in co
 
 | Variable | Used by |
 | --- | --- |
-| `JAMESGIFFORD_AUTH_DEV_PASSWORD` | Shared password for seeded dev users (`config/dev-data.php`); hashed at seed time. |
+| `JAMESGIFFORD_AUTH_DEV_PASSWORD` | Shared password for seeded dev users (`config/jamesgifford/auth-dev.php`); hashed at seed time. |
 | `JAMESGIFFORD_AUTH_USERS_ID_OFFSET` | Auto-increment start for the users table. |
 | `JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET` | Auto-increment start for the accounts table. |
 
@@ -328,7 +328,53 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read only in co
 
 ### Dev-data seeding
 
-`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/dev-data.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_PASSWORD` and hashed at seed time — no credential is committed. The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
+`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/jamesgifford/auth-dev.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_PASSWORD` and hashed at seed time — no credential is committed. The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
+
+The config declares accounts explicitly and each user's memberships from that user's own perspective, so multi-account membership, roles, and the active account are all expressed in one place per entity:
+
+```php
+'accounts' => [
+    ['name' => 'Acme Inc', 'owner' => 'owner@dev.test'],
+    ['name' => 'Beta LLC', 'owner' => 'multi@dev.test'],
+],
+'users' => [
+    ['name' => 'Owner', 'email' => 'owner@dev.test'], // owns Acme Inc
+    ['name' => 'Admin', 'email' => 'admin@dev.test', 'memberships' => [
+        ['account' => 'Acme Inc', 'role' => 'admin'],
+    ]],
+    // Owns Beta LLC and is a member of Acme Inc; active account set to Beta LLC.
+    ['name' => 'Multi', 'email' => 'multi@dev.test', 'memberships' => [
+        ['account' => 'Acme Inc', 'role' => 'member'],
+    ], 'current_account' => 'Beta LLC'],
+    ['name' => 'Floating', 'email' => 'floating@dev.test'], // owns/belongs to nothing
+],
+```
+
+### Seeding from your DatabaseSeeder
+
+Both seeders are first-class Laravel seeders, callable from a consuming app's `database/seeders/DatabaseSeeder.php`. The dev-data seeder self-guards (skips outside `local`/`staging`, always skips in production, never throws), so `php artisan migrate:fresh --seed` re-seeds roles in **every** environment and dev data only in `local`/`staging` — alongside your own seeders:
+
+```php
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Database\DevDataSeeder;
+
+public function run(): void
+{
+    // Auth: required account roles — ALL environments (reads config/jamesgifford/auth.php).
+    $this->call(AccountRoleSeeder::class);
+
+    // Auth: development fixtures — local & staging only (reads config/jamesgifford/auth-dev.php).
+    // The seeder self-guards too, so this stays safe even without the env check.
+    if (app()->environment('local', 'staging')) {
+        $this->call(DevDataSeeder::class);
+    }
+
+    // App-specific seeders:
+    // $this->call(YourAppSeeder::class);
+}
+```
+
+The role seeder (`JamesGifford\Auth\Database\Seeders\AccountRoleSeeder`) reads `config('jamesgifford.auth.roles')` and runs unconditionally — roles are required data. The dev-data seeder (`JamesGifford\Auth\Database\DevDataSeeder`) reads `config('jamesgifford.auth-dev')` and self-restricts to development.
 
 ### ID offsets
 

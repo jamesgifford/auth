@@ -52,8 +52,8 @@ class AuthServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/auth.php', 'jamesgifford.auth');
 
         // Dev-data defaults live under a sibling key so the published file
-        // (config/jamesgifford/dev-data.php) auto-loads to the same key.
-        $this->mergeConfigFrom(__DIR__.'/../config/dev-data.php', 'jamesgifford.dev-data');
+        // (config/jamesgifford/auth-dev.php) auto-loads to the same key.
+        $this->mergeConfigFrom(__DIR__.'/../config/auth-dev.php', 'jamesgifford.auth-dev');
 
         $this->app->singleton(AlphabetRegistry::class, function () {
             return new AlphabetRegistry;
@@ -138,8 +138,8 @@ class AuthServiceProvider extends ServiceProvider
         // Dev-data config is published only on deliberate request (its own tag),
         // never during a normal install — it is dev-only.
         $this->publishes([
-            __DIR__.'/../config/dev-data.php' => config_path('jamesgifford/dev-data.php'),
-        ], 'jamesgifford-auth-dev-data');
+            __DIR__.'/../config/auth-dev.php' => config_path('jamesgifford/auth-dev.php'),
+        ], 'jamesgifford-auth-dev');
 
         $this->app->make(ConfigGuard::class)->assertMatches();
 

@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Console;
 
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use JamesGifford\Auth\Database\DevDataSeeder;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Exceptions\DevDataSeedingNotAllowedException;
+use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
@@ -23,7 +28,7 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
     protected function tearDown(): void
     {
         if ($this->app !== null) {
-            foreach (['dev-data.php', 'auth.php'] as $name) {
+            foreach (['auth-dev.php', 'auth.php'] as $name) {
                 @unlink(config_path('jamesgifford'.DIRECTORY_SEPARATOR.$name));
             }
         }
@@ -34,27 +39,27 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
 
     public function test_dev_data_config_is_publishable_via_its_own_tag(): void
     {
-        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php');
         @unlink($target);
 
-        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev-data', '--force' => true]);
+        Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-dev', '--force' => true]);
 
         $this->assertFileExists($target);
     }
 
     public function test_dev_data_config_is_not_published_by_the_default_config_tag(): void
     {
-        @unlink(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php'));
+        @unlink(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php'));
 
         Artisan::call('vendor:publish', ['--tag' => 'jamesgifford-auth-config', '--force' => true]);
 
         // The main config publish must NOT bring the dev-only file with it.
-        $this->assertFileDoesNotExist(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php'));
+        $this->assertFileDoesNotExist(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php'));
     }
 
     public function test_seeding_publishes_the_dev_data_config_on_first_run(): void
     {
-        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php');
         @unlink($target);
 
         $this->artisan('jamesgifford:auth:seed-dev-data')
@@ -70,7 +75,7 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
         if (! is_dir($dir)) {
             mkdir($dir, 0777, true);
         }
-        $target = $dir.DIRECTORY_SEPARATOR.'dev-data.php';
+        $target = $dir.DIRECTORY_SEPARATOR.'auth-dev.php';
         file_put_contents($target, "<?php\n\n// consumer dev marker keep-me-77\nreturn [];\n");
 
         Artisan::call('jamesgifford:auth:seed-dev-data');
@@ -82,7 +87,7 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
 
     public function test_a_refused_run_does_not_publish_the_dev_data_config(): void
     {
-        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php');
         @unlink($target);
         $this->app['env'] = 'production';
 
@@ -218,24 +223,170 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
             ->assertSuccessful();
     }
 
+    // ---- New schema: explicit accounts, per-user memberships, current_account ----
+
+    public function test_user_with_multiple_memberships_belongs_to_multiple_accounts(): void
+    {
+        $this->configureDevData([
+            'accounts' => [
+                ['name' => 'Acme', 'owner' => 'owner@example.test'],
+                ['name' => 'Beta', 'owner' => 'owner@example.test'],
+            ],
+            'users' => [
+                ['name' => 'Owner', 'email' => 'owner@example.test'],
+                ['name' => 'Multi', 'email' => 'multi@example.test', 'memberships' => [
+                    ['account' => 'Acme', 'role' => 'admin'],
+                    ['account' => 'Beta', 'role' => 'member'],
+                ]],
+            ],
+        ]);
+
+        $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
+
+        $multi = User::query()->where('email', 'multi@example.test')->firstOrFail();
+        $acme = Account::query()->where('name', 'Acme')->firstOrFail();
+        $beta = Account::query()->where('name', 'Beta')->firstOrFail();
+
+        $this->assertSame(2, $multi->accounts()->count());
+        $this->assertTrue($multi->hasRole($acme, 'admin'));
+        $this->assertTrue($multi->hasRole($beta, 'member'));
+    }
+
+    public function test_current_account_is_set_when_declared_and_valid(): void
+    {
+        $this->configureDevData([
+            'accounts' => [
+                ['name' => 'Acme', 'owner' => 'owner@example.test'],
+                ['name' => 'Beta', 'owner' => 'multi@example.test'],
+            ],
+            'users' => [
+                ['name' => 'Owner', 'email' => 'owner@example.test'],
+                ['name' => 'Multi', 'email' => 'multi@example.test', 'memberships' => [
+                    ['account' => 'Acme', 'role' => 'member'],
+                ], 'current_account' => 'Beta'],
+            ],
+        ]);
+
+        $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
+
+        $multi = User::query()->where('email', 'multi@example.test')->firstOrFail();
+        $beta = Account::query()->where('name', 'Beta')->firstOrFail();
+
+        // Belongs to two accounts (owns Beta, member of Acme); active = Beta.
+        $this->assertSame(2, $multi->accounts()->count());
+        $this->assertSame($beta->id, $multi->current_account_id);
+    }
+
+    public function test_current_account_is_ignored_when_user_neither_owns_nor_belongs(): void
+    {
+        // The user declares a current_account for an account they have no
+        // relationship to — validated away, left unset (not blindly assigned).
+        $this->configureDevData([
+            'accounts' => [
+                ['name' => 'Acme', 'owner' => 'owner@example.test'],
+            ],
+            'users' => [
+                ['name' => 'Owner', 'email' => 'owner@example.test'],
+                ['name' => 'Outsider', 'email' => 'outsider@example.test', 'current_account' => 'Acme'],
+            ],
+        ]);
+
+        $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
+
+        $outsider = User::query()->where('email', 'outsider@example.test')->firstOrFail();
+        $this->assertNull($outsider->current_account_id);
+    }
+
+    // ---- Guard fires on the seeder run() path, not only the command ----
+
+    public function test_run_silently_skips_in_production_without_throwing(): void
+    {
+        $this->app['env'] = 'production';
+
+        try {
+            // The DatabaseSeeder / db:seed path calls run() — it must NOT throw.
+            $this->app->make(DevDataSeeder::class)->run();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+
+        $this->assertSame(0, User::query()->count(), 'run() must not seed in production.');
+    }
+
+    public function test_run_seeds_in_an_allowed_environment(): void
+    {
+        $this->app['env'] = 'local';
+
+        try {
+            $this->app->make(DevDataSeeder::class)->run();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+
+        $this->assertTrue(User::query()->where('email', 'owner@example.test')->exists());
+    }
+
+    // ---- Callable from a consuming app's DatabaseSeeder ----
+
+    public function test_both_seeders_are_callable_from_a_database_seeder(): void
+    {
+        $this->app['env'] = 'local';
+
+        $databaseSeeder = new class extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AccountRoleSeeder::class);
+
+                if (app()->environment('local', 'staging')) {
+                    $this->call(DevDataSeeder::class);
+                }
+            }
+        };
+
+        try {
+            $databaseSeeder->setContainer($this->app)->run();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER), 'roles seed via $this->call');
+        $this->assertTrue(User::query()->where('email', 'owner@example.test')->exists(), 'dev data seeds via $this->call');
+    }
+
+    public function test_roles_seed_in_production_while_dev_data_self_guards(): void
+    {
+        $this->app['env'] = 'production';
+
+        try {
+            // Roles are required data — seeded in ALL environments.
+            $this->app->make(AccountRoleSeeder::class)->run();
+            // Dev data self-guards on every invocation path — no throw, no rows.
+            $this->app->make(DevDataSeeder::class)->run();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+
+        $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+        $this->assertSame(0, User::query()->count(), 'dev data must not seed in production');
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
     private function configureDevData(array $overrides = []): void
     {
-        config(['jamesgifford.dev-data' => array_merge([
+        config(['jamesgifford.auth-dev' => array_merge([
             'environments' => ['local', 'testing'],
             'password' => 'dev-secret-pw',
+            'accounts' => [
+                ['name' => 'Dev Workspace', 'owner' => 'owner@example.test'],
+            ],
             'users' => [
-                [
-                    'name' => 'Dev Owner',
-                    'email' => 'owner@example.test',
-                    'account' => 'Dev Workspace',
-                    'members' => [
-                        ['email' => 'member@example.test', 'role' => 'admin'],
-                    ],
-                ],
-                ['name' => 'Dev Member', 'email' => 'member@example.test'],
+                ['name' => 'Dev Owner', 'email' => 'owner@example.test'],
+                ['name' => 'Dev Member', 'email' => 'member@example.test', 'memberships' => [
+                    ['account' => 'Dev Workspace', 'role' => 'admin'],
+                ]],
             ],
         ], $overrides)]);
     }

@@ -24,14 +24,14 @@ class PackageEnvVariablesTest extends TestCase
 
         $_SERVER[$key] = 'secret-from-env';
         try {
-            $config = require $this->packageRoot().'/config/dev-data.php';
+            $config = require $this->packageRoot().'/config/auth-dev.php';
             $this->assertSame('secret-from-env', $config['password']);
         } finally {
             unset($_SERVER[$key]);
         }
 
         // Falls back to 'password' when the env var is absent.
-        $config = require $this->packageRoot().'/config/dev-data.php';
+        $config = require $this->packageRoot().'/config/auth-dev.php';
         $this->assertSame('password', $config['password']);
     }
 

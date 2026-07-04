@@ -9,7 +9,7 @@ use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Exceptions\DevDataSeedingNotAllowedException;
 
 /**
- * Seed deterministic local dev fixtures from config('jamesgifford.dev-data').
+ * Seed deterministic local dev fixtures from config('jamesgifford.auth-dev').
  *
  * Dev/local only: refuses in production (unconditionally) and in any environment
  * not allow-listed in config — the guard runs before any database access.
@@ -70,19 +70,19 @@ final class AuthSeedDevDataCommand extends Command
     }
 
     /**
-     * Publish config/jamesgifford/dev-data.php on first run so the consumer has
+     * Publish config/jamesgifford/auth-dev.php on first run so the consumer has
      * an editable cast. Never overwrites an existing file (vendor:publish skips
      * it, and we only announce a publish that actually happened).
      */
     private function ensureDevDataConfigPublished(): void
     {
-        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'dev-data.php');
+        $target = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php');
 
         if (is_file($target)) {
             return;
         }
 
-        $this->callSilent('vendor:publish', ['--tag' => 'jamesgifford-auth-dev-data']);
+        $this->callSilent('vendor:publish', ['--tag' => 'jamesgifford-auth-dev']);
 
         if (is_file($target)) {
             $this->line('  Published dev-data config to '.$this->displayPath($target).' — edit it to customize the cast.');

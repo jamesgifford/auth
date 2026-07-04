@@ -161,8 +161,9 @@ sensible account instead of redirecting.
   data). Flags: `--keep-config`, `--remove-published-models`,
   `--force-production`, `--force`.
 - `jamesgifford:auth:seed-dev-data` — seed the deterministic local dev cast from
-  `config/dev-data.php`. Fails closed: refuses in production and outside the
-  configured `environments`. Run `apply-id-offsets` afterwards.
+  `config/jamesgifford/auth-dev.php`. Fails closed: refuses in production and
+  outside the configured `environments`. Run `apply-id-offsets` afterwards. The
+  same cast is also seedable via the `DevDataSeeder` class from a DatabaseSeeder.
 - `jamesgifford:auth:apply-id-offsets` — set the auto-increment start for the
   users/accounts tables (MySQL/Postgres; no-op on SQLite). Run after migrate and
   after any seeding.
@@ -177,7 +178,7 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read ONLY in
 config files (don't call `env()` in app code):
 
 - `JAMESGIFFORD_AUTH_DEV_PASSWORD` — shared password for seeded dev users
-  (`config/dev-data.php`); hashed at seed time.
+  (`config/jamesgifford/auth-dev.php`); hashed at seed time.
 - `JAMESGIFFORD_AUTH_USERS_ID_OFFSET` — auto-increment start for the users table.
 - `JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET` — auto-increment start for accounts.
 
