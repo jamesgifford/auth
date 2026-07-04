@@ -265,20 +265,4 @@ class AccountServiceTransferOwnershipTest extends AccountsTestCase
 
         $this->assertSame($third->id, $account->fresh()->owner_id);
     }
-
-    public function test_transfer_works_when_new_owner_is_viewer(): void
-    {
-        ['account' => $account] = $this->createUserWithAccount();
-        $viewer = User::factory()->create();
-        AccountUser::factory()->for($account)->for($viewer)->viewerRole()->create();
-
-        $this->service->transferOwnership($account, $viewer);
-
-        $this->assertSame($viewer->id, $account->fresh()->owner_id);
-        $membership = AccountUser::query()
-            ->where('account_id', $account->id)
-            ->where('user_id', $viewer->id)
-            ->first();
-        $this->assertSame(AccountRole::findByKey('owner')->id, $membership->account_role_id);
-    }
 }

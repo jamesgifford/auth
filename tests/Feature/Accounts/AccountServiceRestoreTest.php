@@ -55,18 +55,6 @@ class AccountServiceRestoreTest extends AccountsTestCase
         $this->assertDatabaseHas('account_user', ['id' => $memberMembershipId]);
     }
 
-    public function test_account_restored_event_dispatched(): void
-    {
-        Event::fake([AccountRestored::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $this->service->delete($account);
-
-        $this->service->restore($account);
-
-        Event::assertDispatched(AccountRestored::class, 1);
-    }
-
     public function test_restore_on_non_deleted_account_is_noop(): void
     {
         Event::fake([AccountRestored::class]);

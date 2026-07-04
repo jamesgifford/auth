@@ -118,13 +118,9 @@ class ValidatorTest extends TestCase
         $id = $generator->generate('us');
 
         // mutate the last 2 chars (checksum) to be wrong
-        $alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
         $current = substr($id, -2);
         $replacement = $current[0] === 'a' ? 'b' : 'a';
         $tampered = substr($id, 0, -2).$replacement.$replacement;
-
-        // ensure body chars are still in alphabet (they are, both 'a' and 'b' are)
-        $this->assertSame($alphabet, $alphabet); // sanity, keeps the variable used
 
         $validator = new Validator(PublicIdConfigFactory::default());
         $result = $validator->validate($tampered);

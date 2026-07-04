@@ -51,19 +51,6 @@ class AccountServiceChangeRoleTest extends AccountsTestCase
         $this->assertSame('viewer', $updated->role->key);
     }
 
-    public function test_role_changed_event_is_dispatched(): void
-    {
-        Event::fake([AccountRoleChanged::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->memberRole()->create();
-
-        $this->service->changeRole($account, $member, 'admin');
-
-        Event::assertDispatched(AccountRoleChanged::class, 1);
-    }
-
     public function test_event_carries_previous_and_new_role_transfers(): void
     {
         Event::fake([AccountRoleChanged::class]);

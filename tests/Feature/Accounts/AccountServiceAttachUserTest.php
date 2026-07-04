@@ -68,18 +68,6 @@ class AccountServiceAttachUserTest extends AccountsTestCase
         $this->assertSame('viewer', $membership->role->key);
     }
 
-    public function test_user_attached_event_is_dispatched(): void
-    {
-        Event::fake([UserAttachedToAccount::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $newcomer = User::factory()->create();
-
-        $this->service->attachUser($account, $newcomer, 'member');
-
-        Event::assertDispatched(UserAttachedToAccount::class, 1);
-    }
-
     public function test_event_carries_correct_transfers(): void
     {
         Event::fake([UserAttachedToAccount::class]);

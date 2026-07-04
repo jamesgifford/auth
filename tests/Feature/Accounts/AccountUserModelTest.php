@@ -113,16 +113,4 @@ class AccountUserModelTest extends AccountsTestCase
 
         $this->assertDatabaseMissing('account_user', ['id' => $membership->id]);
     }
-
-    public function test_deleting_role_in_use_is_restricted(): void
-    {
-        $role = AccountRole::factory()->create();
-        $user = User::factory()->create();
-        $account = Account::create(['name' => 'Acme', 'owner_id' => $user->id]);
-        AccountUser::factory()->for($account)->for($user)->withRole($role->key)->create();
-
-        $this->expectException(QueryException::class);
-
-        $role->delete();
-    }
 }

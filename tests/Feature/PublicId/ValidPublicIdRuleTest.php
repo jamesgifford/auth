@@ -85,12 +85,6 @@ class ValidPublicIdRuleTest extends TestCase
 
     public function test_non_string_value_produces_must_be_string_message(): void
     {
-        $cases = [
-            ['id' => 123, 'expected' => 'must be a string'],
-            ['id' => [], 'expected' => 'must be a string'],
-            ['id' => null, 'expected' => null], // 'nullable' rule absent — but our rule is reached only if present
-        ];
-
         // For the int case
         $validator = ValidatorFacade::make(['id' => 123], ['id' => [new ValidPublicId]]);
         $this->assertFalse($validator->passes());

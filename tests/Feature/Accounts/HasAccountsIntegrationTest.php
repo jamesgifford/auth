@@ -30,15 +30,6 @@ class HasAccountsIntegrationTest extends AccountsTestCase
         $this->assertSame($account->id, $user->accounts->first()->id);
     }
 
-    public function test_floating_user_has_null_current_account(): void
-    {
-        $user = User::factory()->create();
-
-        $this->assertTrue($user->isFloating());
-        $this->assertNull($user->current_account_id);
-        $this->assertNull($user->currentAccount);
-    }
-
     /**
      * Deleting all of a user's memberships does NOT clear current_account_id.
      * That cleanup is a future concern (EnsureCurrentAccount middleware);

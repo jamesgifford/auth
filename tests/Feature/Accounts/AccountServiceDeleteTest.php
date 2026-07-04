@@ -42,17 +42,6 @@ class AccountServiceDeleteTest extends AccountsTestCase
         $this->assertNull(Account::find($account->id));
     }
 
-    public function test_account_deleted_event_is_dispatched(): void
-    {
-        Event::fake([AccountDeleted::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-
-        $this->service->delete($account);
-
-        Event::assertDispatched(AccountDeleted::class, 1);
-    }
-
     public function test_memberships_still_exist_after_soft_delete(): void
     {
         ['account' => $account, 'membership' => $ownerMembership] = $this->createUserWithAccount();

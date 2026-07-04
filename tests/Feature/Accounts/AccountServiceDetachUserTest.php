@@ -37,19 +37,6 @@ class AccountServiceDetachUserTest extends AccountsTestCase
         $this->assertDatabaseMissing('account_user', ['id' => $membership->id]);
     }
 
-    public function test_user_detached_event_is_dispatched(): void
-    {
-        Event::fake([UserDetachedFromAccount::class]);
-
-        ['account' => $account] = $this->createUserWithAccount();
-        $member = User::factory()->create();
-        AccountUser::factory()->for($account)->for($member)->memberRole()->create();
-
-        $this->service->detachUser($account, $member);
-
-        Event::assertDispatched(UserDetachedFromAccount::class, 1);
-    }
-
     public function test_event_carries_previous_role_correctly(): void
     {
         Event::fake([UserDetachedFromAccount::class]);

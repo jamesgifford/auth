@@ -6,28 +6,45 @@ namespace JamesGifford\Auth\Installer;
 
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Carbon;
 use RuntimeException;
 use Throwable;
 
 /**
- * Single source of truth for identifying and tearing down the package's own
- * migrations in a consuming application.
+ * Single source of truth for publishing, identifying, and tearing down the
+ * package's own migrations in a consuming application.
  *
- * Both the install command's --fresh mode and the uninstall command rely on
- * this so there is exactly one definition of "the package's migrations" — by
- * filename, from the package's own database/migrations directory. The published
- * copies in the consumer's database/migrations keep these exact names, which is
- * what makes surgical rollback and file deletion possible without touching any
- * non-package migration.
+ * The package does NOT loadMigrationsFrom() its migrations — they are PUBLISHED
+ * into the consumer's database/migrations as real files, exactly like the
+ * developer's own migrations, so they run in the normal merged-timestamp order
+ * alongside Laravel's system migrations and the project's own.
+ *
+ * Publishing assigns FRESH timestamps generated at publish time (see publish()),
+ * so the published filenames deliberately DIFFER from the package's frozen
+ * source filenames. Because of that, this class identifies the package's own
+ * published migrations by their STEM — the descriptive part after the
+ * `YYYY_MM_DD_HHMMSS_` timestamp prefix — NOT by exact filename. The stems
+ * (add_jamesgifford_auth_columns_to_users_table, create_accounts_table, …) are
+ * distinctive and stable across fresh timestamps, which is what lets --fresh and
+ * uninstall find and remove the published copies reliably.
  */
 final class PackageMigrations
 {
+    /**
+     * A marker embedded in every published migration file, so a human (or tool)
+     * can recognise a package-published migration even after it has been given a
+     * fresh timestamp filename.
+     */
+    private const WARNING_MARKER = 'Published by the jamesgifford/auth package';
+
     public function __construct(private readonly Application $app) {}
 
     /**
      * Canonical migration names (basename without .php), sourced from the
      * package's own database/migrations directory, sorted by filename so the
-     * order matches their timestamp prefixes.
+     * order matches their timestamp prefixes — which is the correct internal
+     * dependency order (accounts before the account_user pivot, the users
+     * current_account_id alteration after accounts exists, etc.).
      *
      * @return list<string>
      */
@@ -37,6 +54,84 @@ final class PackageMigrations
         sort($files);
 
         return array_map(static fn (string $f): string => basename($f, '.php'), $files);
+    }
+
+    /**
+     * The stems of the package's migrations, in dependency order — the stable
+     * identifiers used to recognise published copies regardless of the fresh
+     * timestamp prefix they were published with.
+     *
+     * @return list<string>
+     */
+    public function stems(): array
+    {
+        return array_map(fn (string $name): string => $this->stemFor($name), $this->names());
+    }
+
+    /**
+     * Publish the package's migrations into the consumer's database/migrations
+     * directory with FRESH timestamps generated NOW.
+     *
+     * Why fresh timestamps: the package's frozen source timestamps are fixed in
+     * the past and could sort incorrectly against the consuming app's migrations
+     * — most critically, the users-table ALTERATION must sort after Laravel's
+     * users-table CREATION. Stamping today's DATE (which, at setup time, is after
+     * the fresh app's system migrations) places them correctly. Each successive
+     * package migration is stamped one second later than the previous, so their
+     * correct internal order (by source filename) is preserved and never
+     * ambiguous.
+     *
+     * Idempotent: a migration whose stem is already published is skipped, never
+     * overwritten or duplicated (publish-if-absent, skip-if-present). Skipped
+     * ones are reported through $log.
+     *
+     * @param  callable(string):void  $log  receives per-migration progress lines
+     */
+    public function publish(callable $log): void
+    {
+        $targetDir = $this->app->databasePath('migrations');
+        if (! is_dir($targetDir)) {
+            @mkdir($targetDir, 0777, true);
+        }
+
+        $alreadyPublished = $this->publishedFiles();
+
+        // Use today's DATE but start the TIME portion at midnight (000000),
+        // incrementing one second per source position (000000, 000001, ...).
+        // Midnight makes the package's migrations sort as early as possible
+        // within the publish day, so they precede any project migration created
+        // the SAME day — make:migration stamps a real time-of-day, which is
+        // always later than 000000. There are only a handful of package
+        // migrations, so the sequence stays within the first few seconds after
+        // midnight, nowhere near a realistic clock time. The position-based
+        // increment preserves the package's internal dependency order.
+        $base = Carbon::now()->startOfDay();
+        $position = 0;
+
+        foreach ($this->names() as $name) {
+            $stem = $this->stemFor($name);
+            $offset = $position;
+            $position++;
+
+            if (isset($alreadyPublished[$stem])) {
+                $log(sprintf(
+                    '  - skipped %s (already published: %s)',
+                    $stem,
+                    basename($alreadyPublished[$stem]),
+                ));
+
+                continue;
+            }
+
+            $timestamp = $base->copy()->addSeconds($offset)->format('Y_m_d_His');
+            $filename = $timestamp.'_'.$stem.'.php';
+            $target = $targetDir.DIRECTORY_SEPARATOR.$filename;
+
+            $contents = (string) file_get_contents($this->sourceDir().DIRECTORY_SEPARATOR.$name.'.php');
+            file_put_contents($target, $this->annotate($contents));
+
+            $log('  - published '.$filename);
+        }
     }
 
     /**
@@ -51,6 +146,11 @@ final class PackageMigrations
      * not the consumer's published copies. The published copies can be stale
      * (the package was updated but not re-published) or already deleted, and we
      * always want the current teardown logic regardless.
+     *
+     * Because published files carry fresh timestamps, the name recorded in the
+     * migrations table differs from the package's source filename — so the
+     * recorded row is matched by STEM, not by exact name, and that recorded name
+     * (not the source name) is what gets deleted from the repository.
      *
      * A single migration's down() failing does NOT abort the whole teardown:
      * each is attempted independently so one bad migration can never strand the
@@ -72,7 +172,13 @@ final class PackageMigrations
             return;
         }
 
-        $ran = $repository->getRan();
+        // Map each ran migration to its stem, so a package migration recorded
+        // under a fresh-timestamp filename can be matched to (and its row
+        // deleted for) the package's source migration.
+        $ranByStem = [];
+        foreach ($repository->getRan() as $ranName) {
+            $ranByStem[$this->stemFor($ranName)] = $ranName;
+        }
 
         // resolvePath() is protected but handles php-parser's anonymous-class
         // migration files correctly (including the require cache), so bind into
@@ -86,7 +192,8 @@ final class PackageMigrations
         $failures = [];
 
         foreach (array_reverse($this->names()) as $name) {
-            $recorded = in_array($name, $ran, true);
+            $stem = $this->stemFor($name);
+            $recordedName = $ranByStem[$stem] ?? null;
 
             try {
                 $migration = $resolve($this->sourceDir().DIRECTORY_SEPARATOR.$name.'.php');
@@ -100,8 +207,8 @@ final class PackageMigrations
                     $migration->down();
                 }
 
-                if ($recorded) {
-                    $repository->delete((object) ['migration' => $name]);
+                if ($recordedName !== null) {
+                    $repository->delete((object) ['migration' => $recordedName]);
                     $log("  - rolled back {$name}");
                 } else {
                     $log("  - {$name} (not recorded; dropped any leftover schema)");
@@ -130,19 +237,17 @@ final class PackageMigrations
     }
 
     /**
-     * Delete the consumer's published copies of the package migrations. Skips
-     * any that are already absent.
+     * Delete the consumer's published copies of the package migrations —
+     * identified by stem, so fresh-timestamp filenames are matched correctly.
+     * Skips any that are already absent.
      *
      * @param  callable(string):void  $log
      */
     public function deletePublishedFiles(callable $log): void
     {
-        foreach ($this->names() as $name) {
-            $path = $this->app->databasePath('migrations'.DIRECTORY_SEPARATOR.$name.'.php');
-            if (is_file($path)) {
-                @unlink($path);
-                $log("  - removed published migration {$name}.php");
-            }
+        foreach ($this->publishedFiles() as $path) {
+            @unlink($path);
+            $log('  - removed published migration '.basename($path));
         }
     }
 
@@ -152,19 +257,73 @@ final class PackageMigrations
      */
     public function publishedFileCount(): int
     {
-        $count = 0;
-        foreach ($this->names() as $name) {
-            if (is_file($this->app->databasePath('migrations'.DIRECTORY_SEPARATOR.$name.'.php'))) {
-                $count++;
+        return count($this->publishedFiles());
+    }
+
+    /**
+     * Map of stem => full path for each of the package's migrations that is
+     * currently published in the consumer's database/migrations directory.
+     *
+     * Identification is by STEM (the descriptive suffix after the
+     * `YYYY_MM_DD_HHMMSS_` prefix), so it recognises copies published with fresh
+     * timestamps as well as any legacy copies that still carry the package's
+     * original frozen filenames.
+     *
+     * @return array<string, string>
+     */
+    public function publishedFiles(): array
+    {
+        $wanted = array_flip($this->stems());
+        $found = [];
+
+        $dir = $this->app->databasePath('migrations');
+        foreach (glob($dir.DIRECTORY_SEPARATOR.'*.php') ?: [] as $path) {
+            $stem = $this->stemFor(basename($path, '.php'));
+            if (isset($wanted[$stem]) && ! isset($found[$stem])) {
+                $found[$stem] = $path;
             }
         }
 
-        return $count;
+        return $found;
+    }
+
+    /**
+     * Strip the `YYYY_MM_DD_HHMMSS_` migration timestamp prefix, leaving the
+     * stable descriptive stem. A name without a recognisable prefix is returned
+     * unchanged (it simply won't match any package stem).
+     */
+    private function stemFor(string $basename): string
+    {
+        return preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_/', '', $basename) ?? $basename;
+    }
+
+    /**
+     * Insert the "published by this package" warning comment near the top of a
+     * migration's source, just after the declare(strict_types=1); line (or the
+     * opening tag if that line is absent). Idempotent — never doubles up.
+     */
+    private function annotate(string $contents): string
+    {
+        if (str_contains($contents, self::WARNING_MARKER)) {
+            return $contents;
+        }
+
+        $comment = "\n/*\n"
+            .' * '.self::WARNING_MARKER." (jamesgifford:auth:install).\n"
+            ." * This table structure is expected by the package's models and services.\n"
+            ." * Modify with caution — prefer a separate migration over editing this file.\n"
+            ." */\n";
+
+        if (preg_match('/^declare\(strict_types=1\);$/m', $contents) === 1) {
+            return preg_replace('/^(declare\(strict_types=1\);)$/m', '$1'.$comment, $contents, 1) ?? $contents;
+        }
+
+        return preg_replace('/^(<\?php)$/m', '$1'.$comment, $contents, 1) ?? $contents;
     }
 
     /**
      * The package's own migrations directory — the single source of truth for
-     * both the canonical migration names and the teardown (down()) logic.
+     * both the canonical migration names/stems and the teardown (down()) logic.
      */
     private function sourceDir(): string
     {

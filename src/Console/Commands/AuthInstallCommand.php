@@ -550,7 +550,14 @@ final class AuthInstallCommand extends Command
     {
         $this->newLine();
         $this->info('→ Publishing package migrations...');
-        $this->call('vendor:publish', ['--tag' => 'jamesgifford-auth-migrations']);
+
+        // Publish with FRESH timestamps generated now (not vendor:publish, which
+        // would copy the package's frozen source timestamps verbatim). Fresh
+        // timestamps sort the package's migrations after the app's system
+        // migrations and before project migrations added later, while preserving
+        // their correct internal order. Idempotent: already-published ones are
+        // skipped, never clobbered.
+        $this->packageMigrations->publish(fn (string $line) => $this->line($line));
 
         $published = glob(database_path('migrations'.DIRECTORY_SEPARATOR.'*_create_accounts_table.php'));
         if ($published === []) {

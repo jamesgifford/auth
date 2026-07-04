@@ -294,6 +294,11 @@ class AuthInstallFreshModeTest extends TestCase
 
         $roles = glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_create_account_roles_table.php') ?: [];
         $this->assertCount(1, $roles);
+
+        // The staged copies carried the package's frozen source timestamps; the
+        // republished ones carry FRESH timestamps generated at fresh-run time,
+        // so the frozen-prefixed filename is gone.
+        $this->assertStringStartsNotWith('2026_05_06_', basename($accounts[0]));
     }
 
     public function test_fresh_preserves_the_published_config_file(): void

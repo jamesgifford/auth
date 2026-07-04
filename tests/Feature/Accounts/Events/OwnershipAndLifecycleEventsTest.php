@@ -60,6 +60,7 @@ class OwnershipAndLifecycleEventsTest extends AccountsTestCase
         Event::assertDispatched(AccountDeleted::class, function (AccountDeleted $event) use ($account) {
             return $event->account->id === $account->id;
         });
+        Event::assertDispatched(AccountDeleted::class, 1);
     }
 
     public function test_account_restored_event_fires_with_correct_transfer(): void
@@ -74,6 +75,7 @@ class OwnershipAndLifecycleEventsTest extends AccountsTestCase
         Event::assertDispatched(AccountRestored::class, function (AccountRestored $event) use ($account) {
             return $event->account->id === $account->id;
         });
+        Event::assertDispatched(AccountRestored::class, 1);
     }
 
     public function test_account_force_deleted_event_fires_with_pre_delete_snapshot(): void

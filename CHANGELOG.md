@@ -5,7 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-07-03
+
+### Changed
+- Migration publishing now assigns **fresh timestamps** at publish time. `jamesgifford:auth:install` copies the package's migrations into `database/migrations/` with new timestamp prefixes generated at that moment (sequential, in dependency order), instead of the package's frozen source timestamps. This guarantees they sort after the app's system migrations and before project migrations added later — fixing an ordering failure where a project migration with an `account_id` foreign key could sort before the package's `accounts` migration and fail under `migrate:fresh` / `setup --fresh`.
+- The package's own migrations are identified by their descriptive **stem** (the part after the `YYYY_MM_DD_HHMMSS_` prefix) rather than exact filenames, so `--fresh` and `uninstall` still find and remove the published copies despite their now-variable timestamps. Each published file also carries a comment noting it was published by the package.
+
+### Upgrade note
+- Apps installed with a previous version recorded the migrations under the package's original frozen filenames. Because publishing now emits fresh filenames, an in-place upgrade would make Laravel see them as un-run and fail (the tables already exist). Reconcile with a **fresh setup**: `php artisan jamesgifford:auth:setup --fresh` (or `migrate:fresh` followed by `jamesgifford:auth:install`). This is a development-rebuild workflow; no automatic migration-record reconciliation is attempted.
 
 ## [1.0.0] - 2026-06-28
 

@@ -122,6 +122,15 @@ class AuthServiceProvider extends ServiceProvider
             __DIR__.'/../config/auth.php' => config_path('jamesgifford/auth.php'),
         ], 'jamesgifford-auth-config');
 
+        // Migrations are PUBLISHED into the consumer's database/migrations as
+        // real files (never loadMigrationsFrom'd), so they run in the normal
+        // merged-timestamp order alongside the app's own migrations. This
+        // registration exposes them to `vendor:publish` for completeness, but
+        // the blessed path is `jamesgifford:auth:install`, which publishes them
+        // with FRESH timestamps generated at setup time (see PackageMigrations)
+        // so they sort correctly — after the app's system migrations, before its
+        // project migrations. A raw `vendor:publish` would copy the frozen source
+        // timestamps verbatim and is not the recommended install path.
         $this->publishes([
             __DIR__.'/../database/migrations/' => database_path('migrations'),
         ], 'jamesgifford-auth-migrations');

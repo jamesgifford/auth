@@ -84,17 +84,6 @@ class AccountServiceCreateTest extends AccountsTestCase
         $this->assertTrue($membership->joined_at->between($before, $after));
     }
 
-    public function test_account_created_event_is_dispatched(): void
-    {
-        Event::fake([AccountCreated::class]);
-
-        $owner = User::factory()->create();
-
-        $this->service->create($owner);
-
-        Event::assertDispatched(AccountCreated::class, 1);
-    }
-
     public function test_event_carries_account_user_and_membership_transfers(): void
     {
         Event::fake([AccountCreated::class]);
