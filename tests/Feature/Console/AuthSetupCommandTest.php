@@ -390,6 +390,205 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringNotContainsString('no offset configured', $output);
     }
 
+    // ---- Offsets are applied ONLY as the final step, after dev-data seeding ----
+
+    public function test_install_step_does_not_apply_offsets_only_the_final_step_does(): void
+    {
+        // With offsets configured AND dev data, the offset must be applied LAST
+        // (Step 4) — never during install (Step 2), which would push the dev
+        // fixtures up to the offset instead of leaving them the low ids.
+        $this->app['env'] = 'local';
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+
+        // install's own offset block (its unique arrow-prefixed line) must NOT
+        // appear — setup invokes install with --skip-id-offsets.
+        $this->assertStringNotContainsString('→ Applying configured ID offsets', $output);
+
+        // The offset was still applied — but only by the final step, i.e. AFTER
+        // dev-data seeding (Step 3). The offset reason (read from config, no-op
+        // on SQLite) must appear strictly after the Step 3 seed marker.
+        $seed = strpos($output, 'Step 3/4');
+        $offsetReason = strpos($output, 'does not support id offsets');
+        $this->assertNotFalse($seed);
+        $this->assertNotFalse($offsetReason, 'offsets should still be applied (as the final step)');
+        $this->assertTrue($offsetReason > $seed, 'offsets must be applied AFTER dev-data seeding, not during install');
+    }
+
+    public function test_dev_users_take_the_low_ids_with_the_offset_applied_after_seeding(): void
+    {
+        // With a users offset configured, dev users must seed FIRST and take the
+        // natural low ids (1, 2, 3...), NOT start at the offset value. On SQLite
+        // the offset ALTER is a no-op, so this asserts the seed-then-offset
+        // ordering via the resulting low ids (the step-order test above pins the
+        // "install never applies offsets" half that SQLite can't observe).
+        $this->app['env'] = 'local';
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+
+        $firstUserId = (int) DB::table('users')->orderBy('id')->value('id');
+        $this->assertSame(1, $firstUserId, 'the first dev user must take id 1, not the offset value (11)');
+
+        $firstAccountId = (int) DB::table('accounts')->orderBy('id')->value('id');
+        $this->assertSame(1, $firstAccountId, 'the first dev account must take id 1, not the offset value (1001)');
+    }
+
+    public function test_offsets_are_applied_without_dev_data_too(): void
+    {
+        // No --with-dev-data: there is nothing to seed below the offset, but the
+        // offset must still be applied (as the final step).
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        // Applied by the final step only (install skipped it), and read from
+        // config rather than reported as absent.
+        $this->assertStringNotContainsString('→ Applying configured ID offsets', $output);
+        $this->assertStringContainsString('does not support id offsets', $output);
+        $this->assertStringNotContainsString('no offset configured', $output);
+    }
+
+    // ---- Pre-flight: dev-data record count vs. configured id offset ----
+
+    public function test_with_dev_data_aborts_when_users_offset_is_at_or_below_dev_user_count(): void
+    {
+        $this->app['env'] = 'local'; // dev data would actually seed here
+        $devUsers = count((array) config('jamesgifford.auth-dev.users'));
+
+        // offset == N is invalid: real records would collide with the dev user
+        // sitting at id N (valid boundary is N+1).
+        config(['jamesgifford.auth.id_offsets' => ['users' => $devUsers, 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString(
+            "The configured users id offset ({$devUsers}) must be greater than the number of dev-data users ({$devUsers}).",
+            $output
+        );
+        $this->assertStringContainsString("collides with dev users at ids 1-{$devUsers}", $output);
+        $this->assertStringContainsString('Set the users offset to at least '.($devUsers + 1), $output);
+        $this->assertStringContainsString(IdOffsetManager::envKeyFor('users'), $output);
+
+        // Fails fast: aborted BEFORE Step 1 — nothing migrated or seeded.
+        $this->assertStringNotContainsString('Step 1/4', $output);
+        $this->assertFalse(Schema::hasTable('accounts'), 'no schema may be created when the pre-flight aborts');
+    }
+
+    public function test_with_dev_data_aborts_when_users_offset_is_well_below_dev_user_count(): void
+    {
+        $this->app['env'] = 'local';
+        $devUsers = count((array) config('jamesgifford.auth-dev.users'));
+        $this->assertGreaterThan(2, $devUsers, 'fixture assumes the shipped dev cast has >2 users');
+
+        config(['jamesgifford.auth.id_offsets' => ['users' => 2, 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString(
+            "The configured users id offset (2) must be greater than the number of dev-data users ({$devUsers}).",
+            $output
+        );
+        $this->assertStringNotContainsString('Step 1/4', $output);
+        $this->assertFalse(Schema::hasTable('accounts'));
+    }
+
+    public function test_with_dev_data_proceeds_when_users_offset_is_exactly_one_above_the_count(): void
+    {
+        $this->app['env'] = 'local';
+        $devUsers = count((array) config('jamesgifford.auth-dev.users'));
+
+        // N+1 is the valid boundary: real records start immediately after the
+        // dev fixtures, no gap.
+        config(['jamesgifford.auth.id_offsets' => ['users' => $devUsers + 1, 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('Setup complete.', $output);
+        $this->assertStringNotContainsString('must be greater than the number of dev-data', $output);
+        // Dev data seeded, taking the low ids.
+        $this->assertSame(1, (int) DB::table('users')->orderBy('id')->value('id'));
+    }
+
+    public function test_with_dev_data_proceeds_when_users_offset_is_well_above_the_count(): void
+    {
+        $this->app['env'] = 'local';
+        config(['jamesgifford.auth.id_offsets' => ['users' => 1000, 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('Setup complete.', $output);
+        $this->assertStringNotContainsString('must be greater than the number of dev-data', $output);
+    }
+
+    public function test_with_dev_data_validates_the_accounts_offset_independently(): void
+    {
+        $this->app['env'] = 'local';
+        $devAccounts = count((array) config('jamesgifford.auth-dev.accounts'));
+
+        // users offset is fine; only the accounts offset is too low.
+        config(['jamesgifford.auth.id_offsets' => ['users' => 1000, 'accounts' => $devAccounts]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString(
+            "The configured accounts id offset ({$devAccounts}) must be greater than the number of dev-data accounts ({$devAccounts}).",
+            $output
+        );
+        $this->assertStringContainsString("collides with dev accounts at ids 1-{$devAccounts}", $output);
+        $this->assertStringContainsString('Set the accounts offset to at least '.($devAccounts + 1), $output);
+        $this->assertStringContainsString(IdOffsetManager::envKeyFor('accounts'), $output);
+        $this->assertStringNotContainsString('Step 1/4', $output);
+    }
+
+    public function test_without_dev_data_a_low_offset_is_accepted_check_skipped(): void
+    {
+        // No --with-dev-data: no dev records exist below the offset, so even an
+        // offset of 1 is valid — the pre-flight must not run.
+        config(['jamesgifford.auth.id_offsets' => ['users' => 1, 'accounts' => 1]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringNotContainsString('must be greater than the number of dev-data', $output);
+        $this->assertStringContainsString('Setup complete.', $output);
+    }
+
+    public function test_null_offset_skips_the_dev_data_preflight(): void
+    {
+        $this->app['env'] = 'local';
+        // Offsets disabled (null) — the pre-flight has nothing to validate even
+        // though dev data will seed.
+        config(['jamesgifford.auth.id_offsets' => ['users' => null, 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringNotContainsString('must be greater than the number of dev-data', $output);
+        $this->assertStringContainsString('Setup complete.', $output);
+    }
+
     // ---- --fresh preserves existing config files (and their values) ----
 
     public function test_fresh_preserves_an_existing_config_file_and_its_custom_offset(): void

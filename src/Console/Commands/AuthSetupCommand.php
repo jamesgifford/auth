@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
+use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
@@ -21,7 +22,10 @@ use Throwable;
  *
  * Ordering is deliberate: install (schema + roles) must precede dev-data
  * seeding, and apply-id-offsets runs LAST so the auto-increment counter lands
- * above any rows the seeding just inserted.
+ * above any rows the seeding just inserted. install is therefore invoked with
+ * --skip-id-offsets — it would otherwise apply offsets at Step 2, before the
+ * dev data is seeded, pushing the dev fixtures up to the offset instead of the
+ * low ids. Offsets are applied exactly once, here in Step 4.
  *
  * Interactivity is gated: when run interactively (no --force), it publishes the
  * config and PAUSES — before the irreversible public_id lock — to explain the
@@ -42,6 +46,11 @@ use Throwable;
  *    always refused by the seeder, even with the flag).
  *  - --force only suppresses the interactive pause and is propagated to the
  *    migrate step so the sequence can run unattended.
+ *  - With --with-dev-data, a pre-flight (before Step 1) refuses any configured
+ *    id offset that is <= the number of dev records for that table: the dev
+ *    fixtures take ids 1..N, so an offset there could never start real records
+ *    above them. It ERRORS (rather than silently no-opping) with nothing yet
+ *    migrated or seeded. Only runs where the seeder would actually seed.
  */
 final class AuthSetupCommand extends Command
 {
@@ -96,6 +105,18 @@ final class AuthSetupCommand extends Command
             return self::FAILURE;
         }
 
+        // Pre-flight: when dev data will be seeded, a configured id offset must
+        // leave room ABOVE the dev fixtures — the dev records take ids 1..N, and
+        // an offset <= N could never start real records above them. Validate
+        // BEFORE Step 1 so an unusable offset fails fast, with nothing migrated
+        // or seeded (no partial work) and a clear message to fix the config.
+        if ($withDevData) {
+            $code = $this->validateDevDataOffsets();
+            if ($code !== self::SUCCESS) {
+                return $code;
+            }
+        }
+
         // Step 1 — database schema.
         $migrate = $fresh ? 'migrate:fresh' : 'migrate';
         $this->step(1, $fresh
@@ -122,7 +143,14 @@ final class AuthSetupCommand extends Command
         // command's single interactive touch-point, so install never re-prompts.
         // --publish-models so a full setup also writes the editable App\Models
         // subclasses (install skips publishing under --force without this).
-        $code = $this->call('jamesgifford:auth:install', ['--force' => true, '--publish-models' => true]);
+        // --skip-id-offsets so install does NOT apply offsets here (before any
+        // dev-data seeding); setup applies them itself as its final Step 4, after
+        // seeding, so dev fixtures keep the low ids and the offset lands above.
+        $code = $this->call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--publish-models' => true,
+            '--skip-id-offsets' => true,
+        ]);
         if ($code !== self::SUCCESS) {
             return $this->abort('jamesgifford:auth:install', $code);
         }
@@ -153,6 +181,79 @@ final class AuthSetupCommand extends Command
 
         $this->newLine();
         $this->info('Setup complete.');
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Pre-flight validation for the --with-dev-data path: a configured id offset
+     * must be GREATER THAN the number of dev records for that table, because the
+     * dev fixtures occupy ids 1..N and the offset (the auto-increment start for
+     * real records) cannot be set at or below them.
+     *
+     *  - offset > N   → valid (real records start above the fixtures, with a gap)
+     *  - offset == N+1 → valid (real records start immediately after the fixtures)
+     *  - offset <= N   → INVALID (collision with dev ids 1..N) → abort
+     *
+     * Runs only when dev data will ACTUALLY seed (the flag AND an allowed
+     * environment): in a non-seeding environment no dev rows are inserted, so no
+     * offset can collide and there is nothing to validate. Null offsets and
+     * non-integer offsets are skipped here — the former disables the feature, the
+     * latter is IdOffsetManager's own validation concern.
+     */
+    private function validateDevDataOffsets(): int
+    {
+        // Only meaningful when the seeder would actually run here. Its env guard
+        // is non-throwing and touches no database, so it is safe this early.
+        if (! $this->laravel->make(DevDataSeeder::class)->environmentAllowed()) {
+            return self::SUCCESS;
+        }
+
+        $devCounts = [
+            'users' => count((array) config('jamesgifford.auth-dev.users', [])),
+            'accounts' => count((array) config('jamesgifford.auth-dev.accounts', [])),
+        ];
+
+        /** @var array<string, mixed> $offsets */
+        $offsets = (array) config('jamesgifford.auth.id_offsets', []);
+
+        foreach ($devCounts as $table => $count) {
+            $offset = IdOffsetManager::normalizeOffset($offsets[$table] ?? null);
+
+            // Null disables the offset; a non-int is rejected later by the
+            // manager itself — neither is a dev-data collision to flag here.
+            if (! is_int($offset)) {
+                continue;
+            }
+
+            if ($offset <= $count) {
+                $this->newLine();
+                $this->error(sprintf(
+                    'The configured %s id offset (%d) must be greater than the number of dev-data %s (%d).',
+                    $table,
+                    $offset,
+                    $table,
+                    $count,
+                ));
+                $this->newLine();
+                $this->line(sprintf(
+                    'The offset reserves ids above the dev fixtures; an offset of %d collides with dev %s at ids 1-%d.',
+                    $offset,
+                    $table,
+                    $count,
+                ));
+                $this->line(sprintf(
+                    'Set the %s offset to at least %d (%s), or higher to leave a gap.',
+                    $table,
+                    $count + 1,
+                    IdOffsetManager::envKeyFor($table),
+                ));
+                $this->newLine();
+                $this->line('Nothing has been changed — fix the offset and re-run.');
+
+                return self::FAILURE;
+            }
+        }
 
         return self::SUCCESS;
     }

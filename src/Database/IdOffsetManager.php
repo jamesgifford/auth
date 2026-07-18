@@ -52,7 +52,7 @@ final class IdOffsetManager
 
         $results = [];
         foreach (self::TABLES as $table) {
-            $results[] = $this->applyToTable($table, $this->normalizeOffset($offsets[$table] ?? null));
+            $results[] = $this->applyToTable($table, self::normalizeOffset($offsets[$table] ?? null));
         }
 
         return $results;
@@ -89,8 +89,12 @@ final class IdOffsetManager
      * have read it from an environment variable, so it arrives as a string):
      * an integer-looking string is cast to int; anything else is passed through
      * untouched for validation to accept (int) or reject.
+     *
+     * Static and public so callers that need to reason about the configured
+     * offset before applying it (e.g. the setup command's dev-data pre-flight)
+     * read the exact same value this manager will act on.
      */
-    private function normalizeOffset(mixed $value): mixed
+    public static function normalizeOffset(mixed $value): mixed
     {
         if (is_string($value) && preg_match('/^-?\d+$/', trim($value)) === 1) {
             return (int) trim($value);

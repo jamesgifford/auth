@@ -44,6 +44,7 @@ final class AuthInstallCommand extends Command
         {--fresh : Tear down and cleanly redo the package setup (development only; refuses if package data exists)}
         {--without-http : Disable the HTTP plumbing (routes + middleware); sets http.enabled = false in the published config}
         {--publish-models : Publish editable App\Models subclasses (Account, AccountUser, AccountRole) without prompting}
+        {--skip-id-offsets : Skip applying configured ID offsets (the orchestrating setup command applies them LAST, after any dev-data seeding, so it invokes install with this flag)}
         {--verify : Only run verification; don\'t modify anything}';
 
     protected $description = 'Install and configure the JamesGifford Auth package in this application.';
@@ -133,7 +134,14 @@ final class AuthInstallCommand extends Command
         // Final step: apply configured auto-increment offsets, after all data
         // (migrations + role seeding) is in place. No-op by default (null
         // offsets). --fresh falls through to this same tail, so it re-applies.
-        $this->maybeApplyIdOffsets();
+        //
+        // Skipped under --skip-id-offsets: the setup command passes that flag so
+        // it can apply offsets itself as its OWN final step, AFTER dev-data
+        // seeding — otherwise offsets applied here (before setup seeds dev data)
+        // would push the dev fixtures up to the offset instead of the low ids.
+        if (! $this->option('skip-id-offsets')) {
+            $this->maybeApplyIdOffsets();
+        }
 
         $this->newLine();
         $this->displayNextSteps();

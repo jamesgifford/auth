@@ -452,6 +452,25 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringNotContainsString('Applying configured ID offsets', $output);
     }
 
+    public function test_skip_id_offsets_suppresses_the_offset_step_even_when_configured(): void
+    {
+        // The setup command passes --skip-id-offsets so it can apply offsets
+        // itself LAST (after dev-data seeding). Even with offsets configured,
+        // install must not apply them under this flag.
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--skip-id-offsets' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertStringNotContainsString('Applying configured ID offsets', $output);
+        $this->assertStringNotContainsString('does not support id offsets', $output);
+    }
+
     // ---- Model publishing during install ----
 
     public function test_publish_models_flag_publishes_during_install(): void
