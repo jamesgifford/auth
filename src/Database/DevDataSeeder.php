@@ -162,15 +162,31 @@ final class DevDataSeeder extends Seeder
         foreach ($userDeclarations as $declaration) {
             $email = (string) $declaration['email'];
 
+            // firstOrNew keyed on email makes this idempotent: an existing user
+            // (including one left over from before an uninstall — uninstall drops
+            // the package columns but NOT the user rows) is FOUND and updated
+            // rather than duplicated, so a re-seed never hits users_email_unique.
             $user = $userClass::query()->firstOrNew(['email' => $email]);
             $user->name = $declaration['name'] ?? $email;
             $user->password = $password;
 
-            if (! $user->exists
-                && empty($user->public_id)
-                && ! $userAutoGeneratesPublicId
+            // Assign a public_id explicitly whenever the row would otherwise be
+            // left without one and the trait can't fill it. That covers two
+            // cases the trait's create-only hook misses:
+            //   1. A NEW user under a stale, trait-less in-process User model
+            //      (install just edited the file; PHP can't reload the class).
+            //   2. An EXISTING leftover user with a null public_id — the column
+            //      was dropped by uninstall and re-added, and the trait only
+            //      generates on `creating`, never on the update of an existing
+            //      row. (The re-add migration backfills these too, but the
+            //      seeder stays correct on its own.)
+            // Skipped only when the model DOES auto-generate AND the user is new
+            // (the trait handles it on create), or the row already has an id.
+            $needsExplicitPublicId = empty($user->public_id)
                 && $user->getConnection()->getSchemaBuilder()->hasColumn($user->getTable(), 'public_id')
-            ) {
+                && ($user->exists || ! $userAutoGeneratesPublicId);
+
+            if ($needsExplicitPublicId) {
                 $user->public_id = PublicId::generate($this->resolveUserPrefix($userClass));
             }
 

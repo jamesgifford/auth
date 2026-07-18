@@ -4,20 +4,43 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        // Add the column as NULLABLE first. It must be addable to a `users`
+        // table that ALREADY has rows — leftover users after an uninstall that
+        // preserved user data (uninstall drops this column but NOT the rows), or
+        // installing the package into an app that already has users. A NOT NULL
+        // unique column cannot be added to a populated table: SQLite rejects
+        // "Cannot add a NOT NULL column with default value NULL", and MySQL would
+        // backfill every existing row with '' and immediately violate the unique
+        // index (users_public_id_unique).
         Schema::table('users', function (Blueprint $table) {
             $table->string('public_id', PublicId::maxLength())
-                ->unique()
+                ->nullable()
                 ->after('id');
 
             // current_account_id FK added in a separate migration after
             // the accounts table exists.
+        });
+
+        // Backfill every pre-existing row with a valid, unique public_id so none
+        // is left null and the unique index below can be enforced.
+        $this->backfillPublicIds();
+
+        // Now enforce the intended constraints: every row has a value, so the
+        // column can become NOT NULL and gain its unique index.
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('public_id', PublicId::maxLength())
+                ->nullable(false)
+                ->change();
+            $table->unique('public_id');
         });
     }
 
@@ -38,6 +61,50 @@ return new class extends Migration
 
             $table->dropColumn('public_id');
         });
+    }
+
+    /**
+     * Give every existing users row that lacks a public_id a freshly generated,
+     * valid one. Runs on fresh installs (a no-op — the table is empty) and on
+     * re-installs where leftover rows carry null (or, defensively, empty) values.
+     */
+    private function backfillPublicIds(): void
+    {
+        $prefix = $this->userPrefix();
+
+        $ids = DB::table('users')
+            ->where(function ($query) {
+                $query->whereNull('public_id')->orWhere('public_id', '');
+            })
+            ->orderBy('id')
+            ->pluck('id');
+
+        foreach ($ids as $id) {
+            DB::table('users')
+                ->where('id', $id)
+                ->update(['public_id' => PublicId::generate($prefix)]);
+        }
+    }
+
+    /**
+     * The public_id prefix for the configured user model, resolved the same way
+     * the HasPublicId trait resolves it at runtime, so backfilled ids match the
+     * prefix new rows will use. Falls back to 'user' when the model isn't
+     * registered/resolvable (the migration must never fail over a lookup).
+     */
+    private function userPrefix(): string
+    {
+        $userClass = config('jamesgifford.auth.models.user');
+
+        if (is_string($userClass) && class_exists($userClass)) {
+            try {
+                return app(PrefixRegistry::class)->prefixFor($userClass);
+            } catch (Throwable) {
+                // fall through to the default
+            }
+        }
+
+        return 'user';
     }
 
     /**

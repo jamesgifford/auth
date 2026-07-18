@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Console;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Exceptions\DevDataSeedingNotAllowedException;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
@@ -195,10 +200,114 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
         $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
         $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
 
-        // updateOrCreate on email — no duplicates, no error, one account.
+        // firstOrNew keyed on email — no duplicates, no error, one account.
         $this->assertSame(2, User::query()->count());
         $owner = User::query()->where('email', 'owner@example.test')->firstOrFail();
         $this->assertSame(1, $owner->ownedAccounts()->count());
+    }
+
+    // ---- Idempotency across an uninstall → reinstall → re-seed cycle ----
+
+    public function test_reseed_after_uninstall_reinstall_reconciles_leftover_users(): void
+    {
+        // 1. Seed dev data — the users, accounts and memberships exist.
+        $this->app->make(DevDataSeeder::class)->seed();
+        $this->assertSame(2, User::query()->count());
+        $ownerIdBefore = (int) User::query()->where('email', 'owner@example.test')->value('id');
+
+        // 2. Uninstall: roll back the package schema (drops the accounts tables
+        //    and the columns added to users) but LEAVE the user rows — exactly
+        //    what the real uninstall does (it never deletes user data).
+        $this->uninstallPackageSchema();
+        $this->assertFalse(Schema::hasColumn('users', 'public_id'));
+        $this->assertSame(2, DB::table('users')->count(), 'user rows survive uninstall');
+
+        // 3. Reinstall: re-add the columns/tables. The users-column migration
+        //    backfills a public_id for the leftover rows. Roles are recreated.
+        $this->reinstallPackageSchema();
+        Model::clearBootedModels();
+        $this->seedRoles();
+
+        // 4. Re-seed — this previously failed with a NOT NULL / duplicate-key
+        //    error on public_id when the column was re-added to a populated table.
+        $this->app->make(DevDataSeeder::class)->seed();
+
+        // Reconciled, not duplicated: same rows reused (found by email).
+        $this->assertSame(2, User::query()->count());
+        $this->assertSame(
+            $ownerIdBefore,
+            (int) User::query()->where('email', 'owner@example.test')->value('id'),
+            'the leftover owner row is reused, not replaced/duplicated',
+        );
+
+        // Every user has a valid public_id.
+        foreach (User::query()->get() as $user) {
+            $this->assertNotNull($user->public_id, "user {$user->email} has no public_id");
+            $this->assertTrue(PublicId::isValid((string) $user->public_id), "invalid public_id: {$user->public_id}");
+        }
+
+        // Fresh accounts/memberships attach to the EXISTING (leftover) users.
+        $owner = User::query()->where('email', 'owner@example.test')->firstOrFail();
+        $this->assertSame(1, $owner->ownedAccounts()->count());
+        $member = User::query()->where('email', 'member@example.test')->firstOrFail();
+        $this->assertTrue($member->belongsToAccount($owner->ownedAccounts()->firstOrFail()));
+    }
+
+    public function test_leftover_user_without_public_id_gets_one_on_re_seed(): void
+    {
+        // Simulate a leftover user carrying a NULL public_id (the state a re-add
+        // leaves before backfill, or a row the trait's create-only hook never
+        // touched). Make the column nullable so we can create that state.
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('public_id')->nullable()->change();
+        });
+
+        $id = DB::table('users')->insertGetId([
+            'name' => 'Old Owner',
+            'email' => 'owner@example.test', // matches a declared dev user
+            'password' => Hash::make('x'),
+            'public_id' => null,
+        ]);
+        $this->assertNull(DB::table('users')->where('id', $id)->value('public_id'));
+
+        $this->app->make(DevDataSeeder::class)->seed();
+
+        // The seeder FOUND the leftover user (no duplicate) and, because it had
+        // no public_id, assigned a valid one on the update path.
+        $this->assertSame(1, DB::table('users')->where('email', 'owner@example.test')->count());
+        $publicId = DB::table('users')->where('id', $id)->value('public_id');
+        $this->assertNotNull($publicId);
+        $this->assertTrue(PublicId::isValid((string) $publicId));
+    }
+
+    public function test_reinstall_migration_backfills_public_id_for_all_existing_users(): void
+    {
+        // A NON-dev user that predates the package (or survived an uninstall).
+        $this->app->make(DevDataSeeder::class)->seed();
+        $strayId = DB::table('users')->insertGetId([
+            'name' => 'Stray',
+            'email' => 'stray@example.test',
+            'password' => Hash::make('x'),
+            'public_id' => PublicId::generate('user'),
+        ]);
+
+        // Uninstall strips public_id from every row; reinstall re-adds it.
+        $this->uninstallPackageSchema();
+        $this->assertFalse(Schema::hasColumn('users', 'public_id'));
+
+        $this->reinstallPackageSchema();
+
+        // The migration backfilled public_id for ALL pre-existing rows — dev and
+        // non-dev alike — so none is left null and the unique index holds.
+        $this->assertSame(0, DB::table('users')->whereNull('public_id')->count());
+        $stray = DB::table('users')->where('id', $strayId)->first();
+        $this->assertNotNull($stray->public_id);
+        $this->assertTrue(PublicId::isValid((string) $stray->public_id));
+
+        // And the values are unique across all rows.
+        $total = (int) DB::table('users')->count();
+        $distinct = (int) DB::table('users')->distinct()->count('public_id');
+        $this->assertSame($total, $distinct, 'backfilled public_ids must be unique');
     }
 
     public function test_password_is_sourced_from_config_not_hardcoded(): void
@@ -374,6 +483,43 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
     /**
      * @param  array<string, mixed>  $overrides
      */
+    /**
+     * The package migration files, in filename (run) order.
+     *
+     * @return list<string>
+     */
+    private function packageMigrationPaths(): array
+    {
+        /** @var list<string> $paths */
+        $paths = (array) glob(__DIR__.'/../../../database/migrations/*.php');
+        sort($paths);
+
+        return $paths;
+    }
+
+    /**
+     * Simulate uninstall: roll the package migrations back in reverse order,
+     * dropping the accounts tables and the columns added to users while leaving
+     * the user rows intact. (`require` — not `require_once` — re-executes the
+     * file and returns a fresh migration instance each call.)
+     */
+    private function uninstallPackageSchema(): void
+    {
+        foreach (array_reverse($this->packageMigrationPaths()) as $path) {
+            (require $path)->down();
+        }
+    }
+
+    /**
+     * Simulate reinstall: re-run the package migrations in order.
+     */
+    private function reinstallPackageSchema(): void
+    {
+        foreach ($this->packageMigrationPaths() as $path) {
+            (require $path)->up();
+        }
+    }
+
     private function configureDevData(array $overrides = []): void
     {
         config(['jamesgifford.auth-dev' => array_merge([
