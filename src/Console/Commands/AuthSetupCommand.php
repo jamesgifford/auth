@@ -197,9 +197,20 @@ final class AuthSetupCommand extends Command
      *
      * Runs only when dev data will ACTUALLY seed (the flag AND an allowed
      * environment): in a non-seeding environment no dev rows are inserted, so no
-     * offset can collide and there is nothing to validate. Null offsets and
-     * non-integer offsets are skipped here — the former disables the feature, the
-     * latter is IdOffsetManager's own validation concern.
+     * offset can collide and there is nothing to validate. A null offset is
+     * skipped (the feature is disabled); a malformed offset (non-integer or < 1)
+     * is ERRORED here rather than left to fail at the final apply step, so the
+     * whole class of offset-config mistakes is caught before anything is mutated.
+     *
+     * The counts are the number of rows the seeder will ACTUALLY insert, not the
+     * raw declaration counts: users are deduplicated by email (firstOrNew) and an
+     * account is only seeded when it has a name and an owner that resolves to a
+     * declared user — matching {@see DevDataSeeder::seed()}.
+     *
+     * The check assumes the dev fixtures land on ids 1..N, which holds for the
+     * intended use — a fresh/empty database (with or without --fresh). It cannot
+     * query the users table here (it may not exist until Step 1's migrate), so it
+     * validates against the config, not existing rows.
      */
     private function validateDevDataOffsets(): int
     {
@@ -209,10 +220,7 @@ final class AuthSetupCommand extends Command
             return self::SUCCESS;
         }
 
-        $devCounts = [
-            'users' => count((array) config('jamesgifford.auth-dev.users', [])),
-            'accounts' => count((array) config('jamesgifford.auth-dev.accounts', [])),
-        ];
+        $devCounts = $this->effectiveDevRecordCounts();
 
         /** @var array<string, mixed> $offsets */
         $offsets = (array) config('jamesgifford.auth.id_offsets', []);
@@ -220,10 +228,31 @@ final class AuthSetupCommand extends Command
         foreach ($devCounts as $table => $count) {
             $offset = IdOffsetManager::normalizeOffset($offsets[$table] ?? null);
 
-            // Null disables the offset; a non-int is rejected later by the
-            // manager itself — neither is a dev-data collision to flag here.
-            if (! is_int($offset)) {
+            // Null disables the offset — nothing to validate.
+            if ($offset === null) {
                 continue;
+            }
+
+            // Fail fast on a malformed offset (e.g. a non-numeric typo in the
+            // env var). Left unchecked it would pass here and only throw at the
+            // final apply-id-offsets step — AFTER migrate and dev-data seeding
+            // have already run, defeating this pre-flight's whole purpose.
+            if (! is_int($offset) || $offset < 1) {
+                $this->newLine();
+                $this->error(sprintf(
+                    'The configured %s id offset must be a positive integer, got %s.',
+                    $table,
+                    var_export($offsets[$table] ?? null, true),
+                ));
+                $this->newLine();
+                $this->line(sprintf(
+                    'Set a positive integer (%s) or remove it to disable the offset.',
+                    IdOffsetManager::envKeyFor($table),
+                ));
+                $this->newLine();
+                $this->line('Nothing has been changed — fix the offset and re-run.');
+
+                return self::FAILURE;
             }
 
             if ($offset <= $count) {
@@ -256,6 +285,46 @@ final class AuthSetupCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The number of dev rows the seeder will actually insert per table, matching
+     * {@see DevDataSeeder::seed()}: users deduplicated by (non-empty) email, and
+     * accounts deduplicated by name and counted only when they have a name and an
+     * owner that resolves to a declared user. Counting raw declarations instead
+     * would over-count (duplicate emails, unnamed/orphaned accounts) and could
+     * falsely reject an offset that is in fact above every seeded id.
+     *
+     * @return array{users: int, accounts: int}
+     */
+    private function effectiveDevRecordCounts(): array
+    {
+        /** @var list<array<string, mixed>> $userDeclarations */
+        $userDeclarations = (array) config('jamesgifford.auth-dev.users', []);
+        /** @var list<array<string, mixed>> $accountDeclarations */
+        $accountDeclarations = (array) config('jamesgifford.auth-dev.accounts', []);
+
+        $userEmails = [];
+        foreach ($userDeclarations as $declaration) {
+            $email = (string) ($declaration['email'] ?? '');
+            if ($email !== '') {
+                $userEmails[$email] = true;
+            }
+        }
+
+        $accountNames = [];
+        foreach ($accountDeclarations as $declaration) {
+            $name = (string) ($declaration['name'] ?? '');
+            $owner = (string) ($declaration['owner'] ?? '');
+            if ($name !== '' && isset($userEmails[$owner])) {
+                $accountNames[$name] = true;
+            }
+        }
+
+        return [
+            'users' => count($userEmails),
+            'accounts' => count($accountNames),
+        ];
     }
 
     /**

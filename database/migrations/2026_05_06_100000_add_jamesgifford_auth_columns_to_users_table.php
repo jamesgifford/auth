@@ -21,14 +21,23 @@ return new class extends Migration
         // "Cannot add a NOT NULL column with default value NULL", and MySQL would
         // backfill every existing row with '' and immediately violate the unique
         // index (users_public_id_unique).
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('public_id', PublicId::maxLength())
-                ->nullable()
-                ->after('id');
+        //
+        // Each step below is guarded to be individually re-runnable. Splitting
+        // the original single ALTER into add → backfill → constrain sacrifices
+        // the atomicity of one DDL statement; on MySQL (non-transactional DDL) a
+        // failure partway would otherwise leave the column added but the
+        // migration unrecorded, so a re-run must be able to pick up where it left
+        // off rather than abort on "Duplicate column name public_id".
+        if (! Schema::hasColumn('users', 'public_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->string('public_id', PublicId::maxLength())
+                    ->nullable()
+                    ->after('id');
 
-            // current_account_id FK added in a separate migration after
-            // the accounts table exists.
-        });
+                // current_account_id FK added in a separate migration after
+                // the accounts table exists.
+            });
+        }
 
         // Backfill every pre-existing row with a valid, unique public_id so none
         // is left null and the unique index below can be enforced.
@@ -40,7 +49,10 @@ return new class extends Migration
             $table->string('public_id', PublicId::maxLength())
                 ->nullable(false)
                 ->change();
-            $table->unique('public_id');
+
+            if (! $this->uniqueIndexExists('users', 'public_id')) {
+                $table->unique('public_id');
+            }
         });
     }
 
@@ -67,6 +79,12 @@ return new class extends Migration
      * Give every existing users row that lacks a public_id a freshly generated,
      * valid one. Runs on fresh installs (a no-op — the table is empty) and on
      * re-installs where leftover rows carry null (or, defensively, empty) values.
+     *
+     * Each row needs its OWN unique id, so this is inherently one UPDATE per row
+     * rather than a single set-based statement. The updates are wrapped in one
+     * transaction so a large existing users table incurs a single commit instead
+     * of one per row (a no-op wrapper on drivers/connections already in a
+     * transaction). Backfilling only null/empty rows keeps it re-runnable.
      */
     private function backfillPublicIds(): void
     {
@@ -79,11 +97,17 @@ return new class extends Migration
             ->orderBy('id')
             ->pluck('id');
 
-        foreach ($ids as $id) {
-            DB::table('users')
-                ->where('id', $id)
-                ->update(['public_id' => PublicId::generate($prefix)]);
+        if ($ids->isEmpty()) {
+            return;
         }
+
+        DB::transaction(function () use ($ids, $prefix) {
+            foreach ($ids as $id) {
+                DB::table('users')
+                    ->where('id', $id)
+                    ->update(['public_id' => PublicId::generate($prefix)]);
+            }
+        });
     }
 
     /**

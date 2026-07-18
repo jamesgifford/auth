@@ -589,6 +589,62 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('Setup complete.', $output);
     }
 
+    public function test_with_dev_data_aborts_early_on_a_malformed_offset(): void
+    {
+        // A non-numeric offset (e.g. an env-var typo) would pass a naive check
+        // and only blow up at the FINAL apply step — after migrate + seed. The
+        // pre-flight must catch it before anything is migrated or seeded.
+        $this->app['env'] = 'local';
+        config(['jamesgifford.auth.id_offsets' => ['users' => '100abc', 'accounts' => null]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('The configured users id offset must be a positive integer', $output);
+        $this->assertStringContainsString(IdOffsetManager::envKeyFor('users'), $output);
+        // Fails fast: nothing migrated or seeded.
+        $this->assertStringNotContainsString('Step 1/4', $output);
+        $this->assertFalse(Schema::hasTable('accounts'));
+    }
+
+    public function test_preflight_counts_seedable_rows_not_raw_declarations(): void
+    {
+        // A dev config that declares more entries than will actually seed:
+        // duplicate user email (firstOrNew dedups → 2 users, not 3) and an
+        // orphaned/unnamed account (skipped → 1 account, not 2). An offset equal
+        // to the DECLARED count but above the SEEDED count must be accepted.
+        $this->app['env'] = 'local';
+        config(['jamesgifford.auth-dev' => [
+            'environments' => ['local'],
+            'password' => 'password',
+            'accounts' => [
+                ['name' => 'Acme Inc', 'owner' => 'owner@dev.test'],
+                ['name' => '', 'owner' => 'owner@dev.test'], // unnamed → skipped
+                ['name' => 'Ghost', 'owner' => 'nobody@dev.test'], // orphan owner → skipped
+            ],
+            'users' => [
+                ['name' => 'Owner', 'email' => 'owner@dev.test'],
+                ['name' => 'Owner Dup', 'email' => 'owner@dev.test'], // dup email → dedup
+                ['name' => 'Second', 'email' => 'second@dev.test'],
+            ],
+        ]]);
+
+        // 2 users actually seed → offset 2 is the valid boundary (N+... wait: 2
+        // == N, invalid). Use offset 3 = seededUsers(2)+1 → valid; 1 account
+        // seeds → offset 2 valid. Raw declaration counts (3 users, 3 accounts)
+        // would have rejected these.
+        config(['jamesgifford.auth.id_offsets' => ['users' => 3, 'accounts' => 2]]);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringNotContainsString('must be greater than the number of dev-data', $output);
+        $this->assertSame(2, (int) DB::table('users')->count(), 'duplicate email deduped');
+        $this->assertSame(1, (int) DB::table('accounts')->count(), 'unnamed/orphan accounts skipped');
+    }
+
     // ---- --fresh preserves existing config files (and their values) ----
 
     public function test_fresh_preserves_an_existing_config_file_and_its_custom_offset(): void

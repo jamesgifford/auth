@@ -156,6 +156,14 @@ final class DevDataSeeder extends Seeder
 
         $counts = ['users' => 0, 'accounts' => 0, 'memberships' => 0];
 
+        // Whether the users table has a public_id column is invariant across the
+        // loop below, so resolve it once here rather than issuing a schema-
+        // introspection query (information_schema / PRAGMA) per declared user.
+        $probe = new $userClass;
+        $publicIdColumnExists = $probe->getConnection()
+            ->getSchemaBuilder()
+            ->hasColumn($probe->getTable(), 'public_id');
+
         // Pass 1: all users (idempotent on email) so accounts/memberships can
         // reference any of them regardless of declaration order.
         $usersByEmail = [];
@@ -183,7 +191,7 @@ final class DevDataSeeder extends Seeder
             // Skipped only when the model DOES auto-generate AND the user is new
             // (the trait handles it on create), or the row already has an id.
             $needsExplicitPublicId = empty($user->public_id)
-                && $user->getConnection()->getSchemaBuilder()->hasColumn($user->getTable(), 'public_id')
+                && $publicIdColumnExists
                 && ($user->exists || ! $userAutoGeneratesPublicId);
 
             if ($needsExplicitPublicId) {

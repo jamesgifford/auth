@@ -481,9 +481,6 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
     }
 
     /**
-     * @param  array<string, mixed>  $overrides
-     */
-    /**
      * The package migration files, in filename (run) order.
      *
      * @return list<string>
@@ -520,6 +517,9 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
     private function configureDevData(array $overrides = []): void
     {
         config(['jamesgifford.auth-dev' => array_merge([
