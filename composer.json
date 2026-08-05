@@ -36,6 +36,10 @@
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
+        "test:sqlite": [
+            "@putenv DB_CONNECTION=testing",
+            "vendor/bin/phpunit"
+        ],
         "format": "vendor/bin/pint",
         "format:check": "vendor/bin/pint --test",
         "analyse": "vendor/bin/phpstan analyse",

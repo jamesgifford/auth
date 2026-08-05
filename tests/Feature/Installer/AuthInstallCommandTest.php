@@ -435,9 +435,14 @@ class AuthInstallCommandTest extends TestCase
         Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
         $output = Artisan::output();
 
-        // The step runs after seeding; on SQLite it's a reported no-op.
+        // The step runs after seeding. On a real driver the offset is applied;
+        // on sqlite it's a reported no-op — either way, never silent.
         $this->assertStringContainsString('Applying configured ID offsets', $output);
-        $this->assertStringContainsString("accounts: skipped — driver 'sqlite' does not support", $output);
+        if ($this->databaseDriver() === 'sqlite') {
+            $this->assertStringContainsString("accounts: skipped — driver 'sqlite' does not support", $output);
+        } else {
+            $this->assertStringContainsString("accounts: set to 1001 ({$this->databaseDriver()})", $output);
+        }
     }
 
     public function test_install_is_silent_about_offsets_when_none_configured(): void

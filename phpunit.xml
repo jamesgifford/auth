@@ -22,4 +22,14 @@
             <directory>src</directory>
         </include>
     </source>
+    <php>
+        <!-- MariaDB is the package's real target; the suite runs against it by
+             default. These only apply when the variable is not already set, so
+             CI (or a one-off run) overrides them from the environment; use
+             `composer test:sqlite` for the fast in-memory loop. -->
+        <env name="DB_CONNECTION" value="mariadb"/>
+        <env name="DB_DATABASE" value="jamesgifford_auth_test"/>
+        <env name="DB_USERNAME" value="jamesgifford"/>
+        <env name="DB_SOCKET" value="/tmp/mysql.sock"/>
+    </php>
 </phpunit>

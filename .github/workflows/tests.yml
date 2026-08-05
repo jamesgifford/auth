@@ -18,7 +18,33 @@ jobs:
                     - laravel: '13.*'
                       testbench: '11.*'
 
-        name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+        name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }} / MariaDB
+
+        services:
+            mariadb:
+                image: mariadb:12
+                env:
+                    MARIADB_ROOT_PASSWORD: root
+                    MARIADB_DATABASE: jamesgifford_auth_test
+                ports:
+                    - 3306:3306
+                options: >-
+                    --health-cmd="healthcheck.sh --connect --innodb_initialized"
+                    --health-interval=10s
+                    --health-timeout=5s
+                    --health-retries=5
+
+        # phpunit.xml's <env> defaults only apply when a variable is UNSET, so
+        # these take precedence over the local-machine socket defaults. Note
+        # DB_SOCKET must be set (to empty) or the local socket path would leak in.
+        env:
+            DB_CONNECTION: mariadb
+            DB_HOST: 127.0.0.1
+            DB_PORT: 3306
+            DB_DATABASE: jamesgifford_auth_test
+            DB_USERNAME: root
+            DB_PASSWORD: root
+            DB_SOCKET: ''
 
         steps:
             - name: Checkout code
@@ -28,7 +54,7 @@ jobs:
               uses: shivammathur/setup-php@v2
               with:
                   php-version: ${{ matrix.php }}
-                  extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl
+                  extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, mysql, pdo_mysql, sqlite, pdo_sqlite, bcmath, intl
                   coverage: none
 
             - name: Cache Composer dependencies
@@ -42,5 +68,5 @@ jobs:
                   composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
                   composer update --prefer-dist --no-interaction --no-progress
 
-            - name: Run tests
+            - name: Run tests (MariaDB)
               run: vendor/bin/phpunit

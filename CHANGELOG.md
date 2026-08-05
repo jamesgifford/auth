@@ -5,6 +5,15 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The test suite now runs against **MariaDB by default** (the package's actual deployment target) instead of SQLite; `composer test:sqlite` remains as the fast in-memory development loop. The base test case purges the schema before each test on real drivers, restoring the hermetic per-test semantics sqlite `:memory:` provided implicitly.
+- CI's test matrix runs against a MariaDB service container (PHP 8.4/8.5 × Laravel 13).
+
+### Added
+- Real-driver offset verification: tests now prove `apply-id-offsets` (and install's offset step) genuinely move `AUTO_INCREMENT` — the next inserted row lands exactly at the configured offset. Previously this was a manual-verification item because SQLite cannot execute the statement. Driver-specific assertions guard themselves by the active driver.
+
 ## [1.2.0] - 2026-08-05
 
 ### Added

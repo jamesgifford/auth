@@ -84,6 +84,8 @@ class HasPublicIdTraitTest extends TestCase
 
     protected function defineDatabaseMigrations(): void
     {
+        parent::defineDatabaseMigrations();
+
         $this->loadMigrationsFrom(__DIR__.'/../../Support/migrations');
     }
 }

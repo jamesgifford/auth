@@ -436,9 +436,20 @@ php artisan jamesgifford:auth:uninstall
 
 The package ships with a comprehensive test suite covering both subsystems, the service layer's transaction and event behavior, the invariant enforcement, the HTTP layer, and the installer.
 
+The suite runs against **MariaDB by default** — the package's actual target — so driver-real behavior (`AUTO_INCREMENT` offsets, DDL against populated tables, constraint names) is genuinely exercised, not simulated. It expects a local MariaDB with a `jamesgifford_auth_test` database reachable via the settings in `phpunit.xml`'s `<php>` block (override any of them with environment variables; CI does exactly that to point at a service container).
+
 ```bash
+# Full suite against MariaDB (the integrity gate; slower — real DDL per test)
 composer test
+
+# Fast in-memory SQLite loop for day-to-day development
+composer test:sqlite
+
+# Pint + PHPStan + the MariaDB suite
+composer check
 ```
+
+Driver-specific tests guard themselves: sqlite-only assertions (the offset no-op messaging) skip on MariaDB and vice versa, so both commands run green with a couple of expected skips.
 
 ## License
 

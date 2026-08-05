@@ -12,13 +12,12 @@ use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 /**
  * NOTE ON TEST SCOPE
  * ------------------
- * These tests run on SQLite (Testbench), which does NOT support setting an
- * auto-increment start the way MySQL/MariaDB and PostgreSQL do. So we test the
- * LOGIC and the per-driver SQL GENERATION — NOT the actual offset taking effect.
- *
- * The real auto-increment behavior MUST be verified manually against a live
- * MySQL/MariaDB or PostgreSQL database; SQLite cannot honor these statements, so
- * asserting offset behavior here would be a false claim of verification.
+ * The suite's default database is MariaDB (the package's real target), where
+ * the offset ACTUALLY takes effect — asserted below by inserting rows and
+ * checking their ids. Driver-specific branches are guarded: the sqlite
+ * graceful-no-op test runs only under `composer test:sqlite`, and the
+ * real-effect test only on a real driver. Pure statementFor() generation
+ * tests run everywhere.
  */
 class IdOffsetManagerTest extends AccountsTestCase
 {
@@ -72,6 +71,10 @@ class IdOffsetManagerTest extends AccountsTestCase
 
     public function test_sqlite_driver_is_a_graceful_no_op_for_configured_offsets(): void
     {
+        if ($this->databaseDriver() !== 'sqlite') {
+            $this->markTestSkipped('Asserts the sqlite no-op path; run via composer test:sqlite.');
+        }
+
         config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
 
         // Must not throw, despite SQLite being unable to honor the offset.
@@ -82,6 +85,39 @@ class IdOffsetManagerTest extends AccountsTestCase
             $this->assertFalse($result['applied']);
             $this->assertStringContainsString("driver 'sqlite' does not support", $result['reason']);
         }
+    }
+
+    public function test_offsets_actually_take_effect_on_a_real_driver(): void
+    {
+        if ($this->databaseDriver() === 'sqlite') {
+            $this->markTestSkipped('Real AUTO_INCREMENT behavior needs mysql/mariadb.');
+        }
+
+        config(['jamesgifford.auth.id_offsets' => ['users' => 11, 'accounts' => 1001]]);
+
+        $results = $this->manager()->apply();
+
+        foreach ($results as $result) {
+            $this->assertTrue($result['applied'], "{$result['table']}: {$result['reason']}");
+            $this->assertNotNull($result['statement']);
+        }
+
+        // The proof sqlite could never give: the next inserted rows land
+        // exactly at the configured offsets.
+        $userId = DB::table('users')->insertGetId([
+            'name' => 'Offset Check',
+            'email' => 'offset-check@example.test',
+            'password' => bcrypt('secret'),
+            'public_id' => 'usr_offsetcheck000000',
+        ]);
+        $this->assertSame(11, $userId);
+
+        $accountId = DB::table('accounts')->insertGetId([
+            'public_id' => 'account_offsetcheck00',
+            'name' => 'Offset Check Workspace',
+            'owner_id' => $userId,
+        ]);
+        $this->assertSame(1001, $accountId);
     }
 
     public function test_offset_at_or_below_existing_max_id_is_skipped_with_a_reason(): void

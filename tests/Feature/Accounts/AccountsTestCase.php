@@ -51,6 +51,8 @@ abstract class AccountsTestCase extends TestCase
      */
     protected function defineDatabaseMigrations(): void
     {
+        parent::defineDatabaseMigrations();
+
         $this->loadLaravelMigrations();
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
     }
