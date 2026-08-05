@@ -12,7 +12,7 @@ use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Installer\UserModelModifier;
-use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\PublicId\AlphabetRegistry;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\ConfigGuard;
@@ -250,7 +250,7 @@ final class AuthInstallCommand extends Command
             return true;
         }
 
-        return AccountRole::findByKey(SystemRole::OWNER) === null;
+        return PackageModels::accountRole()::findByKey(SystemRole::OWNER) === null;
     }
 
     private function packageMigrationsHaveRun(): bool
@@ -625,7 +625,7 @@ final class AuthInstallCommand extends Command
             return false;
         }
 
-        if (AccountRole::findByKey(SystemRole::OWNER) === null) {
+        if (PackageModels::accountRole()::findByKey(SystemRole::OWNER) === null) {
             $this->error('Owner role still missing after seeding.');
 
             return false;
@@ -795,8 +795,8 @@ final class AuthInstallCommand extends Command
             $this->line('A fresh reinstall would orphan or destroy this data.');
             $this->newLine();
             $this->line('To remove the package when data exists, use the dedicated teardown');
-            $this->line('command `jamesgifford:auth:uninstall` (note: not yet available in this');
-            $this->line('version). Otherwise back up your data and reset manually before retrying.');
+            $this->line('command `jamesgifford:auth:uninstall`. Otherwise back up your data and');
+            $this->line('reset manually before retrying.');
 
             return self::FAILURE;
         }
@@ -1002,7 +1002,7 @@ final class AuthInstallCommand extends Command
         $check('account_roles table exists', Schema::hasTable('account_roles'));
         $check('account_user table exists', Schema::hasTable('account_user'));
 
-        $rolesOk = Schema::hasTable('account_roles') && AccountRole::findByKey(SystemRole::OWNER) !== null;
+        $rolesOk = Schema::hasTable('account_roles') && PackageModels::accountRole()::findByKey(SystemRole::OWNER) !== null;
         $check('System roles seeded (owner role present)', $rolesOk);
 
         if (! $this->shouldSkipUserModel()) {

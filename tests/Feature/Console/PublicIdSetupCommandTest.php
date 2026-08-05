@@ -48,7 +48,7 @@ class PublicIdSetupCommandTest extends TestCase
             ->expectsOutputToContain('Body length')
             ->expectsOutputToContain('lowercase_alphanumeric')
             ->expectsOutputToContain('Sample IDs')
-            ->expectsOutputToContain('usr_')
+            ->expectsOutputToContain('user_')
             ->expectsOutputToContain('Collision probability')
             ->expectsConfirmation('Lock this configuration?', 'no')
             ->assertSuccessful();

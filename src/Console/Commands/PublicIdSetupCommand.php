@@ -146,6 +146,11 @@ final class PublicIdSetupCommand extends Command
     private function samplePrefixes(): array
     {
         $max = $this->config->prefixMaxLength();
+        // The default prefix_max_length (7) fits the package's shipped default
+        // prefixes, so the samples match what a stock install will generate.
+        if ($max >= 7) {
+            return ['user', 'account', 'inv'];
+        }
         if ($max >= 3) {
             return ['usr', 'acc', 'inv'];
         }

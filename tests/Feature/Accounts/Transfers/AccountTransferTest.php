@@ -26,7 +26,9 @@ class AccountTransferTest extends AccountsTestCase
 
         $this->expectException(Error::class);
 
-        // @phpstan-ignore-next-line — testing readonly enforcement.
+        // Writing to a readonly property; PHP throws Error. (If tests are
+        // ever added to the PHPStan paths, suppress with the identifier-based
+        // `@phpstan-ignore property.readOnlyAssignNotInConstructor`.)
         $transfer->name = 'Mutated';
     }
 }

@@ -25,6 +25,7 @@ use JamesGifford\Auth\Exceptions\SelfOwnershipTransferException;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\Roles\RolesConfig;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Transfers;
@@ -72,19 +73,16 @@ final class AccountService
         $accountName = $name ?? $this->renderDefaultName($owner);
         $ownerRole = $this->requireRole(SystemRole::OWNER);
 
-        /** @var class-string<Account> $accountClass */
-        $accountClass = config('jamesgifford.auth.models.account');
-
-        $account = DB::transaction(function () use ($accountClass, $owner, $accountName, $ownerRole) {
+        $account = DB::transaction(function () use ($owner, $accountName, $ownerRole) {
             /** @var Account $account */
-            $account = $accountClass::query()->create([
+            $account = PackageModels::account()::query()->create([
                 'name' => $accountName,
-                'owner_id' => $owner->id,
+                'owner_id' => $owner->getKey(),
             ]);
 
-            $membership = AccountUser::query()->create([
+            $membership = PackageModels::accountUser()::query()->create([
                 'account_id' => $account->id,
-                'user_id' => $owner->id,
+                'user_id' => $owner->getKey(),
                 'account_role_id' => $ownerRole->id,
                 'joined_at' => now(),
             ]);
@@ -122,9 +120,9 @@ final class AccountService
 
         $role = $this->requireRole($roleKey);
 
-        $existing = AccountUser::query()
+        $existing = PackageModels::accountUser()::query()
             ->where('account_id', $account->id)
-            ->where('user_id', $user->id)
+            ->where('user_id', $user->getKey())
             ->exists();
 
         if ($existing) {
@@ -135,9 +133,9 @@ final class AccountService
         }
 
         $membership = DB::transaction(function () use ($account, $user, $role) {
-            $membership = AccountUser::query()->create([
+            $membership = PackageModels::accountUser()::query()->create([
                 'account_id' => $account->id,
-                'user_id' => $user->id,
+                'user_id' => $user->getKey(),
                 'account_role_id' => $role->id,
                 'joined_at' => now(),
             ]);
@@ -172,9 +170,9 @@ final class AccountService
      */
     public function detachUser(Account $account, Model $user): void
     {
-        $membership = AccountUser::query()
+        $membership = PackageModels::accountUser()::query()
             ->where('account_id', $account->id)
-            ->where('user_id', $user->id)
+            ->where('user_id', $user->getKey())
             ->with('role')
             ->first();
 
@@ -192,13 +190,14 @@ final class AccountService
             );
         }
 
+        /** @var AccountRole $previousRole always present: account_role_id is a restrictOnDelete FK */
         $previousRole = $membership->role;
 
         DB::transaction(function () use ($account, $user, $membership, $previousRole): void {
             $membership->delete();
 
-            if ($user->current_account_id === $account->id) {
-                $user->current_account_id = null;
+            if ($user->getAttribute('current_account_id') === $account->id) {
+                $user->setAttribute('current_account_id', null);
                 $user->save();
             }
 
@@ -234,9 +233,9 @@ final class AccountService
 
         $newRole = $this->requireRole($newRoleKey);
 
-        $membership = AccountUser::query()
+        $membership = PackageModels::accountUser()::query()
             ->where('account_id', $account->id)
-            ->where('user_id', $user->id)
+            ->where('user_id', $user->getKey())
             ->with('role')
             ->first();
 
@@ -254,6 +253,7 @@ final class AccountService
             );
         }
 
+        /** @var AccountRole $previousRole always present: account_role_id is a restrictOnDelete FK */
         $previousRole = $membership->role;
 
         if ($previousRole->id === $newRole->id) {
@@ -316,11 +316,11 @@ final class AccountService
         // model that was loaded before another transferOwnership ran.
         $account = $account->fresh();
 
-        if ($newOwner->id === $account->owner_id) {
+        if ($newOwner->getKey() === $account->owner_id) {
             throw SelfOwnershipTransferException::forAccount($account->public_id);
         }
 
-        $previousOwnerMembership = AccountUser::query()
+        $previousOwnerMembership = PackageModels::accountUser()::query()
             ->where('account_id', $account->id)
             ->where('user_id', $account->owner_id)
             ->first();
@@ -329,9 +329,9 @@ final class AccountService
             throw OwnerlessAccountException::forAccount($account->public_id);
         }
 
-        $newOwnerMembership = AccountUser::query()
+        $newOwnerMembership = PackageModels::accountUser()::query()
             ->where('account_id', $account->id)
-            ->where('user_id', $newOwner->id)
+            ->where('user_id', $newOwner->getKey())
             ->first();
 
         if ($newOwnerMembership === null) {
@@ -341,10 +341,8 @@ final class AccountService
             );
         }
 
-        /** @var class-string<Model> $userClass */
-        $userClass = config('jamesgifford.auth.models.user');
         /** @var Model $previousOwner */
-        $previousOwner = $userClass::query()->findOrFail($account->owner_id);
+        $previousOwner = PackageModels::user()::query()->findOrFail($account->owner_id);
 
         DB::transaction(function () use (
             $account,
@@ -357,7 +355,7 @@ final class AccountService
         ): void {
             $previousOwnerMembership->update(['account_role_id' => $previousOwnerNewRole->id]);
             $newOwnerMembership->update(['account_role_id' => $ownerRole->id]);
-            $account->update(['owner_id' => $newOwner->id]);
+            $account->update(['owner_id' => $newOwner->getKey()]);
 
             DB::afterCommit(function () use ($account, $previousOwner, $newOwner, $previousOwnerNewRole): void {
                 AccountOwnershipTransferred::dispatch(
@@ -384,13 +382,10 @@ final class AccountService
     {
         $transfer = AccountTransfer::fromModel($account);
 
-        /** @var class-string<Model> $userClass */
-        $userClass = config('jamesgifford.auth.models.user');
-
-        DB::transaction(function () use ($account, $userClass, $transfer): void {
+        DB::transaction(function () use ($account, $transfer): void {
             $account->delete();
 
-            $userClass::query()
+            PackageModels::user()::query()
                 ->where('current_account_id', $account->id)
                 ->update(['current_account_id' => null]);
 
@@ -476,7 +471,7 @@ final class AccountService
             throw InvalidRoleException::forKey($key);
         }
 
-        $role = AccountRole::findByKey($key);
+        $role = PackageModels::accountRole()::findByKey($key);
 
         if ($role === null) {
             throw InvalidRoleException::forKey($key);
@@ -492,6 +487,6 @@ final class AccountService
      */
     private function userIdentifier(Model $user): string
     {
-        return $user->public_id ?? (string) $user->id;
+        return $user->getAttribute('public_id') ?? (string) $user->getKey();
     }
 }

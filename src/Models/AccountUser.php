@@ -6,9 +6,12 @@ namespace JamesGifford\Auth\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\Carbon;
 use JamesGifford\Auth\Database\Factories\AccountUserFactory;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\SystemRole;
 
 /**
@@ -21,10 +24,20 @@ use JamesGifford\Auth\SystemRole;
  *
  * This model is data + relationships only. Consumers may extend it and point
  * config('jamesgifford.auth.models.account_user') at their subclass.
+ *
+ * @property int $id
+ * @property int $account_id
+ * @property int $user_id
+ * @property int $account_role_id
+ * @property Carbon|null $joined_at
+ * @property-read Account|null $account
+ * @property-read Model|null $user
+ * @property-read AccountRole|null $role
  */
 #[Fillable(['account_id', 'user_id', 'account_role_id', 'joined_at'])]
 class AccountUser extends Pivot
 {
+    /** @use HasFactory<AccountUserFactory> */
     use HasFactory;
 
     public $incrementing = true;
@@ -35,19 +48,28 @@ class AccountUser extends Pivot
         'joined_at' => 'datetime',
     ];
 
+    /**
+     * @return BelongsTo<Account, $this>
+     */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(Account::class, 'account_id');
+        return $this->belongsTo(PackageModels::account(), 'account_id');
     }
 
+    /**
+     * @return BelongsTo<Model, $this>
+     */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(config('jamesgifford.auth.models.user'), 'user_id');
+        return $this->belongsTo(PackageModels::user(), 'user_id');
     }
 
+    /**
+     * @return BelongsTo<AccountRole, $this>
+     */
     public function role(): BelongsTo
     {
-        return $this->belongsTo(AccountRole::class, 'account_role_id');
+        return $this->belongsTo(PackageModels::accountRole(), 'account_role_id');
     }
 
     public function isOwner(): bool

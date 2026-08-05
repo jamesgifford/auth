@@ -30,9 +30,9 @@ Prefix resolution order (see `PrefixRegistry`): (1) the model's
 `publicIdPrefix()` override, else (2) the `public_id.prefixes` config map, else
 (3) throws `UnregisteredModelException`.
 
-The public_id format is **locked at install** (via
-`jamesgifford:public-id:setup`, which `jamesgifford:auth:install` runs) and
-recorded in the lock file (default `config/jamesgifford/auth.lock.json`). Do NOT
+The public_id format is **locked at install**: `jamesgifford:auth:install`
+writes the lock file directly (default `config/jamesgifford/auth.lock.json`).
+`jamesgifford:public-id:setup` is the standalone interactive wizard. Do NOT
 change the format-defining `public_id` config keys afterward (`separator`,
 `body.length`, `body.alphabet`, `checksum.*`): existing IDs would no longer
 validate, and DB column sizes were set from the locked format. Only
@@ -195,6 +195,12 @@ It writes `App\Models\Account`, `App\Models\AccountUser`, and
 already exist. Then point `config('jamesgifford.auth.models.*')` at them (the
 command prints the exact lines). Edit these published files — do NOT edit the
 package's base models in `vendor/`.
+
+The `models.*` overrides are honored everywhere: services, relationships,
+factories, seeders, and HTTP route-model binding all resolve model classes
+through `JamesGifford\Auth\PackageModels`, so package code returns instances of
+the configured subclass. Package code must never reference the concrete base
+models directly (a guard test enforces this) — resolve through `PackageModels`.
 
 ## Do not
 

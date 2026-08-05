@@ -6,6 +6,7 @@ namespace JamesGifford\Auth\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PackageModels;
 
 /**
  * Produces AccountRole records for tests. By default it creates custom
@@ -16,7 +17,15 @@ use JamesGifford\Auth\Models\AccountRole;
  */
 class AccountRoleFactory extends Factory
 {
-    protected $model = AccountRole::class;
+    /**
+     * Config-resolved so the factory produces the CONFIGURED role model.
+     *
+     * @return class-string<AccountRole>
+     */
+    public function modelName(): string
+    {
+        return PackageModels::accountRole();
+    }
 
     public function definition(): array
     {

@@ -11,6 +11,7 @@ use JamesGifford\Auth\PublicId\Exceptions\UnregisteredModelException;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModel;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelBadPrefix;
+use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelChild;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionA;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelCollisionB;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelEmptyPrefix;
@@ -139,6 +140,34 @@ class PrefixRegistryTest extends TestCase
         $registry = new PrefixRegistry(PublicIdConfigFactory::default());
 
         $this->assertNull($registry->modelFor('unknown'));
+    }
+
+    public function test_subclass_claiming_parents_prefix_is_not_a_collision(): void
+    {
+        $registry = new PrefixRegistry(PublicIdConfigFactory::default());
+
+        $registry->register(FixtureModel::class);
+        $registry->register(FixtureModelChild::class);
+
+        $registry->assertNoCollisions();
+
+        $this->assertSame('fix', $registry->prefixFor(FixtureModelChild::class));
+    }
+
+    public function test_model_for_prefers_the_most_derived_class_in_a_chain(): void
+    {
+        $registry = new PrefixRegistry(PublicIdConfigFactory::default());
+        $registry->register(FixtureModel::class);
+        $registry->register(FixtureModelChild::class);
+
+        $this->assertSame(FixtureModelChild::class, $registry->modelFor('fix'));
+
+        // Registration order must not matter.
+        $reversed = new PrefixRegistry(PublicIdConfigFactory::default());
+        $reversed->register(FixtureModelChild::class);
+        $reversed->register(FixtureModel::class);
+
+        $this->assertSame(FixtureModelChild::class, $reversed->modelFor('fix'));
     }
 
     public function test_assert_no_collisions_passes_when_unique(): void

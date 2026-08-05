@@ -181,8 +181,34 @@ final class AuthSetupCommand extends Command
 
         $this->newLine();
         $this->info('Setup complete.');
+        $this->displayNextSteps();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Post-setup pointers. Install prints its own next steps mid-run at
+     * Step 2, where they scroll away; the DatabaseSeeder wiring otherwise
+     * appears only in the README. Surfacing both at the END of setup — the
+     * documented primary entry point — is what an operator actually sees.
+     */
+    private function displayNextSteps(): void
+    {
+        $this->newLine();
+        $this->line('Next steps:');
+        $this->newLine();
+        $this->line('  • Register the seeders in database/seeders/DatabaseSeeder.php so');
+        $this->line('    `migrate:fresh --seed` recreates roles (and the dev cast locally):');
+        $this->newLine();
+        $this->line('        // Required account roles — ALL environments.');
+        $this->line('        $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);');
+        $this->newLine();
+        $this->line('        // Dev fixtures — the seeder itself refuses outside local/staging.');
+        $this->line('        $this->call(\JamesGifford\Auth\Database\DevDataSeeder::class);');
+        $this->newLine();
+        $this->line('  • Using Laravel Boost? Run `php artisan boost:update` to install this');
+        $this->line("    package's AI skill (first-time Boost setup uses `boost:install`).");
+        $this->line('    Not using Boost? No action needed.');
     }
 
     /**

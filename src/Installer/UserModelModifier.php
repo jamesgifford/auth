@@ -179,6 +179,7 @@ final class UserModelModifier
 
         $traverser = new NodeTraverser;
         $traverser->addVisitor(new CloningVisitor);
+        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
         $newStmts = $traverser->traverse($oldStmts);
 
         $addedImports = [];
@@ -303,6 +304,7 @@ final class UserModelModifier
 
         $modifyTraverser = new NodeTraverser;
         $modifyTraverser->addVisitor($visitor);
+        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
         $newStmts = $modifyTraverser->traverse($newStmts);
 
         // If the file had no namespace, the container we mutated lives at
@@ -353,6 +355,7 @@ final class UserModelModifier
 
         $traverser = new NodeTraverser;
         $traverser->addVisitor(new CloningVisitor);
+        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
         $newStmts = $traverser->traverse($oldStmts);
 
         [$namespace, $importMap] = $this->resolveContext($newStmts);

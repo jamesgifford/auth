@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Database;
 
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Exceptions\DevDataSeedingNotAllowedException;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
@@ -134,12 +134,9 @@ final class DevDataSeeder extends Seeder
         // or not the User model has that cast — and never stores plaintext.
         $password = Hash::make((string) ($config['password'] ?? 'password'));
 
-        /** @var class-string<Model> $userClass */
-        $userClass = config('jamesgifford.auth.models.user');
-        /** @var class-string<Model> $accountClass */
-        $accountClass = config('jamesgifford.auth.models.account');
-        /** @var class-string<Model> $accountUserClass */
-        $accountUserClass = config('jamesgifford.auth.models.account_user');
+        $userClass = PackageModels::user();
+        $accountClass = PackageModels::account();
+        $accountUserClass = PackageModels::accountUser();
 
         // When the in-process User model lacks an ACTIVE HasPublicId trait — e.g.
         // setup's install step just added it to the file, but the already-loaded
@@ -175,8 +172,8 @@ final class DevDataSeeder extends Seeder
             // the package columns but NOT the user rows) is FOUND and updated
             // rather than duplicated, so a re-seed never hits users_email_unique.
             $user = $userClass::query()->firstOrNew(['email' => $email]);
-            $user->name = $declaration['name'] ?? $email;
-            $user->password = $password;
+            $user->setAttribute('name', $declaration['name'] ?? $email);
+            $user->setAttribute('password', $password);
 
             // Assign a public_id explicitly whenever the row would otherwise be
             // left without one and the trait can't fill it. That covers two
@@ -190,12 +187,12 @@ final class DevDataSeeder extends Seeder
             //      seeder stays correct on its own.)
             // Skipped only when the model DOES auto-generate AND the user is new
             // (the trait handles it on create), or the row already has an id.
-            $needsExplicitPublicId = empty($user->public_id)
+            $needsExplicitPublicId = empty($user->getAttribute('public_id'))
                 && $publicIdColumnExists
                 && ($user->exists || ! $userAutoGeneratesPublicId);
 
             if ($needsExplicitPublicId) {
-                $user->public_id = PublicId::generate($this->resolveUserPrefix($userClass));
+                $user->setAttribute('public_id', PublicId::generate($this->resolveUserPrefix($userClass)));
             }
 
             $user->save();

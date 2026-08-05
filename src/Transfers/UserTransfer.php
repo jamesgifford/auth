@@ -25,11 +25,13 @@ final readonly class UserTransfer
 
     public static function fromModel(Model $user): self
     {
+        // Attribute access goes through getKey()/getAttribute(): the
+        // consumer's User class is only known as Model here.
         return new self(
-            id: $user->id,
-            publicId: $user->public_id ?? null,
-            name: $user->name,
-            email: $user->email,
+            id: (int) $user->getKey(),
+            publicId: $user->getAttribute('public_id'),
+            name: (string) $user->getAttribute('name'),
+            email: (string) $user->getAttribute('email'),
         );
     }
 }

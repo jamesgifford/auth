@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use JamesGifford\Auth\Models\AccountRole;
+use JamesGifford\Auth\PackageModels;
 
 /**
  * Seeds the account_roles table from config('jamesgifford.auth.roles').
@@ -25,7 +25,7 @@ class AccountRoleSeeder extends Seeder
         $roles = config('jamesgifford.auth.roles', []);
 
         foreach ($roles as $key => $attributes) {
-            AccountRole::query()->updateOrCreate(
+            PackageModels::accountRole()::query()->updateOrCreate(
                 ['key' => $key],
                 [
                     'name' => $attributes['name'],

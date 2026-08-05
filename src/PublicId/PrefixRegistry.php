@@ -23,6 +23,15 @@ use ReflectionMethod;
  *
  * Resolution is lazy and cached — first call resolves and stores; subsequent
  * calls return the cached prefix.
+ *
+ * Same-prefix claims within a single inheritance chain are ONE logical
+ * registration, not a collision: a published App\Models subclass inherits its
+ * parent's publicIdPrefix(), so after the standard publish-models flow both
+ * the package base model (registered from the config prefixes map) and the
+ * consumer's subclass (self-registered on boot) legitimately claim the same
+ * prefix. Only unrelated classes claiming one prefix collide, and
+ * {@see modelFor()} resolves a chain to its most-derived registered class —
+ * the consumer's effective model.
  */
 final class PrefixRegistry
 {
@@ -56,16 +65,24 @@ final class PrefixRegistry
     /**
      * Reverse lookup: which model class (if any) claims this prefix.
      * Walks only the already-registered set; will not lazily resolve.
+     * When a base class and its subclass both claim the prefix (one
+     * inheritance chain), the most-derived registered class wins.
      */
     public function modelFor(string $prefix): ?string
     {
+        $match = null;
+
         foreach ($this->registered as $modelClass => $registeredPrefix) {
-            if ($registeredPrefix === $prefix) {
-                return $modelClass;
+            if ($registeredPrefix !== $prefix) {
+                continue;
+            }
+
+            if ($match === null || is_subclass_of($modelClass, $match)) {
+                $match = $modelClass;
             }
         }
 
-        return null;
+        return $match;
     }
 
     /**
@@ -94,7 +111,9 @@ final class PrefixRegistry
     }
 
     /**
-     * Throws if two registered models claim the same prefix.
+     * Throws if two UNRELATED registered models claim the same prefix. A
+     * group forming a single inheritance chain (base + subclasses inheriting
+     * its prefix) is one logical claim, never a collision.
      *
      * @throws PrefixCollisionException
      */
@@ -106,10 +125,31 @@ final class PrefixRegistry
         }
 
         foreach ($byPrefix as $prefix => $modelClasses) {
-            if (count($modelClasses) > 1) {
+            if (count($modelClasses) > 1 && ! $this->isSingleInheritanceChain($modelClasses)) {
                 throw PrefixCollisionException::forPrefix($prefix, $modelClasses);
             }
         }
+    }
+
+    /**
+     * Whether every pair of classes is related by inheritance. In a class
+     * hierarchy, pairwise relatedness implies one linear ancestor chain —
+     * two sibling subclasses claiming the same prefix are pairwise unrelated
+     * and therefore a genuine collision.
+     *
+     * @param  list<string>  $classes
+     */
+    private function isSingleInheritanceChain(array $classes): bool
+    {
+        foreach ($classes as $a) {
+            foreach ($classes as $b) {
+                if ($a !== $b && ! is_subclass_of($a, $b) && ! is_subclass_of($b, $a)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private function resolvePrefix(string $modelClass): string

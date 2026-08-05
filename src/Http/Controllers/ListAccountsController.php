@@ -20,9 +20,11 @@ final class ListAccountsController
     public function __invoke(Request $request): JsonResponse
     {
         $user = $request->user();
-        $currentId = $user->current_account_id;
+        $currentId = $user->getAttribute('current_account_id');
 
-        $accounts = $user->accounts()
+        // The consumer's User model is documented to use HasAccounts; its
+        // concrete class is config-resolved, so PHPStan sees only Model here.
+        $accounts = $user->accounts() // @phpstan-ignore method.notFound
             ->get()
             ->map(static fn (Account $account): array => [
                 'public_id' => $account->public_id,

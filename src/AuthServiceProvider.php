@@ -163,6 +163,16 @@ class AuthServiceProvider extends ServiceProvider
         // EnsureCurrentAccount middleware). Gated by a single config flag so
         // `--without-http` (which sets it false) skips all of it.
         if (config('jamesgifford.auth.http.enabled', true)) {
+            // Explicit {account} binder for the CONFIGURED account class, so a
+            // models.account override is honored by route-model binding (the
+            // controllers' base-class type-hints no longer drive resolution).
+            // Registered here, not in routes/web.php — route files are skipped
+            // entirely under route:cache, which would silently drop a binder
+            // declared there. Note Router::model() binds by parameter name
+            // globally: consumer routes using {account} get this binder too
+            // (it resolves by public_id via the model's getRouteKeyName()).
+            $this->app['router']->model('account', PackageModels::account());
+
             $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
             $this->app['router']->aliasMiddleware('auth.current-account', EnsureCurrentAccount::class);
         }

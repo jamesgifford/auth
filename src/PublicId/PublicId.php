@@ -17,11 +17,11 @@ use JamesGifford\Auth\PublicId\Exceptions\InvalidPrefixException;
  *
  * Common usage:
  *
- *   $id = PublicId::generate('usr');                    // 'usr_a1b2...'
+ *   $id = PublicId::generate('inv');                    // 'inv_a1b2...'
  *   $valid = PublicId::isValid($id);                    // true
- *   $valid = PublicId::isValid($id, 'usr');             // restricts to a prefix
+ *   $valid = PublicId::isValid($id, 'inv');             // restricts to a prefix
  *   $result = PublicId::validate($id);                  // ValidationResult
- *   $prefix = PublicId::prefixOf($id);                  // 'usr' or null
+ *   $prefix = PublicId::prefixOf($id);                  // 'inv' or null
  *   $columnSize = PublicId::maxLength();                // for migrations
  */
 final class PublicId

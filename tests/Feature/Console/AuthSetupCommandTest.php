@@ -99,6 +99,24 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('skipped (pass --with-dev-data to include it)', $output);
     }
 
+    public function test_completion_output_lists_next_steps(): void
+    {
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('Setup complete.', $output);
+
+        // The next-steps block must FOLLOW completion (not scroll away
+        // mid-run like install's own Step 2 output does).
+        $afterComplete = (string) strstr($output, 'Setup complete.');
+        $this->assertStringContainsString('database/seeders/DatabaseSeeder.php', $afterComplete);
+        $this->assertStringContainsString('AccountRoleSeeder::class', $afterComplete);
+        $this->assertStringContainsString('DevDataSeeder::class', $afterComplete);
+        $this->assertStringContainsString('boost:update', $afterComplete);
+        $this->assertStringContainsString('boost:install', $afterComplete);
+    }
+
     // ---- --with-dev-data in an allowlisted environment seeds ----
 
     public function test_with_dev_data_seeds_in_an_allowlisted_environment(): void

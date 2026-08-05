@@ -28,8 +28,10 @@ use Throwable;
  * production guard, an explicit data-loss summary, and a typed confirmation
  * (type "uninstall" to proceed).
  *
- * It does NOT edit the User model; automated reversion is deferred. It prints
- * tailored manual instructions for that one remaining step instead.
+ * It also surgically reverts the User model — removing only the package's
+ * trait imports/usage and the publicIdPrefix() method, preserving everything
+ * else — and falls back to printed manual instructions when the model can't
+ * be safely auto-edited.
  */
 final class AuthUninstallCommand extends Command
 {

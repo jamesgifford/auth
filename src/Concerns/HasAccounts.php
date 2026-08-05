@@ -12,6 +12,7 @@ use JamesGifford\Auth\Exceptions\NotAMemberException;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\PublicId\Concerns\HasPublicId;
 use JamesGifford\Auth\SystemRole;
 
@@ -33,24 +34,29 @@ trait HasAccounts
 {
     public function accounts(): BelongsToMany
     {
+        // Pivot keys are pinned explicitly: the related class is
+        // config-resolved, so Eloquent must never guess column names from a
+        // consumer subclass's basename (OverrideAccount => override_account_id).
         return $this->belongsToMany(
-            config('jamesgifford.auth.models.account'),
-            'account_user'
+            PackageModels::account(),
+            'account_user',
+            'user_id',
+            'account_id'
         )
-            ->using(AccountUser::class)
+            ->using(PackageModels::accountUser())
             ->withPivot(['account_role_id', 'joined_at'])
             ->withTimestamps();
     }
 
     public function memberships(): HasMany
     {
-        return $this->hasMany(AccountUser::class, 'user_id');
+        return $this->hasMany(PackageModels::accountUser(), 'user_id');
     }
 
     public function currentAccount(): BelongsTo
     {
         return $this->belongsTo(
-            config('jamesgifford.auth.models.account'),
+            PackageModels::account(),
             'current_account_id'
         );
     }
@@ -58,7 +64,7 @@ trait HasAccounts
     public function ownedAccounts(): HasMany
     {
         return $this->hasMany(
-            config('jamesgifford.auth.models.account'),
+            PackageModels::account(),
             'owner_id'
         );
     }

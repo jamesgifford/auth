@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use JamesGifford\Auth\Models\Account;
+use JamesGifford\Auth\PackageModels;
 
 /**
  * Produces Account records for tests. Data only — this factory does NOT
@@ -18,7 +19,16 @@ use JamesGifford\Auth\Models\Account;
  */
 class AccountFactory extends Factory
 {
-    protected $model = Account::class;
+    /**
+     * Config-resolved so Account::factory() (and any subclass inheriting this
+     * factory) produces the CONFIGURED account model, not always the base.
+     *
+     * @return class-string<Account>
+     */
+    public function modelName(): string
+    {
+        return PackageModels::account();
+    }
 
     public function definition(): array
     {
@@ -31,6 +41,6 @@ class AccountFactory extends Factory
 
     public function ownedBy(Model $user): self
     {
-        return $this->state(['owner_id' => $user->id]);
+        return $this->state(['owner_id' => $user->getKey()]);
     }
 }

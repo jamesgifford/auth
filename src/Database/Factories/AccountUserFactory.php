@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\SystemRole;
 
 /**
@@ -20,7 +20,15 @@ use JamesGifford\Auth\SystemRole;
  */
 class AccountUserFactory extends Factory
 {
-    protected $model = AccountUser::class;
+    /**
+     * Config-resolved so the factory produces the CONFIGURED pivot model.
+     *
+     * @return class-string<AccountUser>
+     */
+    public function modelName(): string
+    {
+        return PackageModels::accountUser();
+    }
 
     public function definition(): array
     {
@@ -54,7 +62,7 @@ class AccountUserFactory extends Factory
     public function withRole(string $key): self
     {
         return $this->state(fn (): array => [
-            'account_role_id' => AccountRole::findByKey($key)?->id,
+            'account_role_id' => PackageModels::accountRole()::findByKey($key)?->id,
         ]);
     }
 }

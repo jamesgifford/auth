@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use JamesGifford\Auth\Database\Factories\AccountRoleFactory;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Exceptions\CannotDeleteSystemRoleException;
+use JamesGifford\Auth\PackageModels;
 
 /**
  * A role that can be assigned to a member within an account.
@@ -22,10 +24,19 @@ use JamesGifford\Auth\Exceptions\CannotDeleteSystemRoleException;
  * System roles (system => true) ship with the package and cannot be deleted
  * via Eloquent — see {@see booted()}. Consumers may extend this class and
  * point config('jamesgifford.auth.models.account_role') at their subclass.
+ *
+ * @property int $id
+ * @property string $key
+ * @property string $name
+ * @property string|null $description
+ * @property bool $system
+ * @property int $sort_order
+ * @property-read Collection<int, AccountUser> $memberships
  */
 #[Fillable(['key', 'name', 'description', 'system', 'sort_order'])]
 class AccountRole extends Model
 {
+    /** @use HasFactory<AccountRoleFactory> */
     use HasFactory;
 
     protected $casts = [
@@ -33,9 +44,12 @@ class AccountRole extends Model
         'sort_order' => 'integer',
     ];
 
+    /**
+     * @return HasMany<AccountUser, $this>
+     */
     public function memberships(): HasMany
     {
-        return $this->hasMany(AccountUser::class, 'account_role_id');
+        return $this->hasMany(PackageModels::accountUser(), 'account_role_id');
     }
 
     public function isSystem(): bool

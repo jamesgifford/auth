@@ -35,15 +35,16 @@ final class EnsureCurrentAccount
             return $next($request);
         }
 
-        if ($user->current_account_id !== null) {
-            $account = $user->currentAccount; // null when the account is soft-deleted/gone
+        if ($user->getAttribute('current_account_id') !== null) {
+            // null when the account is soft-deleted/gone
+            $account = $user->getRelationValue('currentAccount');
 
             if ($account !== null && $user->belongsToAccount($account)) {
                 return $next($request);
             }
 
             // The current account was deleted, or the user lost membership.
-            $user->current_account_id = null;
+            $user->setAttribute('current_account_id', null);
             $user->save();
 
             return $this->resolveMissing($user) ?? $next($request);
@@ -63,9 +64,11 @@ final class EnsureCurrentAccount
             return redirect()->route($route);
         }
 
-        $first = $user->accounts()->first();
+        // The consumer's User model is documented to use HasAccounts; its
+        // concrete class is config-resolved, so PHPStan sees only Model here.
+        $first = $user->accounts()->first(); // @phpstan-ignore method.notFound
         if ($first !== null) {
-            $user->switchToAccount($first);
+            $user->switchToAccount($first); // @phpstan-ignore method.notFound
         }
 
         return null;

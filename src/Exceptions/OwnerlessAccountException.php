@@ -19,8 +19,7 @@ class OwnerlessAccountException extends RuntimeException
     {
         return new self(
             "Account '{$accountPublicId}' has no valid Owner. This indicates data corruption. ".
-            'Run `php artisan jamesgifford:auth:check-integrity` (once available) or use '.
-            'AccountIntegrityService::scan() to investigate.'
+            'Use AccountIntegrityService::scan() to investigate.'
         );
     }
 }

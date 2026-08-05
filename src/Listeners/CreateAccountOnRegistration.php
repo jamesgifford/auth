@@ -57,7 +57,9 @@ final class CreateAccountOnRegistration
         // Make the new account current. switchToAccount() validates membership
         // first (the user is the owner, so it passes) and persists
         // current_account_id, so login never has to resolve a current account.
-        $user->switchToAccount($account);
+        // The consumer's User model is documented to use HasAccounts (the
+        // method_exists guard above verified it); PHPStan sees only Model.
+        $user->switchToAccount($account); // @phpstan-ignore method.notFound
     }
 
     /**
@@ -70,7 +72,7 @@ final class CreateAccountOnRegistration
     {
         $template = config('jamesgifford.auth.accounts.default_name_template', "{name}'s Account");
 
-        $name = $user->name;
+        $name = $user->getAttribute('name');
         if (! is_string($name) || trim($name) === '') {
             $name = 'User';
         }

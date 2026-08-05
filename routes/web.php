@@ -16,6 +16,11 @@ use JamesGifford\Auth\Http\Controllers\ListAccountsController;
 | SubstituteBindings is applied explicitly (rather than relying on the web/api
 | group) so route-model binding works without forcing session/CSRF — keeping
 | the endpoints usable from any frontend, including stateless API clients.
+|
+| The {account} parameter is bound by AuthServiceProvider::boot() to the
+| CONFIGURED account class (Router::model + PackageModels::account()), so a
+| models.account override flows through to these routes. The binder cannot
+| live here: route files are skipped entirely under route:cache.
 */
 
 Route::middleware(['auth', SubstituteBindings::class])

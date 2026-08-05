@@ -67,6 +67,8 @@ The interactive flow pauses before the irreversible public_id lock to surface th
 
 If you prefer to run the steps yourself, `jamesgifford:auth:install` performs just the install stage. See [Commands](#commands) for the full list.
 
+> **Note on migrations:** a `vendor:publish --tag=jamesgifford-auth-migrations` tag exists but is internal — it copies the package's frozen source timestamps verbatim, which can sort incorrectly against your app's migrations. `jamesgifford:auth:install` is the supported path: it publishes the migrations with fresh timestamps so they order correctly.
+
 ## Quick start
 
 Registration auto-creates a personal account the user owns, so a freshly registered user is immediately a member of one account. From there, the typical interaction looks like this:
@@ -179,7 +181,7 @@ The format-defining settings are locked the first time you run `jamesgifford:pub
 | `jamesgifford:public-id:setup` | Lock the public_id configuration for this application. |
 | `jamesgifford:public-id:status` | Display the current public_id configuration status. |
 | `jamesgifford:public-id:check` | Verify public_id prefix registry integrity and detect config issues. |
-| `jamesgifford:public-id:reset` | Clear the public_id configuration lock. **Destructive:** invalidates all previously generated IDs. |
+| `jamesgifford:public-id:reset` | Clear the public_id configuration lock. **Destructive:** invalidates all previously generated IDs. Requires `--i-understand-this-breaks-existing-ids`. |
 
 ## Accounts and memberships
 
@@ -301,6 +303,8 @@ The package ships a frontend-agnostic HTTP layer: the controllers only redirect 
 
 The backend primitive is `$user->switchToAccount($account)`, which validates membership, then sets and persists `current_account_id` (throwing `NotAMemberException` if the user isn't a member). The HTTP switch route is a thin wrapper over it.
 
+When HTTP is enabled, the package registers an explicit route binder for the `{account}` parameter, bound to your configured `models.account` class and resolving by `public_id`. Note this binder applies by parameter name application-wide: your own routes using `{account}` will resolve through it too (set `http.enabled` to `false` if you need different `{account}` semantics).
+
 Apply the `auth.current-account` middleware alias (the `EnsureCurrentAccount` middleware) to routes that require an active account. Its redirect destinations are config route names: `http.middleware.redirect_floating_to` (no current account) and `redirect_missing_to` (current account gone). When either is `null`, the middleware auto-assigns a sensible account and continues instead of redirecting.
 
 ## Configuration
@@ -412,11 +416,25 @@ php artisan jamesgifford:auth:uninstall
 | `jamesgifford:public-id:setup` | Lock the public_id configuration. |
 | `jamesgifford:public-id:status` | Display the current public_id configuration status. |
 | `jamesgifford:public-id:check` | Verify prefix registry integrity and detect config issues. |
-| `jamesgifford:public-id:reset` | Clear the public_id lock. Destructive. |
+| `jamesgifford:public-id:reset` | Clear the public_id lock. Destructive; requires `--i-understand-this-breaks-existing-ids`. |
+
+### Install flags
+
+`jamesgifford:auth:install` accepts granular flags for non-standard flows:
+
+| Flag | Effect |
+| --- | --- |
+| `--force` | Run non-interactively (skip all prompts). |
+| `--fresh` | Tear down and cleanly redo the package setup. Development only — refuses if package data exists. |
+| `--verify` | Only run the verification step; change nothing. |
+| `--without-http` | Disable the HTTP plumbing (`http.enabled = false` in the published config). |
+| `--publish-models` | Publish the editable `App\Models` subclasses without prompting. |
+| `--skip-public-id` / `--skip-migrations` / `--skip-roles` / `--skip-user-model` | Skip individual install steps (`--no-modify-user` is an alias for `--skip-user-model`). |
+| `--skip-id-offsets` | Don't apply ID offsets here (the setup command passes this so it can apply them itself, after dev-data seeding). |
 
 ## Testing
 
-The package ships with a suite of 628 tests covering both subsystems, the service layer's transaction and event behavior, the invariant enforcement, the HTTP layer, and the installer.
+The package ships with a comprehensive test suite covering both subsystems, the service layer's transaction and event behavior, the invariant enforcement, the HTTP layer, and the installer.
 
 ```bash
 composer test

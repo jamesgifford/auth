@@ -26,11 +26,11 @@ use JamesGifford\Auth\PublicId\PublicId;
  *
  * Override publicIdPrefix() on the model to declare the prefix locally:
  *
- *   public function publicIdPrefix(): string { return 'usr'; }
+ *   public function publicIdPrefix(): string { return 'inv'; }
  *
  * Or leave it to the trait's default and register the model in config:
  *
- *   'prefixes' => [App\Models\User::class => 'usr'],
+ *   'prefixes' => [App\Models\Invoice::class => 'inv'],
  */
 trait HasPublicId
 {
@@ -59,13 +59,19 @@ trait HasPublicId
         return 'public_id';
     }
 
+    /**
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
     public function scopeWherePublicId(Builder $query, string $publicId): Builder
     {
         return $query->where('public_id', $publicId);
     }
 
     /**
+     * @param  Builder<static>  $query
      * @param  array<int, string>  $publicIds
+     * @return Builder<static>
      */
     public function scopeWherePublicIdIn(Builder $query, array $publicIds): Builder
     {

@@ -60,7 +60,7 @@ class PackageEnvVariablesTest extends TestCase
     {
         $offenders = [];
 
-        foreach (['src', 'database', 'routes'] as $dir) {
+        foreach (['src', 'database', 'routes', 'resources'] as $dir) {
             $path = $this->packageRoot().DIRECTORY_SEPARATOR.$dir;
             if (! is_dir($path)) {
                 continue;

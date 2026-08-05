@@ -1,0 +1,16 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 6
+
+    paths:
+        - src
+        - database
+
+    ignoreErrors:
+        # HasAccounts is applied to the CONSUMER's User model, never to a
+        # class inside this package, so PHPStan sees it as unused here.
+        -
+            identifier: trait.unused
+            path: src/Concerns/HasAccounts.php

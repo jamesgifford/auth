@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Transfers\IntegrityIssueTransfer;
 use JamesGifford\Auth\Transfers\IntegrityIssueType;
@@ -35,7 +36,7 @@ final class AccountIntegrityService
      */
     public function scan(): Collection
     {
-        $ownerRole = AccountRole::findByKey(SystemRole::OWNER);
+        $ownerRole = PackageModels::accountRole()::findByKey(SystemRole::OWNER);
 
         if ($ownerRole === null) {
             // The Owner role row is missing — package setup is broken at a
@@ -67,7 +68,7 @@ final class AccountIntegrityService
      */
     public function scanAccount(Account $account): Collection
     {
-        $ownerRole = AccountRole::findByKey(SystemRole::OWNER);
+        $ownerRole = PackageModels::accountRole()::findByKey(SystemRole::OWNER);
 
         if ($ownerRole === null) {
             return collect();
@@ -99,10 +100,7 @@ final class AccountIntegrityService
      */
     private function accountQuery(AccountRole $ownerRole): Builder
     {
-        /** @var class-string<Account> $accountClass */
-        $accountClass = config('jamesgifford.auth.models.account');
-
-        return $accountClass::query()
+        return PackageModels::account()::query()
             ->with(['memberships' => function ($query) use ($ownerRole): void {
                 $query->where('account_role_id', $ownerRole->id);
             }]);

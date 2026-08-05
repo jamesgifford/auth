@@ -20,12 +20,19 @@ use JamesGifford\Auth\Models\Account;
  */
 final class AccountSwitchController
 {
+    /**
+     * The base-class type-hint does not drive binding: the provider registers
+     * an explicit {account} binder for the CONFIGURED account class, so a
+     * models.account subclass arrives here (it satisfies the hint).
+     */
     public function __invoke(Request $request, Account $account): RedirectResponse|JsonResponse
     {
         $user = $request->user();
 
         try {
-            $user->switchToAccount($account);
+            // The consumer's User model is documented to use HasAccounts; its
+            // concrete class is config-resolved, so PHPStan sees only Model.
+            $user->switchToAccount($account); // @phpstan-ignore method.notFound
         } catch (NotAMemberException) {
             // switchToAccount() throws when the user isn't a member. Reject
             // without leaking whether the account exists; never render a view.
