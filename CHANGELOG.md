@@ -5,7 +5,11 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - 2026-08-05
+
+Development infrastructure only — **no runtime code changed**. Nothing under
+`src/` or `database/` differs from 1.2.0, so upgrading changes nothing for a
+consuming application.
 
 ### Changed
 - The test suite now runs against **MariaDB by default** (the package's actual deployment target) instead of SQLite; `composer test:sqlite` remains as the fast in-memory development loop. The base test case purges the schema before each test on real drivers, restoring the hermetic per-test semantics sqlite `:memory:` provided implicitly.
@@ -148,7 +152,8 @@ Initial release. Public ID subsystem.
 - Console commands: `jamesgifford:public-id:setup`, `jamesgifford:public-id:status`, `jamesgifford:public-id:check`, `jamesgifford:public-id:reset`.
 - Configuration published to `config/jamesgifford/auth.php` with `vendor:publish --tag=jamesgifford-auth-config`.
 
-[Unreleased]: https://github.com/jamesgifford/auth/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/jamesgifford/auth/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/jamesgifford/auth/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/jamesgifford/auth/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/jamesgifford/auth/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/jamesgifford/auth/compare/v1.1.2...v1.1.3
