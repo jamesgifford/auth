@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Console\Commands;
 use Illuminate\Console\Command;
 use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Database\IdOffsetManager;
+use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
 use Throwable;
@@ -57,9 +58,15 @@ final class AuthSetupCommand extends Command
     protected $signature = 'jamesgifford:auth:setup
         {--fresh : Reset the database first with migrate:fresh (drops ALL tables). Development only — the whole command refuses in production}
         {--with-dev-data : Also seed deterministic local dev data. Dev/local only — the seeder refuses in production even when this flag is passed}
+        {--skip-seeder-wiring : Skip wiring the package seeders into database/seeders/DatabaseSeeder.php}
         {--force : Run non-interactively: skip the educational pause and propagate --force to the migrate step}';
 
     protected $description = 'Run a complete auth setup: migrate (or migrate:fresh), install, optionally seed dev data, then apply ID offsets. Sequences the existing commands.';
+
+    public function __construct(private readonly DatabaseSeederWiring $seederWiring)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -150,6 +157,7 @@ final class AuthSetupCommand extends Command
             '--force' => true,
             '--publish-models' => true,
             '--skip-id-offsets' => true,
+            '--skip-seeder-wiring' => (bool) $this->option('skip-seeder-wiring'),
         ]);
         if ($code !== self::SUCCESS) {
             return $this->abort('jamesgifford:auth:install', $code);
@@ -166,6 +174,13 @@ final class AuthSetupCommand extends Command
                 // it and continue rather than failing the whole setup.
                 $this->newLine();
                 $this->warn('  Dev data was not seeded — the seeder declined (see its message above).');
+            }
+
+            // Wire the dev seeder regardless of whether the seed above ran: the
+            // seeder self-guards by environment, and the wiring is about future
+            // `--seed` rebuilds, not this run.
+            if (! $this->option('skip-seeder-wiring')) {
+                $this->wireDevDataSeeder();
             }
         } else {
             $this->step(3, 'Seeding local dev data — skipped (pass --with-dev-data to include it)');
@@ -187,24 +202,68 @@ final class AuthSetupCommand extends Command
     }
 
     /**
-     * Post-setup pointers. Install prints its own next steps mid-run at
-     * Step 2, where they scroll away; the DatabaseSeeder wiring otherwise
-     * appears only in the README. Surfacing both at the END of setup — the
-     * documented primary entry point — is what an operator actually sees.
+     * Add DevDataSeeder to the consumer's DatabaseSeeder. Install already wired
+     * the always-on seeders (roles, ID offsets), so this only fills in the dev
+     * fixtures. Advisory: a file we cannot edit is reported, never fatal.
+     */
+    private function wireDevDataSeeder(): void
+    {
+        $analysis = $this->seederWiring->analyze();
+
+        if (! $analysis->isModifiable()) {
+            $this->newLine();
+            $this->warn('  Could not add DevDataSeeder to database/seeders/DatabaseSeeder.php'
+                .' ('.($analysis->unusualReason ?? 'unusual structure').').');
+            $this->line('  Add it by hand:');
+            $this->line('      $this->call(\\'.DatabaseSeederWiring::DEV_DATA.'::class);');
+
+            return;
+        }
+
+        // Reporting stays inside the try so $change is never read on a path
+        // where it was not assigned.
+        try {
+            $change = $this->seederWiring->wire($analysis, [DatabaseSeederWiring::DEV_DATA]);
+            $this->seederWiring->commit($change);
+
+            $this->line($change->addedSeeders === []
+                ? '  - DevDataSeeder already wired into database/seeders/DatabaseSeeder.php'
+                : '  - wired DevDataSeeder into database/seeders/DatabaseSeeder.php');
+        } catch (Throwable $e) {
+            $this->newLine();
+            $this->warn('  Could not add DevDataSeeder: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Post-setup pointers. The seeders are now wired automatically, so this
+     * reports what was done and names the rebuild command — `migrate:refresh`
+     * seeds only with `--seed`, so naming the bare command would mislead.
      */
     private function displayNextSteps(): void
     {
         $this->newLine();
         $this->line('Next steps:');
         $this->newLine();
-        $this->line('  • Register the seeders in database/seeders/DatabaseSeeder.php so');
-        $this->line('    `migrate:fresh --seed` recreates roles (and the dev cast locally):');
-        $this->newLine();
-        $this->line('        // Required account roles — ALL environments.');
-        $this->line('        $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);');
-        $this->newLine();
-        $this->line('        // Dev fixtures — the seeder itself refuses outside local/staging.');
-        $this->line('        $this->call(\JamesGifford\Auth\Database\DevDataSeeder::class);');
+
+        if ($this->option('skip-seeder-wiring')) {
+            $this->line('  • Seeder wiring was skipped (--skip-seeder-wiring). To rebuild the');
+            $this->line('    database with `--seed`, add these to run() in');
+            $this->line('    database/seeders/DatabaseSeeder.php yourself:');
+            $this->newLine();
+            foreach (DatabaseSeederWiring::CANONICAL_ORDER as $fqcn) {
+                $this->line('        $this->call(\\'.$fqcn.'::class);');
+            }
+        } else {
+            $this->line('  • The package seeders are wired into');
+            $this->line('    database/seeders/DatabaseSeeder.php, so you can rebuild the');
+            $this->line('    database at any time with:');
+            $this->newLine();
+            $this->line('        php artisan migrate:refresh --seed');
+            $this->newLine();
+            $this->line('    (`migrate:refresh` alone re-runs migrations without seeding.)');
+        }
+
         $this->newLine();
         $this->line('  • Using Laravel Boost? Run `php artisan boost:update` to install this');
         $this->line("    package's AI skill (first-time Boost setup uses `boost:install`).");

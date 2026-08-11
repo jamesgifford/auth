@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Installer;
 
+use JamesGifford\Auth\Installer\TransientFileWriter;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Tests\TestCase;
 use PhpParser\Parser;
@@ -22,9 +23,11 @@ class UserModelModifierTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $parser = $this->app->make(Parser::class);
         $this->modifier = new UserModelModifier(
-            $this->app->make(Parser::class),
+            $parser,
             new Standard,
+            new TransientFileWriter($parser),
         );
         $this->tmpDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jamesgifford-modifier-'.uniqid('', true);
         mkdir($this->tmpDir, 0777, true);

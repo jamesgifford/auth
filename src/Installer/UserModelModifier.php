@@ -37,6 +37,7 @@ final class UserModelModifier
     public function __construct(
         private readonly Parser $parser,
         private readonly Standard $printer,
+        private readonly TransientFileWriter $writer,
     ) {}
 
     public function analyze(string $filePath): UserModelAnalysis
@@ -492,31 +493,7 @@ final class UserModelModifier
      */
     public function applyTransient(string $filePath, string $newCode, ?Closure $verify = null): void
     {
-        $backupPath = $filePath.'.bak';
-        copy($filePath, $backupPath);
-
-        try {
-            file_put_contents($filePath, $newCode);
-
-            // Validity gate: the written file must still parse as PHP.
-            $written = (string) file_get_contents($filePath);
-            if ($this->parser->parse($written) === null) {
-                throw new RuntimeException('the edited User model did not parse as valid PHP');
-            }
-
-            if ($verify !== null) {
-                $verify();
-            }
-        } catch (Throwable $e) {
-            if (is_file($backupPath)) {
-                file_put_contents($filePath, (string) file_get_contents($backupPath));
-            }
-            @unlink($backupPath);
-
-            throw $e;
-        }
-
-        @unlink($backupPath);
+        $this->writer->apply($filePath, $newCode, $verify);
     }
 
     /**

@@ -5,6 +5,23 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-08-11
+
+### Added
+- `jamesgifford:auth:install` now wires `AccountRoleSeeder` and the new `ApplyIdOffsetsSeeder` into `database/seeders/DatabaseSeeder.php`, and `jamesgifford:auth:setup --with-dev-data` adds `DevDataSeeder`. After setup, `php artisan migrate:refresh --seed` (or `migrate:fresh --seed`) rebuilds roles, dev fixtures, and ID offsets with no manual file edits. Note that `migrate:refresh` alone re-runs migrations without seeding — the `--seed` flag is Laravel's, and the wiring is what makes it do the right thing.
+- New `ApplyIdOffsetsSeeder`. A `--seed` rebuild resets each table's auto-increment counter, so offsets applied at setup time were previously lost until `jamesgifford:auth:apply-id-offsets` was re-run by hand. It is a no-op when no offsets are configured and on SQLite. Offsets are a convenience rather than a correctness requirement, so any failure — a malformed offset, or a driver refusing the `ALTER` (insufficient grants, a locked table) — is logged and skipped rather than allowed to abort the seeding run.
+- New `--skip-seeder-wiring` flag on `install` and `setup` for consumers who manage `DatabaseSeeder` themselves. `install --verify` reports the wiring state unless the flag is passed; a `DatabaseSeeder` that exists but cannot be parsed is surfaced as an advisory line rather than a failed check, so an unrelated syntax error in that file cannot fail an otherwise-complete install.
+
+### Changed
+- `jamesgifford:auth:uninstall` removes the package's `$this->call(...)` lines from `DatabaseSeeder`, preserving the application's own seeders, and names the edit in its up-front teardown summary.
+- `jamesgifford:auth:setup`'s closing block reports what was wired instead of instructing you to paste the calls in yourself.
+- The README's seeding section no longer wraps `DevDataSeeder` in `if (app()->environment('local', 'staging'))`. The seeder self-guards, and the documented form now matches exactly what the commands write.
+
+### Development
+- Edits to `DatabaseSeeder` are AST-based via nikic/php-parser's format-preserving printer, so they coexist with unrelated changes: detection is position-independent and recognises imported, fully-qualified, array-form, and nested calls; insertion adds only what is missing; removal takes only the package's entries and is pinned by a byte-for-byte wire-then-unwire round-trip test.
+- `applyTransient()` is extracted from `UserModelModifier` into a shared `TransientFileWriter`, so every editor that rewrites a consumer's source file uses one restore-on-failure implementation.
+- New drift guard: every seeder class the wiring writes into consumers' files must autoload and extend `Illuminate\Database\Seeder`.
+
 ## [1.2.2] - 2026-08-11
 
 ### Changed

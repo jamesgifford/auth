@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Installer\UserModelModifier;
@@ -38,6 +39,7 @@ final class AuthInstallCommand extends Command
         {--skip-public-id : Skip public_id config setup}
         {--skip-migrations : Skip publishing and running migrations}
         {--skip-roles : Skip seeding system roles}
+        {--skip-seeder-wiring : Skip wiring the package seeders into database/seeders/DatabaseSeeder.php}
         {--skip-user-model : Skip User model modification; print instructions instead}
         {--no-modify-user : Alias for --skip-user-model}
         {--force : Bypass interactive prompts}
@@ -55,6 +57,7 @@ final class AuthInstallCommand extends Command
         private readonly PackageMigrations $packageMigrations,
         private readonly ModelPublisher $modelPublisher,
         private readonly IdOffsetManager $idOffsetManager,
+        private readonly DatabaseSeederWiring $seederWiring,
     ) {
         parent::__construct();
     }
@@ -209,8 +212,37 @@ final class AuthInstallCommand extends Command
             'publish_migrations' => $this->needsMigrationsPublished() && ! $this->option('skip-migrations'),
             'run_migrations' => $this->needsMigrationsRun() && ! $this->option('skip-migrations'),
             'seed_roles' => $this->needsRolesSeeded() && ! $this->option('skip-roles'),
+            'wire_database_seeder' => $this->needsSeederWiring() && ! $this->option('skip-seeder-wiring'),
             'modify_user_model' => $this->needsUserModelModification() && ! $this->shouldSkipUserModel(),
         ];
+    }
+
+    /**
+     * Wiring is needed when either always-on seeder is missing from the
+     * consumer's DatabaseSeeder — or when there is no DatabaseSeeder at all,
+     * in which case one is created.
+     */
+    private function needsSeederWiring(): bool
+    {
+        $analysis = $this->seederWiring->analyze();
+
+        if (! $analysis->fileExists) {
+            return true;
+        }
+
+        return $analysis->missing($this->installWiredSeeders()) !== [];
+    }
+
+    /**
+     * The seeders install itself wires: required roles, and the offset
+     * re-application that `--seed` rebuilds would otherwise lose. Dev fixtures
+     * are wired by `setup --with-dev-data`, not here.
+     *
+     * @return list<string>
+     */
+    private function installWiredSeeders(): array
+    {
+        return [DatabaseSeederWiring::ROLES, DatabaseSeederWiring::ID_OFFSETS];
     }
 
     private function shouldSkipUserModel(): bool
@@ -296,6 +328,7 @@ final class AuthInstallCommand extends Command
             'publish_migrations' => 'Publish package migrations to database/migrations/',
             'run_migrations' => 'Run pending migrations',
             'seed_roles' => 'Seed system roles into account_roles',
+            'wire_database_seeder' => 'Wire package seeders into database/seeders/DatabaseSeeder.php',
             'modify_user_model' => 'Modify your User model to add HasPublicId and HasAccounts traits',
         ];
 
@@ -325,6 +358,7 @@ final class AuthInstallCommand extends Command
             'publish_migrations' => $this->option('skip-migrations') ? 'skipped via flag' : 'already published',
             'run_migrations' => $this->option('skip-migrations') ? 'skipped via flag' : 'already run',
             'seed_roles' => $this->option('skip-roles') ? 'skipped via flag' : 'already seeded',
+            'wire_database_seeder' => $this->option('skip-seeder-wiring') ? 'skipped via flag' : 'already wired',
             'modify_user_model' => $this->shouldSkipUserModel() ? 'skipped via flag' : 'already configured',
             default => 'skipped',
         };
@@ -533,6 +567,11 @@ final class AuthInstallCommand extends Command
                 return false;
             }
         }
+        if ($plan['wire_database_seeder']) {
+            // Advisory: a DatabaseSeeder we cannot safely edit must not fail an
+            // otherwise-good install. Same posture as model publishing.
+            $this->executeWireDatabaseSeeder($this->installWiredSeeders());
+        }
         if ($plan['modify_user_model']) {
             if (! $this->executeModifyUserModel()) {
                 return false;
@@ -668,6 +707,73 @@ final class AuthInstallCommand extends Command
 
                 return;
             }
+        }
+    }
+
+    /**
+     * Wire the given seeders into the consumer's DatabaseSeeder, creating the
+     * file when absent. Never fails the install: on any refusal it prints the
+     * lines to paste instead.
+     *
+     * @param  list<string>  $seeders
+     */
+    private function executeWireDatabaseSeeder(array $seeders): void
+    {
+        $this->newLine();
+        $this->info('→ Wiring seeders into DatabaseSeeder...');
+
+        $analysis = $this->seederWiring->analyze();
+        $path = $this->seederWiring->path();
+
+        if (! $analysis->fileExists) {
+            $directory = dirname($path);
+            if (! is_dir($directory)) {
+                @mkdir($directory, 0755, true);
+            }
+            file_put_contents($path, $this->seederWiring->stub($seeders));
+            $this->line('  - created '.$this->relativeToBase($path));
+
+            return;
+        }
+
+        if (! $analysis->isModifiable()) {
+            $this->warn('  Could not edit '.$this->relativeToBase($path).': '.($analysis->unusualReason ?? 'unusual structure').'.');
+            $this->displaySeederWiringInstructions($seeders);
+
+            return;
+        }
+
+        // Reporting stays inside the try so $change is never read on a path
+        // where it was not assigned.
+        try {
+            $change = $this->seederWiring->wire($analysis, $seeders);
+            $this->seederWiring->commit($change);
+
+            if ($change->addedSeeders === []) {
+                $this->line('  - already wired: '.$this->relativeToBase($path));
+
+                return;
+            }
+
+            foreach ($change->addedSeeders as $fqcn) {
+                $this->line('  - added '.class_basename($fqcn).' to '.$this->relativeToBase($path));
+            }
+        } catch (Throwable $e) {
+            $this->warn('  Could not edit '.$this->relativeToBase($path).': '.$e->getMessage());
+            $this->displaySeederWiringInstructions($seeders);
+        }
+    }
+
+    /**
+     * @param  list<string>  $seeders
+     */
+    private function displaySeederWiringInstructions(array $seeders): void
+    {
+        $this->newLine();
+        $this->line('  Add these to run() in database/seeders/DatabaseSeeder.php by hand:');
+        $this->newLine();
+        foreach ($seeders as $fqcn) {
+            $this->line('      $this->call(\\'.$fqcn.'::class);');
         }
     }
 
@@ -1004,6 +1110,29 @@ final class AuthInstallCommand extends Command
 
         $rolesOk = Schema::hasTable('account_roles') && PackageModels::accountRole()::findByKey(SystemRole::OWNER) !== null;
         $check('System roles seeded (owner role present)', $rolesOk);
+
+        // Skipped under the flag, mirroring how the User-model checks are
+        // skipped under --skip-user-model, so --verify reports the state the
+        // consumer actually asked install to produce.
+        if (! $this->option('skip-seeder-wiring')) {
+            $wiring = $this->seederWiring->analyze();
+
+            // A DatabaseSeeder that exists but cannot be safely edited is the
+            // consumer's file to fix, and install already printed the lines to
+            // add. Reporting it as a FAILED check would make an unrelated
+            // syntax error in their file fail an otherwise-complete install —
+            // disproportionate, and contrary to the advisory posture the
+            // wiring step itself takes. Surface it, don't fail on it.
+            if ($wiring->fileExists && ! $wiring->isModifiable()) {
+                $this->line('  ! Package seeders wired into DatabaseSeeder (could not read it: '
+                    .($wiring->unusualReason ?? 'unusual structure').')');
+            } else {
+                $check(
+                    'Package seeders wired into DatabaseSeeder',
+                    $wiring->missing($this->installWiredSeeders()) === [],
+                );
+            }
+        }
 
         if (! $this->shouldSkipUserModel()) {
             $file = $this->resolveUserModelFile();

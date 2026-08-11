@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Installer\UserModelAnalysis;
@@ -50,6 +51,7 @@ final class AuthUninstallCommand extends Command
         private readonly LockFile $lockFile,
         private readonly PackageMigrations $packageMigrations,
         private readonly ModelPublisher $modelPublisher,
+        private readonly DatabaseSeederWiring $seederWiring,
     ) {
         parent::__construct();
     }
@@ -80,6 +82,7 @@ final class AuthUninstallCommand extends Command
         }
 
         $this->revertUserModel();
+        $this->unwireDatabaseSeeder();
         $this->handlePublishedModels();
         $this->displayCompletion();
 
@@ -189,6 +192,7 @@ final class AuthUninstallCommand extends Command
      *     lockFileExists: bool,
      *     lockPath: string,
      *     configFiles: list<string>,
+     *     wiredSeeders: list<string>,
      *     notes: list<string>,
      * }
      */
@@ -260,6 +264,7 @@ final class AuthUninstallCommand extends Command
             'lockFileExists' => $this->lockFile->exists(),
             'lockPath' => $this->lockFile->path(),
             'configFiles' => array_values(array_filter($this->publishedConfigPaths(), 'is_file')),
+            'wiredSeeders' => $this->seederWiring->analyze()->wiredSeeders,
             'notes' => $notes,
         ];
     }
@@ -270,7 +275,7 @@ final class AuthUninstallCommand extends Command
      * color only amplifies it — red for the headline, yellow for the counts
      * and the back-up caution.
      *
-     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, configFiles: list<string>, notes: list<string>}  $summary
+     * @param  array{accounts: ?int, memberships: ?int, customRoles: list<string>, usersAffected: ?int, userColumns: list<string>, migrationFileCount: int, lockFileExists: bool, lockPath: string, configFiles: list<string>, wiredSeeders: list<string>, notes: list<string>}  $summary
      */
     private function displayWarning(array $summary): void
     {
@@ -327,6 +332,13 @@ final class AuthUninstallCommand extends Command
             $this->warn('  • the public ID lock file ('.$this->displayPath($summary['lockPath']).')');
         } else {
             $this->warn('  • the public ID lock file (already absent)');
+        }
+        if ($summary['wiredSeeders'] !== []) {
+            $this->warn(sprintf(
+                '  • %d package seeder %s from database/seeders/DatabaseSeeder.php (your own seeders are kept)',
+                count($summary['wiredSeeders']),
+                $this->pluralize(count($summary['wiredSeeders']), 'call', 'calls'),
+            ));
         }
 
         if ($this->option('keep-config')) {
@@ -578,6 +590,52 @@ final class AuthUninstallCommand extends Command
             }
         }
         $this->line('  All other code in the model was preserved. No backup file was left behind.');
+    }
+
+    /**
+     * Remove the package's seeder calls from the consumer's DatabaseSeeder,
+     * preserving their own seeders. Advisory: a file we cannot safely edit is
+     * reported with by-hand instructions rather than mangled.
+     */
+    private function unwireDatabaseSeeder(): void
+    {
+        $this->newLine();
+
+        $analysis = $this->seederWiring->analyze();
+        $path = $this->displayPath($this->seederWiring->path());
+
+        if (! $analysis->fileExists || $analysis->wiredSeeders === []) {
+            $this->line('No package seeders are wired into '.$path.', so nothing to remove there.');
+
+            return;
+        }
+
+        if (! $analysis->isModifiable()) {
+            $this->warn('Could not auto-edit '.$path.' ('.($analysis->unusualReason ?? 'unusual structure').').');
+            $this->line('Remove these calls from its run() method by hand:');
+            foreach ($analysis->wiredSeeders as $fqcn) {
+                $this->line('  • $this->call(\\'.$fqcn.'::class);');
+            }
+
+            return;
+        }
+
+        // Report what the change actually removed, not what analysis found
+        // beforehand — and from inside the try, so it is never read on a path
+        // where the commit threw.
+        try {
+            $change = $this->seederWiring->unwire($analysis);
+            $this->seederWiring->commit($change);
+
+            $this->info('✓ Removed the package\'s seeder calls from '.$path.':');
+            foreach ($change->removedSeeders as $fqcn) {
+                $this->line('  • '.class_basename($fqcn));
+            }
+            $this->line('  Your own seeders were preserved.');
+        } catch (Throwable $e) {
+            $this->warn('Could not auto-edit '.$path.': '.$e->getMessage());
+            $this->line('It was left unchanged. Remove the package\'s $this->call(...) lines by hand.');
+        }
     }
 
     /**

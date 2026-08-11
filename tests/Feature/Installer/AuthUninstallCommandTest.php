@@ -9,14 +9,18 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\PublicId\Config\ConfigFingerprint;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
 use JamesGifford\Auth\Tests\TestCase;
 
 class AuthUninstallCommandTest extends TestCase
 {
+    use StagesDatabaseSeeder;
+
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -42,6 +46,7 @@ class AuthUninstallCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->removeDatabaseSeeder();
         $this->rmTree($this->tmpDir);
         if (isset($this->migrationsDir) && is_dir($this->migrationsDir)) {
             foreach (['*jamesgifford*', '*_create_account*', '*_add_jamesgifford*', '*_add_current_account*'] as $pattern) {
@@ -634,6 +639,48 @@ class AuthUninstallCommandTest extends TestCase
 
         $this->assertStringContainsString('Uninstall complete.', $output);
         $this->assertStringContainsString('tables, columns, migration files, public ID lock, and', $output);
+    }
+
+    public function test_uninstall_removes_the_wiring_and_keeps_app_seeders(): void
+    {
+        $this->stageInstall();
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        $wiring = $this->app->make(DatabaseSeederWiring::class);
+        $wiring->commit($wiring->wire($wiring->analyze(), DatabaseSeederWiring::CANONICAL_ORDER));
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringNotContainsString('AccountRoleSeeder', $contents);
+        $this->assertStringNotContainsString('DevDataSeeder', $contents);
+        $this->assertStringNotContainsString('ApplyIdOffsetsSeeder', $contents);
+        $this->assertStringContainsString('$this->call(ProductSeeder::class);', $contents);
+    }
+
+    public function test_the_teardown_summary_names_the_database_seeder_edit(): void
+    {
+        $this->stageInstall();
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        $wiring = $this->app->make(DatabaseSeederWiring::class);
+        $wiring->commit($wiring->wire($wiring->analyze(), [DatabaseSeederWiring::ROLES]));
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+
+        $this->assertStringContainsString('DatabaseSeeder.php', Artisan::output());
+    }
+
+    public function test_uninstall_is_a_no_op_when_nothing_is_wired(): void
+    {
+        $this->stageInstall();
+        $original = $this->defaultDatabaseSeederSource();
+        $this->stageDatabaseSeeder($original);
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+
+        $this->assertSame($original, $this->readDatabaseSeeder());
     }
 
     // ---- Setup helpers ----

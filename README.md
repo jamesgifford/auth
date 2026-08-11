@@ -60,7 +60,8 @@ php artisan jamesgifford:auth:setup --force
 | Flag | Effect |
 | --- | --- |
 | `--fresh` | Reset the database with `migrate:fresh` first. Development only — the command refuses in production. |
-| `--with-dev-data` | Also seed the deterministic local dev cast. The seeder refuses in production even with this flag. |
+| `--with-dev-data` | Also seed the deterministic local dev cast, and wire `DevDataSeeder` into `DatabaseSeeder`. The seeder refuses in production even with this flag. |
+| `--skip-seeder-wiring` | Don't touch `database/seeders/DatabaseSeeder.php`; print the calls to add instead. |
 | `--force` | Run non-interactively: skip the educational pause and propagate `--force` to the migrate step. |
 
 The interactive flow pauses before the irreversible public_id lock to surface the format that's about to be locked. In production you run it non-interactively with `--force`; `--fresh` and `--with-dev-data` are refused there regardless.
@@ -356,29 +357,43 @@ The config declares accounts explicitly and each user's memberships from that us
 
 ### Seeding from your DatabaseSeeder
 
-Both seeders are first-class Laravel seeders, callable from a consuming app's `database/seeders/DatabaseSeeder.php`. The dev-data seeder self-guards (skips outside `local`/`staging`, always skips in production, never throws), so `php artisan migrate:fresh --seed` re-seeds roles in **every** environment and dev data only in `local`/`staging` — alongside your own seeders:
+The setup commands wire this up for you — there is nothing to paste in. `jamesgifford:auth:install` adds the two always-on seeders to `database/seeders/DatabaseSeeder.php`, and `jamesgifford:auth:setup --with-dev-data` adds the dev fixtures, leaving:
 
 ```php
-use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
-use JamesGifford\Auth\Database\DevDataSeeder;
-
 public function run(): void
 {
-    // Auth: required account roles — ALL environments (reads config/jamesgifford/auth.php).
-    $this->call(AccountRoleSeeder::class);
+    // Auth: required account roles — ALL environments.
+    $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);
 
-    // Auth: development fixtures — local & staging only (reads config/jamesgifford/auth-dev.php).
-    // The seeder self-guards too, so this stays safe even without the env check.
-    if (app()->environment('local', 'staging')) {
-        $this->call(DevDataSeeder::class);
-    }
+    // Auth: development fixtures — the seeder refuses outside
+    // local/staging and always in production.
+    $this->call(\JamesGifford\Auth\Database\DevDataSeeder::class);
 
-    // App-specific seeders:
-    // $this->call(YourAppSeeder::class);
+    // Auth: reserve low IDs for the fixtures above. No-op when no
+    // offsets are configured, and on SQLite.
+    $this->call(\JamesGifford\Auth\Database\Seeders\ApplyIdOffsetsSeeder::class);
+
+    // ...your own seeders, untouched
 }
 ```
 
-The role seeder (`JamesGifford\Auth\Database\Seeders\AccountRoleSeeder`) reads `config('jamesgifford.auth.roles')` and runs unconditionally — roles are required data. The dev-data seeder (`JamesGifford\Auth\Database\DevDataSeeder`) reads `config('jamesgifford.auth-dev')` and self-restricts to development.
+So rebuilding the database takes one command:
+
+```bash
+php artisan migrate:refresh --seed     # or: migrate:fresh --seed
+```
+
+`migrate:refresh` on its own re-runs migrations **without** seeding — the `--seed` flag is Laravel's, and this wiring is what makes it repopulate the package's data.
+
+Each seeder is independently safe:
+
+- `AccountRoleSeeder` reads `config('jamesgifford.auth.roles')` and runs unconditionally — roles are required data in every environment.
+- `DevDataSeeder` reads `config('jamesgifford.auth-dev')` and self-guards: outside `local`/`staging`, and always in production, it logs a notice and returns without seeding or throwing.
+- `ApplyIdOffsetsSeeder` re-applies your configured ID offsets, which a `--seed` rebuild resets. It is a no-op when no offsets are configured and on SQLite. Offsets are a convenience rather than a correctness requirement, so any failure — a malformed offset, or a driver refusing the `ALTER` — is logged and skipped rather than allowed to abort your seeding run. It runs last so the offsets land above the fixtures.
+
+Your own seeders are never touched. The package's edits are made through PHP's AST with a format-preserving printer, so unrelated content — your seeders, comments, docblocks, and formatting — is preserved byte for byte, and re-running setup never duplicates a call. `jamesgifford:auth:uninstall` removes only the package's `$this->call(...)` lines and leaves yours in place.
+
+Pass `--skip-seeder-wiring` to `install` or `setup` to manage the file yourself; the commands then print the lines to add. If your application's root seeder is not at `database/seeders/DatabaseSeeder.php`, or that file cannot be safely parsed, the commands print the same instructions rather than editing anything.
 
 ### ID offsets
 
@@ -390,7 +405,7 @@ The package ships a [Laravel Boost](https://github.com/laravel/boost) skill (`re
 
 ## Uninstall
 
-`jamesgifford:auth:uninstall` removes the package's footprint: it drops the package tables, reverts the User model modifications, removes the package config, and clears the public_id lock. It is destructive (drops tables and deletes data) and prompts before proceeding.
+`jamesgifford:auth:uninstall` removes the package's footprint: it drops the package tables, reverts the User model modifications, removes the package's `$this->call(...)` lines from your `DatabaseSeeder` (leaving your own seeders in place), removes the package config, and clears the public_id lock. It is destructive (drops tables and deletes data) and prompts before proceeding, listing everything it will touch first.
 
 ```bash
 php artisan jamesgifford:auth:uninstall
@@ -430,6 +445,7 @@ php artisan jamesgifford:auth:uninstall
 | `--without-http` | Disable the HTTP plumbing (`http.enabled = false` in the published config). |
 | `--publish-models` | Publish the editable `App\Models` subclasses without prompting. |
 | `--skip-public-id` / `--skip-migrations` / `--skip-roles` / `--skip-user-model` | Skip individual install steps (`--no-modify-user` is an alias for `--skip-user-model`). |
+| `--skip-seeder-wiring` | Don't touch `database/seeders/DatabaseSeeder.php`; print the calls to add instead. |
 | `--skip-id-offsets` | Don't apply ID offsets here (the setup command passes this so it can apply them itself, after dev-data seeding). |
 
 ## Testing

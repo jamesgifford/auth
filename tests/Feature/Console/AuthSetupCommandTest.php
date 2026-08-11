@@ -15,6 +15,7 @@ use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
 use JamesGifford\Auth\Tests\TestCase;
 use ReflectionClass;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -33,6 +34,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 class AuthSetupCommandTest extends TestCase
 {
+    use StagesDatabaseSeeder;
+
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -48,6 +51,7 @@ class AuthSetupCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->removeDatabaseSeeder();
         if ($this->app !== null) {
             // Restore env before the parent's migrate rollback runs.
             $this->app['env'] = 'testing';
@@ -111,10 +115,74 @@ class AuthSetupCommandTest extends TestCase
         // mid-run like install's own Step 2 output does).
         $afterComplete = (string) strstr($output, 'Setup complete.');
         $this->assertStringContainsString('database/seeders/DatabaseSeeder.php', $afterComplete);
-        $this->assertStringContainsString('AccountRoleSeeder::class', $afterComplete);
-        $this->assertStringContainsString('DevDataSeeder::class', $afterComplete);
+        // It now REPORTS the wiring and names the rebuild command, rather than
+        // instructing the developer to paste the calls in themselves.
+        $this->assertStringContainsString('migrate:refresh --seed', $afterComplete);
         $this->assertStringContainsString('boost:update', $afterComplete);
         $this->assertStringContainsString('boost:install', $afterComplete);
+    }
+
+    public function test_setup_with_dev_data_wires_all_three_seeders(): void
+    {
+        $this->app['env'] = 'local';
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        Artisan::call('jamesgifford:auth:setup', [
+            '--force' => true,
+            '--with-dev-data' => true,
+        ]);
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringContainsString('AccountRoleSeeder::class', $contents);
+        $this->assertStringContainsString('DevDataSeeder::class', $contents);
+        $this->assertStringContainsString('ApplyIdOffsetsSeeder::class', $contents);
+    }
+
+    public function test_setup_without_dev_data_does_not_wire_dev_data(): void
+    {
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringContainsString('AccountRoleSeeder::class', $contents);
+        $this->assertStringContainsString('ApplyIdOffsetsSeeder::class', $contents);
+        $this->assertStringNotContainsString('DevDataSeeder::class', $contents);
+    }
+
+    public function test_skip_seeder_wiring_leaves_the_database_seeder_untouched(): void
+    {
+        $this->app['env'] = 'local';
+        $original = $this->defaultDatabaseSeederSource();
+        $this->stageDatabaseSeeder($original);
+
+        Artisan::call('jamesgifford:auth:setup', [
+            '--force' => true,
+            '--with-dev-data' => true,
+            '--skip-seeder-wiring' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame($original, $this->readDatabaseSeeder());
+        // With wiring skipped, the closing block goes back to instructing.
+        $this->assertStringContainsString('DevDataSeeder::class', $output);
+    }
+
+    public function test_re_running_setup_does_not_duplicate_wiring(): void
+    {
+        $this->app['env'] = 'local';
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        Artisan::call('jamesgifford:auth:setup', ['--force' => true, '--with-dev-data' => true]);
+        Artisan::call('jamesgifford:auth:setup', ['--force' => true, '--with-dev-data' => true]);
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertSame(1, substr_count($contents, 'AccountRoleSeeder::class'));
+        $this->assertSame(1, substr_count($contents, 'DevDataSeeder::class'));
+        $this->assertSame(1, substr_count($contents, 'ApplyIdOffsetsSeeder::class'));
     }
 
     // ---- --with-dev-data in an allowlisted environment seeds ----

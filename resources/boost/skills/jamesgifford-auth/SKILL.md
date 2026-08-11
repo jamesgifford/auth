@@ -152,11 +152,12 @@ sensible account instead of redirecting.
 - `jamesgifford:auth:setup` — primary entry point. Sequences migrate → install
   → (optional dev data) → apply ID offsets. Flags: `--fresh` (migrate:fresh,
   refuses in production), `--with-dev-data` (seed local dev cast, refuses in
-  production), `--force` (non-interactive; skips the educational pause).
+  production), `--skip-seeder-wiring`, `--force` (non-interactive; skips the
+  educational pause).
 - `jamesgifford:auth:install` — install/configure the package. Flags include
   `--fresh`, `--without-http`, `--publish-models`, `--skip-public-id`,
-  `--skip-migrations`, `--skip-roles`, `--skip-user-model`, `--force`,
-  `--verify`.
+  `--skip-migrations`, `--skip-roles`, `--skip-user-model`,
+  `--skip-seeder-wiring`, `--force`, `--verify`.
 - `jamesgifford:auth:uninstall` — destructive removal (drops tables, deletes
   data). Flags: `--keep-config`, `--remove-published-models`,
   `--force-production`, `--force`.
@@ -167,6 +168,22 @@ sensible account instead of redirecting.
 - `jamesgifford:auth:apply-id-offsets` — set the auto-increment start for the
   users/accounts tables (MySQL/Postgres; no-op on SQLite). Run after migrate and
   after any seeding.
+
+## DatabaseSeeder wiring
+
+`install` wires `JamesGifford\Auth\Database\Seeders\AccountRoleSeeder` and
+`JamesGifford\Auth\Database\Seeders\ApplyIdOffsetsSeeder` into
+`database/seeders/DatabaseSeeder.php`; `setup --with-dev-data` also wires
+`JamesGifford\Auth\Database\DevDataSeeder`. Order is roles → dev data → offsets.
+So `php artisan migrate:refresh --seed` (or `migrate:fresh --seed`) rebuilds
+everything — do NOT tell users to add these calls by hand, and note that bare
+`migrate:refresh` re-runs migrations WITHOUT seeding.
+
+`ApplyIdOffsetsSeeder` re-applies configured ID offsets, which a `--seed`
+rebuild resets; it no-ops when none are configured and on SQLite. `uninstall`
+removes only the package's calls and preserves the app's own seeders. Edits are
+AST-based, so they never disturb unrelated content and never duplicate on
+re-run. `--skip-seeder-wiring` opts out on both commands.
 - `jamesgifford:auth:publish-models` — publish editable `App\Models` subclasses.
 - `jamesgifford:public-id:setup` / `:check` / `:status` / `:reset` — lock the
   public_id format / verify prefix integrity / show status / clear the lock

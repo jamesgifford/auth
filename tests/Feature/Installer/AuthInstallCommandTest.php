@@ -17,10 +17,13 @@ use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
 use JamesGifford\Auth\Tests\TestCase;
 
 class AuthInstallCommandTest extends TestCase
 {
+    use StagesDatabaseSeeder;
+
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -46,6 +49,7 @@ class AuthInstallCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->removeDatabaseSeeder();
         $this->rmTree($this->tmpDir);
         if (isset($this->userModelPath)) {
             @unlink($this->userModelPath);
@@ -98,6 +102,8 @@ class AuthInstallCommandTest extends TestCase
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
         // Trigger schema check by hitting the package's seeder.
         $this->app->make(AccountRoleSeeder::class)->run();
+        // A complete install now includes the DatabaseSeeder wiring.
+        $this->stageDatabaseSeeder($this->wiredDatabaseSeederSource());
 
         $this->artisan('jamesgifford:auth:install', ['--verify' => true])
             ->expectsOutputToContain('All checks passed.')
@@ -157,6 +163,7 @@ class AuthInstallCommandTest extends TestCase
         $this->loadLaravelMigrations();
         $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
         $this->app->make(AccountRoleSeeder::class)->run();
+        $this->stageDatabaseSeeder($this->wiredDatabaseSeederSource());
 
         $this->artisan('jamesgifford:auth:install', ['--verify' => true, '--skip-user-model' => true])
             ->expectsOutputToContain('All checks passed.')
@@ -714,6 +721,60 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString($relative, $output);
         // The absolute path (with the project root prefix) is not shown.
         $this->assertStringNotContainsString($absolute, $output);
+    }
+
+    public function test_install_wires_roles_and_offsets_but_not_dev_data(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringContainsString('AccountRoleSeeder::class', $contents);
+        $this->assertStringContainsString('ApplyIdOffsetsSeeder::class', $contents);
+        $this->assertStringNotContainsString('DevDataSeeder::class', $contents);
+    }
+
+    public function test_install_creates_the_database_seeder_when_absent(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->removeDatabaseSeeder();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $this->assertFileExists($this->databaseSeederPath());
+        $this->assertStringContainsString('AccountRoleSeeder::class', $this->readDatabaseSeeder());
+    }
+
+    public function test_skip_seeder_wiring_leaves_the_file_untouched(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = $this->defaultDatabaseSeederSource();
+        $this->stageDatabaseSeeder($original);
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--skip-seeder-wiring' => true,
+        ]);
+
+        $this->assertSame($original, $this->readDatabaseSeeder());
+    }
+
+    public function test_an_unusual_database_seeder_prints_instructions_without_failing(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = '<?php this will not parse {{{';
+        $this->stageDatabaseSeeder($original);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, 'Wiring problems are advisory, never fatal to install.');
+        $this->assertSame($original, $this->readDatabaseSeeder());
+        $this->assertStringContainsString('AccountRoleSeeder', $output);
     }
 
     protected function defineEnvironment($app): void
