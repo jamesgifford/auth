@@ -376,11 +376,12 @@ final class AuthSetupCommand extends Command
      * Interactive-only pause shown after the config is published and BEFORE the
      * public_id lock. It explains the irreversible lock and shows copy/paste
      * snippets for declaring ID offsets two ways — a config literal and an
-     * environment variable — plus, when a dev cast will be seeded, the .env
-     * line for the shared dev-user password. All of it belongs here rather than
-     * in the closing next-steps block: the lock and the seeding both happen
-     * after this point, so this is the last moment any of it is actionable
-     * without a re-run.
+     * environment variable — plus, when a dev cast will actually be seeded, the
+     * .env line for the shared dev-user password. Env-sourced values are
+     * resolved when the app BOOTS, so an .env edit made during the pause cannot
+     * reach this run: everything here teaches the Ctrl-C-and-re-run path, and
+     * it sits at the pause (not in the closing next-steps block) because this
+     * is the last moment to abort before the lock and the seeding happen.
      */
     private function educationalPause(bool $withDevData): void
     {
@@ -399,15 +400,18 @@ final class AuthSetupCommand extends Command
 
         $this->displayPrefixSection();
 
-        // Only when a cast will actually be seeded. Kept clear of the ID-offset
-        // section below, whose two bullets are an either/or pair that must stay
-        // contiguous. The password is hashed at seed time in Step 3, so this
-        // pause is the last point at which setting it still changes the
-        // outcome — after that it takes a re-seed.
-        if ($withDevData) {
-            $this->line('Dev users all share one password, read from your .env. Add this line');
-            $this->line('before Step 3 seeds the cast — the value is hashed at seed time, and');
-            $this->line('"password" is what the seeder uses if you skip it:');
+        // Only when a cast will ACTUALLY be seeded: the flag alone is not
+        // enough — Step 3 is double-guarded by the seeder's environment
+        // allowlist, and a password reminder for a cast the seeder will refuse
+        // would leave the user believing dev users exist. Kept clear of the
+        // ID-offset section below, whose two bullets are an either/or pair
+        // that must stay contiguous.
+        if ($withDevData && $this->laravel->make(DevDataSeeder::class)->environmentAllowed()) {
+            $this->line('Dev users will all share one password, read from your .env when the app');
+            $this->line('boots — so adding it during this pause cannot affect THIS run. To choose');
+            $this->line('it now, press Ctrl-C, add this line to .env, then re-run setup. If it is');
+            $this->line('not set, the cast is seeded with "password" (a warning after seeding');
+            $this->line('will say how to change it):');
             $this->newLine();
             $this->line('        JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password');
             $this->newLine();

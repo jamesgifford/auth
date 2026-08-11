@@ -58,12 +58,12 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
 
         $contents = (string) file_get_contents(config_path(self::PUBLISHED));
 
-        // Password comes from the environment, never a stored literal. The
-        // second needle must track the key name: 'users_password' => ' has no
-        // quote before "password", so the old needle would silently stop
-        // matching and this assertion would guard nothing.
+        // Password comes from the environment, never a stored literal —
+        // neither on the shared 'users_password' key nor as a per-user
+        // 'password' entry (the cast deliberately has no per-user passwords).
         $this->assertStringContainsString("env('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD'", $contents);
         $this->assertStringNotContainsString("'users_password' => '", $contents);
+        $this->assertStringNotContainsString("'password' => '", $contents);
     }
 
     public function test_default_config_seeds_the_whole_cast_with_invariants_intact(): void

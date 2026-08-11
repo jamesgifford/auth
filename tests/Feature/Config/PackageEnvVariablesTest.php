@@ -168,7 +168,7 @@ class PackageEnvVariablesTest extends TestCase
         return array_values(array_filter(
             array_merge(
                 [$this->packageRoot().DIRECTORY_SEPARATOR.'README.md'],
-                $this->packageFiles(['src', 'config', 'resources'], ['php', 'md']),
+                $this->packageFiles(['src', 'config', 'database', 'routes', 'resources'], ['php', 'md']),
             ),
             'is_file',
         ));

@@ -35,8 +35,12 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/phpunit",
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "vendor/bin/phpunit"
+        ],
         "test:sqlite": [
+            "Composer\\Config::disableProcessTimeout",
             "@putenv DB_CONNECTION=testing",
             "vendor/bin/phpunit"
         ],
@@ -64,7 +68,6 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
-        "sort-packages": true,
-        "process-timeout": 0
+        "sort-packages": true
     }
 }

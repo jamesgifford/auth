@@ -332,7 +332,7 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read only in co
 
 ### Dev-data seeding
 
-`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/jamesgifford/auth-dev.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` and hashed at seed time — no credential is committed. The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
+`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/jamesgifford/auth-dev.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` and hashed at seed time — no credential is committed. When the variable is unset the command warns after seeding that the default password (`password`) was used, and a leftover pre-1.2.2 `password` config key is reported as ignored (the key is now `users_password`). The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
 
 The config declares accounts explicitly and each user's memberships from that user's own perspective, so multi-account membership, roles, and the active account are all expressed in one place per entity:
 

@@ -5,18 +5,23 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.2] - 2026-08-10
+## [1.2.2] - 2026-08-11
 
 ### Changed
 - **Breaking:** the dev-user password env var is now `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` (was `JAMESGIFFORD_AUTH_DEV_PASSWORD`), and its config key is now `users_password` (was `password`) in `config/jamesgifford/auth-dev.php`. Both names now say what the password is for, rather than sitting ambiguously beside the `environments`, `accounts`, and `users` keys. There is no fallback to the old name — rename it in your `.env` and, if you published the dev config, in that file. The default value is unchanged (`password`).
 
 ### Added
-- `jamesgifford:auth:setup --with-dev-data` now names `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` in its pre-lock pause, as a copy/paste `.env` line alongside the existing ID-offset variables. The reminder appears at the pause rather than in the closing next-steps block because the password is hashed at seed time in Step 3 — printed at the end it would arrive after the cast was already created with the fallback. Runs without `--with-dev-data` are unchanged.
+- `jamesgifford:auth:setup --with-dev-data` now names `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` in its pre-lock pause, as a copy/paste `.env` line alongside the existing ID-offset variables. Env values are resolved when the app boots, so the pause teaches the Ctrl-C-edit-re-run path (matching the ID-offset guidance) rather than implying a mid-pause `.env` edit can reach the current run. The reminder prints only when the cast will actually be seeded — the seeder's environment allowlist is consulted, not just the flag. Runs without `--with-dev-data` are unchanged.
+- `jamesgifford:auth:seed-dev-data` warns after seeding when the cast was seeded with the default password (`password`), naming the env var to set. Because the warning lives in the seed command itself, it also reaches `setup --force --with-dev-data` and other non-interactive runs, which never see the educational pause.
+- The seed command likewise warns when the dev config still carries the legacy `password` key (the pre-1.2.2 name): the key is ignored, and the warning says to rename it to `users_password`. The seeder logs the same warning for `DatabaseSeeder`-driven runs (`migrate:fresh --seed`).
+- The seeder resolves `users_password` from the config files on disk (published file first, then the package default) whenever the key is missing from the live config — a config cache built before this release would otherwise skip `mergeConfigFrom` and silently seed the default password even with the env var set. Mirrors the staleness remedy install already applies to role seeding.
 
 ### Development
-- New drift guard: every `JAMESGIFFORD_AUTH_*` name appearing in `src/`, `config/`, `README.md`, or the Boost skill must be one a config file actually reads via `env()`. This catches a class of failure behavior tests cannot — a command that *prints* a variable name, and a test asserting that same literal, can agree with each other while both disagree with config, leaving a green suite that tells developers to set a variable nothing reads. `CHANGELOG.md` is excluded, since it records names as they were at past releases.
+- New drift guard: every `JAMESGIFFORD_AUTH_*` name appearing in `src/`, `config/`, `database/`, `routes/`, `README.md`, or the Boost skill must be one a config file actually reads via `env()`. This catches a class of failure behavior tests cannot — a command that *prints* a variable name, and a test asserting that same literal, can agree with each other while both disagree with config, leaving a green suite that tells developers to set a variable nothing reads. `CHANGELOG.md` is excluded, since it records names as they were at past releases.
 - `composer check` now runs the fast SQLite suite (Pint + PHPStan + `test:sqlite`) so the day-to-day gate takes seconds rather than minutes; the new `composer check:full` runs the same gate against MariaDB. CI is unchanged — it executes the full MariaDB suite on every push, so driver-real behavior is still gated before merge.
-- `composer.json` sets `process-timeout: 0`. Composer's 300-second default aborted the MariaDB suite (~14 minutes) partway through with a timeout error rather than a test failure, which made `composer test` and `composer check` unusable locally.
+- The `test` and `test:sqlite` scripts disable Composer's process timeout via `Composer\Config::disableProcessTimeout`. Composer's 300-second default aborted the MariaDB suite (~14 minutes) partway through with a timeout error rather than a test failure, which made `composer test` and `composer check:full` unusable locally. The default timeout still applies to every other script, so a wedged formatter or analyser fails visibly instead of hanging.
+- Dist hygiene: a new `.gitattributes` marks `tests/`, `.github/`, and tooling config (`phpunit.xml`, `phpstan.neon`, `pint.json`) as `export-ignore`, so `composer require` archives ship only what a consuming application needs.
+- Guard hardening: the transfer-immutability guard scans `src/Transfers/` recursively and fails loudly on a file whose class does not autoload from its path (previously both cases were silently skipped); the published dev-config guard rejects a per-user `'password'` literal in addition to the top-level `'users_password'` key.
 
 ## [1.2.1] - 2026-08-05
 

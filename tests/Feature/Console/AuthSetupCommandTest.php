@@ -375,8 +375,12 @@ class AuthSetupCommandTest extends TestCase
 
         // One substring per output line — see the note on expectsOutputToContain
         // in test_interactive_run_pauses_with_educational_guidance_before_the_lock.
+        // The wording must teach the Ctrl-C-and-re-run path: env values are
+        // resolved at boot, so an .env edit during the pause CANNOT reach this
+        // run, and the pause must not claim otherwise.
         $this->artisan('jamesgifford:auth:setup', ['--with-dev-data' => true])
-            ->expectsOutputToContain('Dev users all share one password, read from your .env. Add this line')
+            ->expectsOutputToContain('Dev users will all share one password, read from your .env when the app')
+            ->expectsOutputToContain('it now, press Ctrl-C, add this line to .env, then re-run setup.')
             ->expectsOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password')
             ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
             ->assertExitCode(0);
@@ -389,6 +393,33 @@ class AuthSetupCommandTest extends TestCase
             ->doesntExpectOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD')
             ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
             ->assertExitCode(0);
+    }
+
+    public function test_pause_omits_the_dev_password_env_var_when_the_seeder_will_decline(): void
+    {
+        // 'testing' is outside the default allowlist (local, staging), so
+        // Step 3 will decline the cast. Advertising a password for users that
+        // never get created would mislead — the reminder is gated on the
+        // seeder's own environment guard, not just the flag.
+        $this->artisan('jamesgifford:auth:setup', ['--with-dev-data' => true])
+            ->doesntExpectOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD')
+            ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
+            ->assertExitCode(0);
+    }
+
+    public function test_force_run_with_dev_data_warns_that_the_default_password_was_seeded(): void
+    {
+        $this->app['env'] = 'local'; // dev-data allowlisted
+
+        // --force skips the educational pause, so the pause can never be the
+        // only place the password variable is named. The post-seed warning
+        // (from the seed-dev-data step) is what reaches unattended runs.
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--with-dev-data' => true, '--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('default password', $output);
+        $this->assertStringContainsString('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD', $output);
     }
 
     public function test_prefix_section_renders_default_user_and_account_prefixes_with_samples(): void

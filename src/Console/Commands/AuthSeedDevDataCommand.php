@@ -62,11 +62,36 @@ final class AuthSeedDevDataCommand extends Command
             $counts['memberships'],
         ));
 
+        $this->displayPasswordWarnings();
+
         $this->newLine();
         $this->line('Next: run `php artisan jamesgifford:auth:apply-id-offsets` so real records');
         $this->line('start above these dev ids. (This command does not run it for you.)');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Post-seed password warnings. Printed AFTER seeding because they describe
+     * what was actually seeded — and here, in the command itself, so they reach
+     * every path that seeds: direct runs, `setup --with-dev-data`, and
+     * non-interactive `setup --force` runs that never see the educational pause.
+     */
+    private function displayPasswordWarnings(): void
+    {
+        if ($this->seeder->legacyPasswordKeyPresent()) {
+            $this->newLine();
+            $this->warn("  The dev config contains the legacy 'password' key, which is ignored.");
+            $this->line("  Rename it to 'users_password' in config/jamesgifford/auth-dev.php — the");
+            $this->line('  package default reads the JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD env var.');
+        }
+
+        if ($this->seeder->resolveUsersPassword() === 'password') {
+            $this->newLine();
+            $this->warn('  Dev users were seeded with the default password "password".');
+            $this->line('  Set JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD in your .env and re-run this');
+            $this->line('  command to update them (the value is hashed at seed time).');
+        }
     }
 
     /**

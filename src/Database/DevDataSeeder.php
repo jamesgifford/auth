@@ -129,10 +129,21 @@ final class DevDataSeeder extends Seeder
         /** @var array<string, mixed> $config */
         $config = (array) config('jamesgifford.auth-dev', []);
 
+        // A leftover pre-1.2.2 'password' key is IGNORED (the key is now
+        // 'users_password'); say so instead of silently seeding the default.
+        // The console command prints a visible warning; this log covers
+        // DatabaseSeeder-driven runs (`migrate:fresh --seed`).
+        if ($this->legacyPasswordKeyPresent()) {
+            Log::warning(
+                "[jamesgifford/auth] The dev-data config contains the legacy 'password' key, which is ".
+                "ignored — rename it to 'users_password' (read from JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD).",
+            );
+        }
+
         // Hash once. Models that cast password to 'hashed' won't re-hash an
         // already-hashed value (Hash::isHashed guard), so this is safe whether
         // or not the User model has that cast — and never stores plaintext.
-        $password = Hash::make((string) ($config['users_password'] ?? 'password'));
+        $password = Hash::make($this->resolveUsersPassword());
 
         $userClass = PackageModels::user();
         $accountClass = PackageModels::account();
@@ -278,6 +289,68 @@ final class DevDataSeeder extends Seeder
         }
 
         return $counts;
+    }
+
+    /**
+     * The shared plaintext password the cast will be seeded with (hashed at
+     * seed time). Read from the live config when present; when the key is
+     * MISSING there — the app booted with a config cached before the key
+     * existed, so mergeConfigFrom never ran — re-read from disk: the published
+     * file first, then the package default, whose env() call resolves the
+     * CURRENT environment value even under a cached config. Mirrors the
+     * staleness remedy install applies to role seeding.
+     */
+    public function resolveUsersPassword(): string
+    {
+        /** @var array<string, mixed> $config */
+        $config = (array) config('jamesgifford.auth-dev', []);
+
+        if (array_key_exists('users_password', $config)) {
+            return (string) $config['users_password'];
+        }
+
+        foreach ([
+            config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php'),
+            dirname(__DIR__, 2).'/config/auth-dev.php',
+        ] as $path) {
+            if (! is_file($path)) {
+                continue;
+            }
+
+            // require (not require_once) re-evaluates and returns the config
+            // array each call, so this is immune to the boot-time include cache.
+            $loaded = require $path;
+            if (is_array($loaded) && array_key_exists('users_password', $loaded)) {
+                return (string) $loaded['users_password'];
+            }
+        }
+
+        return 'password';
+    }
+
+    /**
+     * Whether the dev-data config still carries the pre-1.2.2 'password' key
+     * (renamed to 'users_password'). Checked in the live config AND in the
+     * published file on disk, so a stale published config is caught even when
+     * the live config was built from the package default alone.
+     */
+    public function legacyPasswordKeyPresent(): bool
+    {
+        /** @var array<string, mixed> $config */
+        $config = (array) config('jamesgifford.auth-dev', []);
+
+        if (array_key_exists('password', $config)) {
+            return true;
+        }
+
+        $published = config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth-dev.php');
+        if (! is_file($published)) {
+            return false;
+        }
+
+        $loaded = require $published;
+
+        return is_array($loaded) && array_key_exists('password', $loaded);
     }
 
     /**

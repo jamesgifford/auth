@@ -323,6 +323,71 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
         $this->assertFalse(Hash::check('dev-secret-pw', $owner->password));
     }
 
+    public function test_warns_after_seeding_with_the_default_password(): void
+    {
+        $this->configureDevData(['users_password' => 'password']);
+
+        // The warning must come AFTER seeding (it describes what was seeded)
+        // and must name the env var — for unattended runs (setup --force) this
+        // is the only place the variable is ever surfaced.
+        $this->artisan('jamesgifford:auth:seed-dev-data')
+            ->expectsOutputToContain('Dev users were seeded with the default password "password".')
+            ->expectsOutputToContain('Set JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD in your .env and re-run this')
+            ->assertSuccessful();
+    }
+
+    public function test_no_default_password_warning_when_a_custom_password_is_configured(): void
+    {
+        // setUp's configureDevData sets 'dev-secret-pw'.
+        $this->artisan('jamesgifford:auth:seed-dev-data')
+            ->doesntExpectOutputToContain('default password')
+            ->assertSuccessful();
+    }
+
+    public function test_warns_when_the_legacy_password_key_is_present_and_ignores_it(): void
+    {
+        // A pre-1.2.2 published config carries 'password' (renamed to
+        // 'users_password'). Silently ignoring it would re-seed every dev user
+        // with the default while the consumer believes their configured secret
+        // is in effect.
+        $this->configureDevData(['password' => 'ignored-legacy-value']);
+
+        $this->artisan('jamesgifford:auth:seed-dev-data')
+            ->expectsOutputToContain("The dev config contains the legacy 'password' key, which is ignored.")
+            ->expectsOutputToContain("Rename it to 'users_password' in config/jamesgifford/auth-dev.php")
+            ->assertSuccessful();
+
+        // The current key still wins; the legacy value is never used.
+        $owner = User::query()->where('email', 'owner@example.test')->firstOrFail();
+        $this->assertTrue(Hash::check('dev-secret-pw', $owner->password));
+        $this->assertFalse(Hash::check('ignored-legacy-value', $owner->password));
+    }
+
+    public function test_users_password_is_resolved_from_disk_when_missing_from_live_config(): void
+    {
+        // Simulates the cached-config staleness hazard: a config cache built
+        // before 'users_password' existed skips mergeConfigFrom, so the live
+        // repository lacks the key entirely. The seeder then re-reads the
+        // config from disk, where the package default's env() call resolves
+        // the CURRENT environment value — instead of silently seeding the
+        // default password while the consumer's .env says otherwise.
+        $config = (array) config('jamesgifford.auth-dev');
+        unset($config['users_password']);
+        config(['jamesgifford.auth-dev' => $config]);
+
+        $_SERVER['JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD'] = 'resolved-from-disk';
+        try {
+            $this->artisan('jamesgifford:auth:seed-dev-data')
+                ->doesntExpectOutputToContain('default password')
+                ->assertSuccessful();
+        } finally {
+            unset($_SERVER['JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD']);
+        }
+
+        $owner = User::query()->where('email', 'owner@example.test')->firstOrFail();
+        $this->assertTrue(Hash::check('resolved-from-disk', $owner->password));
+    }
+
     public function test_command_does_not_run_apply_id_offsets_but_points_to_it(): void
     {
         // It must point at the next step, but not couple to / invoke it.

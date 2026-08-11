@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Unit\Transfers;
 
+use FilesystemIterator;
 use PHPUnit\Framework\TestCase;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ReflectionClass;
 
 /**
@@ -37,21 +40,34 @@ class TransferImmutabilityGuardTest extends TestCase
     }
 
     /**
-     * Every class declared in src/Transfers/, excluding enums: an enum cannot be
-     * declared readonly and its cases are immutable by construction.
+     * Every class declared beneath src/Transfers/ (any depth), excluding enums:
+     * an enum cannot be declared readonly and its cases are immutable by
+     * construction. A file whose class does not autoload from its path fails
+     * loudly — skipping it would leave that transfer unguarded.
      *
      * @return list<ReflectionClass<object>>
      */
     private function transferClasses(): array
     {
         $classes = [];
+        $root = dirname(__DIR__, 3).DIRECTORY_SEPARATOR.'src'.DIRECTORY_SEPARATOR.'Transfers';
 
-        foreach ((array) glob(dirname(__DIR__, 3).'/src/Transfers/*.php') as $file) {
-            $fqcn = 'JamesGifford\\Auth\\Transfers\\'.basename((string) $file, '.php');
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)
+        );
 
-            if (! class_exists($fqcn)) {
+        foreach ($iterator as $file) {
+            if ($file->getExtension() !== 'php') {
                 continue;
             }
+
+            $relative = substr($file->getPathname(), strlen($root) + 1, -strlen('.php'));
+            $fqcn = 'JamesGifford\\Auth\\Transfers\\'.str_replace(DIRECTORY_SEPARATOR, '\\', $relative);
+
+            $this->assertTrue(
+                class_exists($fqcn),
+                $file->getPathname().' must declare '.$fqcn.' (PSR-4) so this guard can reflect it.',
+            );
 
             $reflection = new ReflectionClass($fqcn);
 
