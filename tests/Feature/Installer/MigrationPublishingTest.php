@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Installer\PackageMigrations;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
 use JamesGifford\Auth\Tests\TestCase;
 
 /**
@@ -19,6 +20,8 @@ use JamesGifford\Auth\Tests\TestCase;
  */
 class MigrationPublishingTest extends TestCase
 {
+    use StagesDatabaseSeeder;
+
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -53,6 +56,9 @@ class MigrationPublishingTest extends TestCase
 
     protected function tearDown(): void
     {
+        // The full install above wires (or creates) a DatabaseSeeder in the
+        // shared testbench skeleton; a leftover file poisons every later test.
+        $this->removeDatabaseSeeder();
         $this->rmTree($this->tmpDir);
         if (isset($this->migrationsDir) && is_dir($this->migrationsDir)) {
             foreach ([

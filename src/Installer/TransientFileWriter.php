@@ -30,10 +30,19 @@ final class TransientFileWriter
     public function apply(string $filePath, string $newCode, ?Closure $verify = null): void
     {
         $backupPath = $filePath.'.bak';
-        copy($filePath, $backupPath);
+
+        // No restore point means no safe write: refuse before touching the
+        // target at all.
+        if (! @copy($filePath, $backupPath)) {
+            throw new RuntimeException(
+                "could not create a backup at {$backupPath}; the file was left unchanged"
+            );
+        }
 
         try {
-            file_put_contents($filePath, $newCode);
+            if (@file_put_contents($filePath, $newCode) === false) {
+                throw new RuntimeException('the new code could not be written');
+            }
 
             // Validity gate: the written file must still parse as PHP.
             $written = (string) file_get_contents($filePath);

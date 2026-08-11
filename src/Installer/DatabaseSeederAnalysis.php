@@ -7,10 +7,11 @@ namespace JamesGifford\Auth\Installer;
 /**
  * The result of inspecting a consumer's DatabaseSeeder without modifying it.
  *
- * `hasUnusualStructure` is true when the wiring service cannot safely automate
- * changes (unparseable file, more than one class, no Seeder subclass, no run()
- * method). `unusualReason` carries a short human-readable explanation suitable
- * for surfacing in command output so consumers know what to wire by hand.
+ * When the wiring service cannot safely automate changes (unparseable file,
+ * more than one class, no Seeder subclass, no run() method), isModifiable()
+ * is false and `unusualReason` carries a short human-readable explanation
+ * suitable for surfacing in command output so consumers know what to wire by
+ * hand.
  */
 final readonly class DatabaseSeederAnalysis
 {
@@ -25,7 +26,6 @@ final readonly class DatabaseSeederAnalysis
         public bool $extendsSeeder,
         public bool $hasRunMethod,
         public array $wiredSeeders,
-        public bool $hasUnusualStructure,
         public ?string $unusualReason,
     ) {}
 
@@ -34,8 +34,7 @@ final readonly class DatabaseSeederAnalysis
         return $this->fileExists
             && $this->parseable
             && $this->extendsSeeder
-            && $this->hasRunMethod
-            && ! $this->hasUnusualStructure;
+            && $this->hasRunMethod;
     }
 
     /**

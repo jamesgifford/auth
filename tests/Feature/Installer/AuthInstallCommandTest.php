@@ -748,6 +748,27 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString('AccountRoleSeeder::class', $this->readDatabaseSeeder());
     }
 
+    public function test_a_failed_seeder_creation_is_reported_not_claimed_as_created(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->removeDatabaseSeeder();
+
+        // A directory at the DatabaseSeeder.php path makes the write fail.
+        mkdir($this->databaseSeederPath(), 0755, true);
+
+        try {
+            $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+            $output = Artisan::output();
+        } finally {
+            @rmdir($this->databaseSeederPath());
+        }
+
+        $this->assertSame(0, $exit, 'Wiring problems are advisory, never fatal to install. Output: '.$output);
+        $this->assertStringNotContainsString('- created', $output);
+        $this->assertStringContainsString('Could not create', $output);
+        $this->assertStringContainsString('AccountRoleSeeder', $output);
+    }
+
     public function test_skip_seeder_wiring_leaves_the_file_untouched(): void
     {
         $this->loadLaravelMigrations();

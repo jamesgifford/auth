@@ -17,9 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `jamesgifford:auth:setup`'s closing block reports what was wired instead of instructing you to paste the calls in yourself.
 - The README's seeding section no longer wraps `DevDataSeeder` in `if (app()->environment('local', 'staging'))`. The seeder self-guards, and the documented form now matches exactly what the commands write.
 
+### Fixed
+- Unwiring no longer deletes a consumer's own empty `if` statements: cleanup drops only guards the package's own removal emptied (tracked via an AST marker), and a package seeder import is only removed when nothing in the file still references the class — removing a still-referenced import would silently repoint the surviving short name at the wrong namespace.
+- `unwire()` reports only the calls it actually removed. A call in a position the remover does not handle (e.g. chained onto another call) is left in place, and `uninstall` now prints by-hand removal lines for it instead of claiming it was removed.
+- Wired-seeder detection now resolves namespace aliases (`use ...\Database\Seeders as AuthSeeders;`) and group imports (`use ...\Seeders\{AccountRoleSeeder, ...}`), so re-running `install` no longer inserts duplicate calls for those forms. Qualified names also resolve against the current namespace per PHP's rules rather than being taken verbatim.
+- `setup --with-dev-data` inserts `DevDataSeeder` after `AccountRoleSeeder` when both existing anchors sit in a single array-form `$this->call([...])`; previously it could land before the roles its fixtures depend on, breaking the next `--seed` rebuild.
+- `TransientFileWriter` refuses to write when the `.bak` backup cannot be created, and treats a failed write as an error — a blocked backup can no longer let a failed edit permanently corrupt the consumer's file.
+- `uninstall` no longer reports "nothing to remove" for a `DatabaseSeeder` it cannot parse: it falls back to a raw-text scan and prints by-hand removal lines when package seeders are mentioned in the file.
+- `setup`'s closing Next Steps block re-checks the file and only claims the seeders are wired when they actually are; otherwise it prints the paste-in lines for exactly what is missing.
+- `install` verifies the `DatabaseSeeder` it creates was actually written: an unwritable path now produces a warning plus paste-in lines (and an advisory verification line) instead of a false "created" report.
+
 ### Development
 - Edits to `DatabaseSeeder` are AST-based via nikic/php-parser's format-preserving printer, so they coexist with unrelated changes: detection is position-independent and recognises imported, fully-qualified, array-form, and nested calls; insertion adds only what is missing; removal takes only the package's entries and is pinned by a byte-for-byte wire-then-unwire round-trip test.
+- The full-install test classes now remove the `DatabaseSeeder` that install wires into the shared testbench skeleton, so a suite run no longer leaves a file behind in `vendor/` that would make later tests order-dependent.
 - `applyTransient()` is extracted from `UserModelModifier` into a shared `TransientFileWriter`, so every editor that rewrites a consumer's source file uses one restore-on-failure implementation.
+- Name resolution is likewise extracted into a shared `NameResolver` used by both AST editors. This also fixes `UserModelModifier`'s handling of namespace-aliased and group-use trait imports, which were previously misread as absent (and would have been added a second time by `modify()`).
+- Hygiene pass ahead of the tag: the by-hand `$this->call(...)` snippet the commands print is single-sourced in `DatabaseSeederWiring::callLine()`; the derivable `hasUnusualStructure` field is dropped from `DatabaseSeederAnalysis`; `wire()`/`unwire()` resolve the file context once instead of twice; `calledClassNames()` uses php-parser's `NodeFinder` instead of a hand-rolled walk; install's plan checks its cheap `--skip-*` flags before running the probes they would skip; and the Boost skill's DatabaseSeeder-wiring section no longer splits the Artisan command list.
 - New drift guard: every seeder class the wiring writes into consumers' files must autoload and extend `Illuminate\Database\Seeder`.
 
 ## [1.2.2] - 2026-08-11

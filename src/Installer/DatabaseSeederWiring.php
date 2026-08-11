@@ -12,6 +12,7 @@ use PhpParser\Comment;
 use PhpParser\Node;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\CloningVisitor;
 use PhpParser\NodeVisitorAbstract;
@@ -54,6 +55,14 @@ final class DatabaseSeederWiring
     public const CANONICAL_ORDER = [self::ROLES, self::DEV_DATA, self::ID_OFFSETS];
 
     /**
+     * AST attribute marking an `if` whose body lost a statement to the
+     * package's own removal pass. Cleanup only drops guards carrying it, so a
+     * consumer's own empty `if` is never deleted. Public because the visitors
+     * are separate (anonymous) classes.
+     */
+    public const EMPTIED_GUARD = 'jamesgifford_auth_emptied_guard';
+
+    /**
      * Human-readable note written above each inserted call. Cosmetic only:
      * detection is AST-based, so a developer who deletes these keeps working
      * wiring.
@@ -77,6 +86,15 @@ final class DatabaseSeederWiring
         private readonly Standard $printer,
         private readonly TransientFileWriter $writer,
     ) {}
+
+    /**
+     * The paste-in line for wiring a seeder by hand. Single-sourced so the
+     * stub and every command's instructions print the identical snippet.
+     */
+    public static function callLine(string $fqcn): string
+    {
+        return '$this->call(\\'.$fqcn.'::class);';
+    }
 
     public function path(): string
     {
@@ -140,7 +158,6 @@ final class DatabaseSeederWiring
             extendsSeeder: $extendsSeeder,
             hasRunMethod: $runMethod !== null,
             wiredSeeders: $wired,
-            hasUnusualStructure: ! $extendsSeeder || $runMethod === null,
             unusualReason: match (true) {
                 ! $extendsSeeder => 'the class does not extend Illuminate\\Database\\Seeder',
                 $runMethod === null => 'the class has no run() method',
@@ -181,11 +198,14 @@ final class DatabaseSeederWiring
         $traverser->addVisitor(new CloningVisitor);
         $newStmts = $traverser->traverse($oldStmts);
 
-        $namespace = $analysis->namespace;
-        $importMap = $this->importMapOf($newStmts);
+        [$namespace, $importMap, $scan] = $this->resolveContext($newStmts);
 
-        foreach ($this->classNodesIn($newStmts) as $classNode) {
-            $run = $this->findRunMethod($classNode);
+        foreach ($scan as $stmt) {
+            if (! $stmt instanceof Stmt\Class_) {
+                continue;
+            }
+
+            $run = $this->findRunMethod($stmt);
             if ($run === null) {
                 continue;
             }
@@ -218,7 +238,7 @@ final class DatabaseSeederWiring
             foreach (self::COMMENTS[$fqcn] ?? [] as $comment) {
                 $lines[] = '        '.$comment;
             }
-            $lines[] = '        $this->call(\\'.$fqcn.'::class);';
+            $lines[] = '        '.self::callLine($fqcn);
             $lines[] = '';
         }
         $body = rtrim(implode("\n", $lines), "\n");
@@ -274,25 +294,36 @@ final class DatabaseSeederWiring
         $traverser->addVisitor(new CloningVisitor);
         $newStmts = $traverser->traverse($oldStmts);
 
-        $namespace = $analysis->namespace;
-        $importMap = $this->importMapOf($newStmts);
+        [$namespace, $importMap] = $this->resolveContext($newStmts);
 
         $removalTraverser = new NodeTraverser;
         $removalTraverser->addVisitor($this->removalVisitor($namespace, $importMap));
         $newStmts = $removalTraverser->traverse($newStmts);
 
-        // Second pass: drop control structures our removal emptied, and package
-        // imports nothing references any more. Separate from the first pass
-        // because emptiness can only be judged once the calls are gone.
-        $cleanupTraverser = new NodeTraverser;
-        $cleanupTraverser->addVisitor($this->cleanupVisitor());
-        $newStmts = $cleanupTraverser->traverse($newStmts);
+        // Second pass: drop guards OUR removal emptied — judged only once the
+        // calls are gone. A consumer's own empty `if` carries no marker and
+        // survives.
+        $guardTraverser = new NodeTraverser;
+        $guardTraverser->addVisitor($this->emptiedGuardVisitor());
+        $newStmts = $guardTraverser->traverse($newStmts);
+
+        // Third pass: drop package imports nothing references any more.
+        // References are collected AFTER the guard pass, so nothing inside a
+        // dropped guard keeps an import alive.
+        $importTraverser = new NodeTraverser;
+        $importTraverser->addVisitor($this->importCleanupVisitor(
+            $this->referencedNamesIn($newStmts, $namespace, $importMap),
+        ));
+        $newStmts = $importTraverser->traverse($newStmts);
 
         return new DatabaseSeederChange(
             originalCode: $originalCode,
             modifiedCode: $this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens),
             addedSeeders: [],
-            removedSeeders: $analysis->wiredSeeders,
+            // Only what actually left the file: a call in a position the
+            // removal visitor does not handle (e.g. chained) is detected as
+            // wired but survives, and must not be reported as removed.
+            removedSeeders: array_values(array_diff($analysis->wiredSeeders, $this->wiredIn($newStmts))),
         );
     }
 
@@ -323,8 +354,8 @@ final class DatabaseSeederWiring
     private function insertCall(array $body, string $fqcn, ?string $namespace, array $importMap): array
     {
         $rank = array_flip(self::CANONICAL_ORDER);
-        $position = 0;
-        $foundSuccessor = false;
+        $floor = 0;
+        $ceiling = null;
 
         foreach ($body as $index => $stmt) {
             foreach ($this->calledClassNames($stmt, $namespace, $importMap) as $name) {
@@ -332,13 +363,18 @@ final class DatabaseSeederWiring
                     continue;
                 }
                 if ($rank[$name] < $rank[$fqcn]) {
-                    $position = $index + 1;
-                } elseif (! $foundSuccessor) {
-                    $position = $index;
-                    $foundSuccessor = true;
+                    $floor = max($floor, $index + 1);
+                } elseif ($ceiling === null) {
+                    $ceiling = $index;
                 }
             }
         }
+
+        // A successor only pulls the insertion earlier when it sits AFTER
+        // every predecessor. When both share one statement (e.g. an array-form
+        // call listing roles and offsets), the dependency wins: the new call
+        // goes after the statement carrying its predecessor.
+        $position = ($ceiling !== null && $ceiling >= $floor) ? $ceiling : $floor;
 
         array_splice($body, $position, 0, [$this->callStatement($fqcn)]);
 
@@ -365,13 +401,31 @@ final class DatabaseSeederWiring
 
         return new class($isOurs, $isThisCall) extends NodeVisitorAbstract
         {
+            /** @var list<Stmt\If_> */
+            private array $enclosingIfs = [];
+
             public function __construct(
                 private readonly Closure $isOurs,
                 private readonly Closure $isThisCall,
             ) {}
 
+            public function enterNode(Node $node): ?Node
+            {
+                if ($node instanceof Stmt\If_) {
+                    $this->enclosingIfs[] = $node;
+                }
+
+                return null;
+            }
+
             public function leaveNode(Node $node): ?int
             {
+                if ($node instanceof Stmt\If_) {
+                    array_pop($this->enclosingIfs);
+
+                    return null;
+                }
+
                 if (! $node instanceof Stmt\Expression) {
                     return null;
                 }
@@ -398,7 +452,7 @@ final class DatabaseSeederWiring
                     }
 
                     if ($kept === []) {
-                        return NodeTraverser::REMOVE_NODE;
+                        return $this->removed();
                     }
 
                     $value->items = $kept;
@@ -406,48 +460,188 @@ final class DatabaseSeederWiring
                     return null;
                 }
 
-                return ($this->isOurs)($value) ? NodeTraverser::REMOVE_NODE : null;
+                return ($this->isOurs)($value) ? $this->removed() : null;
+            }
+
+            /**
+             * Record WHERE the removal happened: the enclosing `if`, if any,
+             * is now a candidate for the emptied-guard cleanup pass.
+             */
+            private function removed(): int
+            {
+                $enclosing = end($this->enclosingIfs);
+                if ($enclosing instanceof Stmt\If_) {
+                    $enclosing->setAttribute(DatabaseSeederWiring::EMPTIED_GUARD, true);
+                }
+
+                return NodeTraverser::REMOVE_NODE;
             }
         };
     }
 
     /**
-     * Drops `if` statements our removal left with an empty body and no
-     * elseif/else — genuinely dead code — and package seeder imports that
-     * nothing references any more.
+     * Drops `if` statements OUR removal emptied (marked with EMPTIED_GUARD)
+     * that now have no body and no elseif/else — genuinely dead code the
+     * package created. Unmarked empty ifs are the consumer's and are kept.
      */
-    private function cleanupVisitor(): NodeVisitorAbstract
+    private function emptiedGuardVisitor(): NodeVisitorAbstract
     {
         return new class extends NodeVisitorAbstract
         {
-            public function leaveNode(Node $node): ?int
+            /** @var list<Stmt\If_> */
+            private array $enclosingIfs = [];
+
+            public function enterNode(Node $node): ?Node
             {
-                if ($node instanceof Stmt\If_
-                    && $node->stmts === []
-                    && $node->elseifs === []
-                    && $node->else === null) {
-                    return NodeTraverser::REMOVE_NODE;
-                }
-
-                if ($node instanceof Stmt\Use_) {
-                    $kept = [];
-                    foreach ($node->uses as $useItem) {
-                        if (in_array($useItem->name->toString(), DatabaseSeederWiring::CANONICAL_ORDER, true)) {
-                            continue;
-                        }
-                        $kept[] = $useItem;
-                    }
-
-                    if ($kept === []) {
-                        return NodeTraverser::REMOVE_NODE;
-                    }
-
-                    $node->uses = $kept;
+                if ($node instanceof Stmt\If_) {
+                    $this->enclosingIfs[] = $node;
                 }
 
                 return null;
             }
+
+            public function leaveNode(Node $node): ?int
+            {
+                if (! $node instanceof Stmt\If_) {
+                    return null;
+                }
+
+                array_pop($this->enclosingIfs);
+
+                if (! $node->getAttribute(DatabaseSeederWiring::EMPTIED_GUARD, false)
+                    || $node->stmts !== []
+                    || $node->elseifs !== []
+                    || $node->else !== null) {
+                    return null;
+                }
+
+                // Dropping this guard may in turn empty ITS enclosing guard.
+                $enclosing = end($this->enclosingIfs);
+                if ($enclosing instanceof Stmt\If_) {
+                    $enclosing->setAttribute(DatabaseSeederWiring::EMPTIED_GUARD, true);
+                }
+
+                return NodeTraverser::REMOVE_NODE;
+            }
         };
+    }
+
+    /**
+     * Drops package seeder imports that nothing references any more. An
+     * import whose class the file still mentions anywhere (e.g. passed to a
+     * consumer helper) is load-bearing and kept — removing it would silently
+     * repoint the surviving short name at the wrong namespace.
+     *
+     * @param  list<string>  $stillReferenced
+     */
+    private function importCleanupVisitor(array $stillReferenced): NodeVisitorAbstract
+    {
+        return new class($stillReferenced) extends NodeVisitorAbstract
+        {
+            /** @param list<string> $stillReferenced */
+            public function __construct(private readonly array $stillReferenced) {}
+
+            public function leaveNode(Node $node): ?int
+            {
+                if (! $node instanceof Stmt\Use_) {
+                    return null;
+                }
+
+                $kept = [];
+                foreach ($node->uses as $useItem) {
+                    $fqcn = $useItem->name->toString();
+                    if (in_array($fqcn, DatabaseSeederWiring::CANONICAL_ORDER, true)
+                        && ! in_array($fqcn, $this->stillReferenced, true)) {
+                        continue;
+                    }
+                    $kept[] = $useItem;
+                }
+
+                if ($kept === []) {
+                    return NodeTraverser::REMOVE_NODE;
+                }
+
+                $node->uses = $kept;
+
+                return null;
+            }
+        };
+    }
+
+    /**
+     * Every FQCN the AST references OUTSIDE use statements — the survivors
+     * that decide whether a package import is still load-bearing.
+     *
+     * @param  array<int, Node>  $stmts
+     * @param  array<string, string>  $importMap
+     * @return list<string>
+     */
+    private function referencedNamesIn(array $stmts, ?string $namespace, array $importMap): array
+    {
+        $found = [];
+        $resolve = fn (Name $name): string => $this->resolveName($name, $namespace, $importMap);
+        $collect = function (string $fqcn) use (&$found): void {
+            $found[] = $fqcn;
+        };
+
+        $traverser = new NodeTraverser;
+        $traverser->addVisitor(new class($resolve, $collect) extends NodeVisitorAbstract
+        {
+            private int $useDepth = 0;
+
+            public function __construct(
+                private readonly Closure $resolve,
+                private readonly Closure $collect,
+            ) {}
+
+            public function enterNode(Node $node): ?Node
+            {
+                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
+                    $this->useDepth++;
+                } elseif ($node instanceof Name && $this->useDepth === 0) {
+                    ($this->collect)(($this->resolve)($node));
+                }
+
+                return null;
+            }
+
+            public function leaveNode(Node $node): ?int
+            {
+                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
+                    $this->useDepth--;
+                }
+
+                return null;
+            }
+        });
+        $traverser->traverse($stmts);
+
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * The package seeders a statement list still calls, in canonical order —
+     * analyze()'s detection re-run against an in-memory AST, so unwire() can
+     * report what actually left the file.
+     *
+     * @param  array<int, Node>  $stmts
+     * @return list<string>
+     */
+    private function wiredIn(array $stmts): array
+    {
+        [$namespace, $importMap, $scan] = $this->resolveContext($stmts);
+
+        $called = [];
+        foreach ($scan as $stmt) {
+            if ($stmt instanceof Stmt\Class_) {
+                $called = [...$called, ...$this->calledClassNames($stmt, $namespace, $importMap)];
+            }
+        }
+
+        return array_values(array_filter(
+            self::CANONICAL_ORDER,
+            static fn (string $fqcn): bool => in_array($fqcn, $called, true),
+        ));
     }
 
     private function callStatement(string $fqcn): Stmt\Expression
@@ -477,31 +671,6 @@ final class DatabaseSeederWiring
         return $statement;
     }
 
-    /**
-     * @param  array<int, Node>  $stmts
-     * @return list<Stmt\Class_>
-     */
-    private function classNodesIn(array $stmts): array
-    {
-        [, , $scan] = $this->resolveContext($stmts);
-
-        return array_values(array_filter(
-            $scan,
-            static fn (Node $stmt): bool => $stmt instanceof Stmt\Class_,
-        ));
-    }
-
-    /**
-     * @param  array<int, Node>  $stmts
-     * @return array<string, string>
-     */
-    private function importMapOf(array $stmts): array
-    {
-        [, $importMap] = $this->resolveContext($stmts);
-
-        return $importMap;
-    }
-
     private function findRunMethod(Stmt\Class_ $classNode): ?Stmt\ClassMethod
     {
         foreach ($classNode->stmts as $stmt) {
@@ -525,29 +694,23 @@ final class DatabaseSeederWiring
     {
         $found = [];
 
-        $visit = function (Node $node) use (&$visit, &$found, $namespace, $importMap): void {
-            if ($node instanceof Node\Expr\MethodCall && $this->isThisCall($node)) {
-                foreach ($node->args as $arg) {
-                    if (! $arg instanceof Node\Arg) {
-                        continue;
-                    }
-                    foreach ($this->classRefsIn($arg->value) as $name) {
-                        $found[] = $this->resolveName($name, $namespace, $importMap);
-                    }
-                }
+        /** @var list<Node\Expr\MethodCall> $calls */
+        $calls = (new NodeFinder)->findInstanceOf($root, Node\Expr\MethodCall::class);
+
+        foreach ($calls as $call) {
+            if (! $this->isThisCall($call)) {
+                continue;
             }
 
-            foreach ($node->getSubNodeNames() as $subNodeName) {
-                $subNode = $node->{$subNodeName};
-                foreach (is_array($subNode) ? $subNode : [$subNode] as $child) {
-                    if ($child instanceof Node) {
-                        $visit($child);
-                    }
+            foreach ($call->args as $arg) {
+                if (! $arg instanceof Node\Arg) {
+                    continue;
+                }
+                foreach ($this->classRefsIn($arg->value) as $name) {
+                    $found[] = $this->resolveName($name, $namespace, $importMap);
                 }
             }
-        };
-
-        $visit($root);
+        }
 
         return array_values(array_unique($found));
     }
@@ -606,55 +769,24 @@ final class DatabaseSeederWiring
     }
 
     /**
-     * Resolve a name node to an FQCN using the file's namespace and imports —
-     * the same resolution rules as UserModelModifier::analyze().
+     * @see NameResolver::resolve()
      *
      * @param  array<string, string>  $importMap
      */
     private function resolveName(Name $name, ?string $namespace, array $importMap): string
     {
-        if ($name instanceof Name\FullyQualified || count($name->getParts()) > 1) {
-            return $name->toString();
-        }
-
-        $short = $name->getLast();
-
-        return $importMap[$short] ?? ($namespace !== null ? $namespace.'\\'.$short : $short);
+        return NameResolver::resolve($name, $namespace, $importMap);
     }
 
     /**
-     * The file's namespace, its short-name => FQCN import map, and the
-     * statement list the class lives in (inside the namespace when there is
-     * one, otherwise the root). Accepts Node[] because that is what
-     * NodeTraverser::traverse() returns; non-Stmt nodes simply never match.
+     * @see NameResolver::context()
      *
      * @param  array<int, Node>  $ast
      * @return array{0: ?string, 1: array<string, string>, 2: array<int, Node>}
      */
     private function resolveContext(array $ast): array
     {
-        $namespace = null;
-        $scan = $ast;
-
-        foreach ($ast as $top) {
-            if ($top instanceof Stmt\Namespace_) {
-                $namespace = $top->name?->toString();
-                $scan = $top->stmts;
-                break;
-            }
-        }
-
-        $importMap = [];
-        foreach ($scan as $stmt) {
-            if ($stmt instanceof Stmt\Use_) {
-                foreach ($stmt->uses as $useItem) {
-                    $short = $useItem->alias?->toString() ?? $useItem->name->getLast();
-                    $importMap[$short] = $useItem->name->toString();
-                }
-            }
-        }
-
-        return [$namespace, $importMap, $scan];
+        return NameResolver::context($ast);
     }
 
     private function unusable(
@@ -670,7 +802,6 @@ final class DatabaseSeederWiring
             extendsSeeder: false,
             hasRunMethod: false,
             wiredSeeders: [],
-            hasUnusualStructure: true,
             unusualReason: $reason,
         );
     }

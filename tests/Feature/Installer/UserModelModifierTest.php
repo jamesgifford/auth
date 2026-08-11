@@ -123,6 +123,61 @@ class UserModelModifierTest extends TestCase
         $this->assertFalse($analysis->isModifiable());
     }
 
+    public function test_analyze_detects_traits_used_via_a_namespace_alias(): void
+    {
+        $tmp = $this->tmpDir.DIRECTORY_SEPARATOR.'AliasTraitUser.php';
+        file_put_contents($tmp, <<<'PHP'
+        <?php
+
+        namespace App\Models;
+
+        use Illuminate\Foundation\Auth\User as Authenticatable;
+        use JamesGifford\Auth\Concerns as AuthConcerns;
+        use JamesGifford\Auth\PublicId\Concerns as PublicIdConcerns;
+
+        class AliasTraitUser extends Authenticatable
+        {
+            use PublicIdConcerns\HasPublicId;
+            use AuthConcerns\HasAccounts;
+        }
+        PHP);
+        $this->createdFiles[] = $tmp;
+
+        $analysis = $this->modifier->analyze($tmp);
+
+        // Misreading these as absent would make modify() add duplicates.
+        // (needsModification() stays true — the fixture has no
+        // publicIdPrefix() method — so only the trait flags are asserted.)
+        $this->assertTrue($analysis->hasHasPublicIdTrait);
+        $this->assertTrue($analysis->hasHasAccountsTrait);
+    }
+
+    public function test_analyze_detects_traits_imported_via_group_use(): void
+    {
+        $tmp = $this->tmpDir.DIRECTORY_SEPARATOR.'GroupUseTraitUser.php';
+        file_put_contents($tmp, <<<'PHP'
+        <?php
+
+        namespace App\Models;
+
+        use Illuminate\Foundation\Auth\User as Authenticatable;
+        use JamesGifford\Auth\{Concerns\HasAccounts};
+        use JamesGifford\Auth\PublicId\{Concerns\HasPublicId};
+
+        class GroupUseTraitUser extends Authenticatable
+        {
+            use HasPublicId;
+            use HasAccounts;
+        }
+        PHP);
+        $this->createdFiles[] = $tmp;
+
+        $analysis = $this->modifier->analyze($tmp);
+
+        $this->assertTrue($analysis->hasHasPublicIdTrait);
+        $this->assertTrue($analysis->hasHasAccountsTrait);
+    }
+
     public function test_analyze_detects_existing_public_id_prefix_method(): void
     {
         $analysis = $this->modifier->analyze($this->fixturePath('UserWithCustomPrefix'));

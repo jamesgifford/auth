@@ -168,6 +168,10 @@ sensible account instead of redirecting.
 - `jamesgifford:auth:apply-id-offsets` — set the auto-increment start for the
   users/accounts tables (MySQL/Postgres; no-op on SQLite). Run after migrate and
   after any seeding.
+- `jamesgifford:auth:publish-models` — publish editable `App\Models` subclasses.
+- `jamesgifford:public-id:setup` / `:check` / `:status` / `:reset` — lock the
+  public_id format / verify prefix integrity / show status / clear the lock
+  (`:reset` is destructive — invalidates all existing IDs).
 
 ## DatabaseSeeder wiring
 
@@ -184,10 +188,6 @@ rebuild resets; it no-ops when none are configured and on SQLite. `uninstall`
 removes only the package's calls and preserves the app's own seeders. Edits are
 AST-based, so they never disturb unrelated content and never duplicate on
 re-run. `--skip-seeder-wiring` opts out on both commands.
-- `jamesgifford:auth:publish-models` — publish editable `App\Models` subclasses.
-- `jamesgifford:public-id:setup` / `:check` / `:status` / `:reset` — lock the
-  public_id format / verify prefix integrity / show status / clear the lock
-  (`:reset` is destructive — invalidates all existing IDs).
 
 ## Environment variables
 

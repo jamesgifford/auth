@@ -58,27 +58,12 @@ final class UserModelModifier
             return $this->emptyAnalysis(fileExists: true, parseable: false);
         }
 
-        // Resolve namespace + locate class nodes.
-        $namespace = null;
+        // Resolve namespace + imports, and locate class nodes.
+        [$namespace, $importMap, $stmtsToScan] = NameResolver::context($ast);
+
         $classNodes = [];
-        $importMap = [];   // short name => FQCN
-        $stmtsToScan = $ast;
-
-        foreach ($ast as $top) {
-            if ($top instanceof Stmt\Namespace_) {
-                $namespace = $top->name?->toString();
-                $stmtsToScan = $top->stmts;
-                break;
-            }
-        }
-
         foreach ($stmtsToScan as $stmt) {
-            if ($stmt instanceof Stmt\Use_) {
-                foreach ($stmt->uses as $useItem) {
-                    $short = $useItem->alias?->toString() ?? $useItem->name->getLast();
-                    $importMap[$short] = $useItem->name->toString();
-                }
-            } elseif ($stmt instanceof Stmt\Class_) {
+            if ($stmt instanceof Stmt\Class_) {
                 $classNodes[] = $stmt;
             }
         }
@@ -105,16 +90,8 @@ final class UserModelModifier
         $classNode = $classNodes[0];
         $className = $classNode->name?->toString();
 
-        $extendsAuthenticatable = false;
-        if ($classNode->extends !== null) {
-            $parentShort = $classNode->extends->getLast();
-            $parentFqcn = $importMap[$parentShort] ?? ($namespace !== null ? $namespace.'\\'.$parentShort : $parentShort);
-            // If the extends name is multi-part, prefer its own resolution.
-            if (count($classNode->extends->getParts()) > 1) {
-                $parentFqcn = $classNode->extends->toString();
-            }
-            $extendsAuthenticatable = $parentFqcn === 'Illuminate\\Foundation\\Auth\\User';
-        }
+        $extendsAuthenticatable = $classNode->extends !== null
+            && NameResolver::resolve($classNode->extends, $namespace, $importMap) === 'Illuminate\\Foundation\\Auth\\User';
 
         // Walk class body for trait uses and the publicIdPrefix method.
         $hasHasPublicIdTrait = false;
@@ -124,11 +101,7 @@ final class UserModelModifier
         foreach ($classNode->stmts as $bodyStmt) {
             if ($bodyStmt instanceof Stmt\TraitUse) {
                 foreach ($bodyStmt->traits as $traitName) {
-                    $short = $traitName->getLast();
-                    $fqcn = $importMap[$short] ?? ($namespace !== null ? $namespace.'\\'.$short : $short);
-                    if (count($traitName->getParts()) > 1) {
-                        $fqcn = $traitName->toString();
-                    }
+                    $fqcn = NameResolver::resolve($traitName, $namespace, $importMap);
                     if ($fqcn === 'JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId') {
                         $hasHasPublicIdTrait = true;
                     }
@@ -436,13 +409,11 @@ final class UserModelModifier
 
             private function isPackageTrait(Name $name): bool
             {
-                $short = $name->getLast();
-                $fqcn = $this->importMap[$short] ?? ($this->namespace !== null ? $this->namespace.'\\'.$short : $short);
-                if (count($name->getParts()) > 1) {
-                    $fqcn = $name->toString();
-                }
-
-                return in_array($fqcn, self::PACKAGE_FQCNS, true);
+                return in_array(
+                    NameResolver::resolve($name, $this->namespace, $this->importMap),
+                    self::PACKAGE_FQCNS,
+                    true,
+                );
             }
 
             private function captureRemovedMethod(Stmt\ClassMethod $method): void
@@ -497,34 +468,14 @@ final class UserModelModifier
     }
 
     /**
-     * Resolve the file's namespace and short-name => FQCN import map from a
-     * parsed statement list (mirrors the first half of {@see analyze()}).
+     * @see NameResolver::context()
      *
      * @param  array<int, Stmt>  $stmts
      * @return array{0: ?string, 1: array<string, string>}
      */
     private function resolveContext(array $stmts): array
     {
-        $namespace = null;
-        $importMap = [];
-        $scan = $stmts;
-
-        foreach ($stmts as $top) {
-            if ($top instanceof Stmt\Namespace_) {
-                $namespace = $top->name?->toString();
-                $scan = $top->stmts;
-                break;
-            }
-        }
-
-        foreach ($scan as $stmt) {
-            if ($stmt instanceof Stmt\Use_) {
-                foreach ($stmt->uses as $useItem) {
-                    $short = $useItem->alias?->toString() ?? $useItem->name->getLast();
-                    $importMap[$short] = $useItem->name->toString();
-                }
-            }
-        }
+        [$namespace, $importMap] = NameResolver::context($stmts);
 
         return [$namespace, $importMap];
     }

@@ -532,6 +532,190 @@ class DatabaseSeederWiringTest extends TestCase
         $this->assertSame([], $analysis->wiredSeeders);
     }
 
+    public function test_it_detects_a_namespace_alias_reference(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+        use JamesGifford\Auth\Database\Seeders as AuthSeeders;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AuthSeeders\AccountRoleSeeder::class);
+            }
+        }
+        PHP);
+
+        $this->assertSame(
+            [DatabaseSeederWiring::ROLES],
+            $this->wiring()->analyze()->wiredSeeders,
+        );
+    }
+
+    public function test_it_detects_a_group_use_import(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+        use JamesGifford\Auth\Database\Seeders\{AccountRoleSeeder, ApplyIdOffsetsSeeder};
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AccountRoleSeeder::class);
+                $this->call(ApplyIdOffsetsSeeder::class);
+            }
+        }
+        PHP);
+
+        $this->assertSame(
+            [DatabaseSeederWiring::ROLES, DatabaseSeederWiring::ID_OFFSETS],
+            $this->wiring()->analyze()->wiredSeeders,
+        );
+    }
+
+    public function test_dev_data_lands_after_roles_when_both_anchors_share_an_array_call(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call([
+                    \JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class,
+                    \JamesGifford\Auth\Database\Seeders\ApplyIdOffsetsSeeder::class,
+                ]);
+            }
+        }
+        PHP);
+
+        $wiring = $this->wiring();
+        $wiring->commit($wiring->wire($wiring->analyze(), DatabaseSeederWiring::CANONICAL_ORDER));
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertLessThan(
+            strpos($contents, 'DevDataSeeder::class'),
+            strpos($contents, 'AccountRoleSeeder::class'),
+            'DevDataSeeder must run after the roles it attaches users to.',
+        );
+    }
+
+    public function test_unwire_keeps_a_consumers_own_empty_if_statement(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                if ($this->prepareTenants()) {}
+
+                $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);
+            }
+        }
+        PHP);
+
+        $wiring = $this->wiring();
+        $wiring->commit($wiring->unwire($wiring->analyze()));
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringNotContainsString('AccountRoleSeeder', $contents);
+        $this->assertStringContainsString(
+            'prepareTenants',
+            $contents,
+            'An empty if the package did not create must survive unwiring.',
+        );
+    }
+
+    public function test_unwire_keeps_an_import_still_referenced_outside_the_call(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+        use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AccountRoleSeeder::class);
+                $this->callWhenTablesExist([AccountRoleSeeder::class]);
+            }
+        }
+        PHP);
+
+        $wiring = $this->wiring();
+        $wiring->commit($wiring->unwire($wiring->analyze()));
+
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringNotContainsString('$this->call(AccountRoleSeeder::class);', $contents);
+        $this->assertStringContainsString('callWhenTablesExist([AccountRoleSeeder::class])', $contents);
+        $this->assertStringContainsString(
+            'use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;',
+            $contents,
+            'The import must survive while the file still references the class.',
+        );
+    }
+
+    public function test_unwire_reports_only_the_calls_it_actually_removed(): void
+    {
+        // A call in expression position (chained) is detected as wired but is
+        // not a bare statement, so the removal visitor leaves it in place. The
+        // change must then not claim it was removed.
+        $original = <<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class)->call(ProductSeeder::class);
+            }
+        }
+        PHP;
+        $this->stageDatabaseSeeder($original);
+
+        $wiring = $this->wiring();
+        $change = $wiring->unwire($wiring->analyze());
+
+        $this->assertSame($original, $change->modifiedCode);
+        $this->assertSame(
+            [],
+            $change->removedSeeders,
+            'A call left in the file must not be reported as removed.',
+        );
+    }
+
     public function test_unwire_removes_a_now_unused_package_import(): void
     {
         $this->stageDatabaseSeeder(<<<'PHP'

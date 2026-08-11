@@ -604,7 +604,37 @@ final class AuthUninstallCommand extends Command
         $analysis = $this->seederWiring->analyze();
         $path = $this->displayPath($this->seederWiring->path());
 
-        if (! $analysis->fileExists || $analysis->wiredSeeders === []) {
+        if (! $analysis->fileExists) {
+            $this->line('No package seeders are wired into '.$path.', so nothing to remove there.');
+
+            return;
+        }
+
+        // An unanalyzable file (unparseable, or no single class to inspect)
+        // has an EMPTY wiredSeeders list whether or not package calls are
+        // present — fall back to a raw-text scan before claiming there is
+        // nothing to remove.
+        if (! $analysis->parseable || $analysis->className === null) {
+            $mentioned = $this->packageSeedersMentionedIn(
+                (string) file_get_contents($this->seederWiring->path()),
+            );
+
+            if ($mentioned === []) {
+                $this->line('No package seeders are wired into '.$path.', so nothing to remove there.');
+
+                return;
+            }
+
+            $this->warn('Could not auto-edit '.$path.' ('.($analysis->unusualReason ?? 'unusual structure').').');
+            $this->line('Remove the package\'s seeder calls from it by hand:');
+            foreach ($mentioned as $fqcn) {
+                $this->line('  • '.DatabaseSeederWiring::callLine($fqcn));
+            }
+
+            return;
+        }
+
+        if ($analysis->wiredSeeders === []) {
             $this->line('No package seeders are wired into '.$path.', so nothing to remove there.');
 
             return;
@@ -614,7 +644,7 @@ final class AuthUninstallCommand extends Command
             $this->warn('Could not auto-edit '.$path.' ('.($analysis->unusualReason ?? 'unusual structure').').');
             $this->line('Remove these calls from its run() method by hand:');
             foreach ($analysis->wiredSeeders as $fqcn) {
-                $this->line('  • $this->call(\\'.$fqcn.'::class);');
+                $this->line('  • '.DatabaseSeederWiring::callLine($fqcn));
             }
 
             return;
@@ -627,15 +657,41 @@ final class AuthUninstallCommand extends Command
             $change = $this->seederWiring->unwire($analysis);
             $this->seederWiring->commit($change);
 
-            $this->info('✓ Removed the package\'s seeder calls from '.$path.':');
-            foreach ($change->removedSeeders as $fqcn) {
-                $this->line('  • '.class_basename($fqcn));
+            if ($change->removedSeeders !== []) {
+                $this->info('✓ Removed the package\'s seeder calls from '.$path.':');
+                foreach ($change->removedSeeders as $fqcn) {
+                    $this->line('  • '.class_basename($fqcn));
+                }
+                $this->line('  Your own seeders were preserved.');
             }
-            $this->line('  Your own seeders were preserved.');
+
+            // A call in a position the remover does not handle (e.g. chained)
+            // survives the edit; say so instead of implying a clean removal.
+            $leftover = array_diff($analysis->wiredSeeders, $change->removedSeeders);
+            if ($leftover !== []) {
+                $this->warn('Could not remove these calls from '.$path.' automatically — delete them by hand:');
+                foreach ($leftover as $fqcn) {
+                    $this->line('  • '.DatabaseSeederWiring::callLine($fqcn));
+                }
+            }
         } catch (Throwable $e) {
             $this->warn('Could not auto-edit '.$path.': '.$e->getMessage());
             $this->line('It was left unchanged. Remove the package\'s $this->call(...) lines by hand.');
         }
+    }
+
+    /**
+     * The package seeders a raw file mentions by class basename — the honest
+     * fallback when the file cannot be parsed for real analysis.
+     *
+     * @return list<string>
+     */
+    private function packageSeedersMentionedIn(string $contents): array
+    {
+        return array_values(array_filter(
+            DatabaseSeederWiring::CANONICAL_ORDER,
+            static fn (string $fqcn): bool => str_contains($contents, class_basename($fqcn)),
+        ));
     }
 
     /**

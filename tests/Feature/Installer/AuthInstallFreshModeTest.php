@@ -14,11 +14,14 @@ use JamesGifford\Auth\PublicId\Config\ConfigGuard;
 use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
+use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
 use JamesGifford\Auth\Tests\TestCase;
 use ReflectionClass;
 
 class AuthInstallFreshModeTest extends TestCase
 {
+    use StagesDatabaseSeeder;
+
     private string $tmpDir;
 
     private string $lockFilePath;
@@ -38,6 +41,9 @@ class AuthInstallFreshModeTest extends TestCase
 
     protected function tearDown(): void
     {
+        // The full installs above wire (or create) a DatabaseSeeder in the
+        // shared testbench skeleton; a leftover file poisons every later test.
+        $this->removeDatabaseSeeder();
         $this->rmTree($this->tmpDir);
         if (isset($this->migrationsDir) && is_dir($this->migrationsDir)) {
             foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*jamesgifford*') as $f) {

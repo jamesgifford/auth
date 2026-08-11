@@ -170,6 +170,35 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('DevDataSeeder::class', $output);
     }
 
+    public function test_next_steps_do_not_claim_wiring_when_the_seeder_could_not_be_edited(): void
+    {
+        // No run() method: install's wiring step refuses this file, so the
+        // closing block must instruct instead of claiming the seeders are wired.
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+        }
+        PHP);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+
+        $afterComplete = (string) strstr($output, 'Setup complete.');
+        $this->assertStringNotContainsString('seeders are wired', $afterComplete);
+        $this->assertStringContainsString(
+            '$this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);',
+            $afterComplete,
+        );
+    }
+
     public function test_re_running_setup_does_not_duplicate_wiring(): void
     {
         $this->app['env'] = 'local';

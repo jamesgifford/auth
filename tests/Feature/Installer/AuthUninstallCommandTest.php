@@ -672,6 +672,52 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertStringContainsString('DatabaseSeeder.php', Artisan::output());
     }
 
+    public function test_uninstall_gives_by_hand_guidance_for_an_unparseable_seeder(): void
+    {
+        $this->stageInstall();
+        $this->stageDatabaseSeeder(
+            '<?php {{{ $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);'
+        );
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        // The file could not be analyzed, but it plainly mentions a package
+        // seeder — so "nothing to remove" would be false and dangerous.
+        $this->assertStringNotContainsString('nothing to remove', $output);
+        $this->assertStringContainsString('by hand', $output);
+        $this->assertStringContainsString('AccountRoleSeeder', $output);
+    }
+
+    public function test_uninstall_does_not_claim_removal_of_a_call_it_could_not_remove(): void
+    {
+        $this->stageInstall();
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class)->call(ProductSeeder::class);
+            }
+        }
+        PHP);
+
+        Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
+        $output = Artisan::output();
+
+        // The chained call is not removable; the file still contains it, so
+        // the summary must say so instead of reporting success.
+        $this->assertStringContainsString('AccountRoleSeeder', $this->readDatabaseSeeder());
+        $this->assertStringNotContainsString('✓ Removed the package\'s seeder calls', $output);
+        $this->assertStringContainsString('by hand', $output);
+    }
+
     public function test_uninstall_is_a_no_op_when_nothing_is_wired(): void
     {
         $this->stageInstall();

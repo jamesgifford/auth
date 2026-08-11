@@ -207,13 +207,15 @@ final class AuthInstallCommand extends Command
      */
     private function buildPlan(): array
     {
+        // Cheap flag checks come first so a skipped step never pays for its
+        // probe (file reads and parses, schema queries).
         return [
-            'public_id_setup' => $this->needsPublicIdSetup() && ! $this->option('skip-public-id'),
-            'publish_migrations' => $this->needsMigrationsPublished() && ! $this->option('skip-migrations'),
-            'run_migrations' => $this->needsMigrationsRun() && ! $this->option('skip-migrations'),
-            'seed_roles' => $this->needsRolesSeeded() && ! $this->option('skip-roles'),
-            'wire_database_seeder' => $this->needsSeederWiring() && ! $this->option('skip-seeder-wiring'),
-            'modify_user_model' => $this->needsUserModelModification() && ! $this->shouldSkipUserModel(),
+            'public_id_setup' => ! $this->option('skip-public-id') && $this->needsPublicIdSetup(),
+            'publish_migrations' => ! $this->option('skip-migrations') && $this->needsMigrationsPublished(),
+            'run_migrations' => ! $this->option('skip-migrations') && $this->needsMigrationsRun(),
+            'seed_roles' => ! $this->option('skip-roles') && $this->needsRolesSeeded(),
+            'wire_database_seeder' => ! $this->option('skip-seeder-wiring') && $this->needsSeederWiring(),
+            'modify_user_model' => ! $this->shouldSkipUserModel() && $this->needsUserModelModification(),
         ];
     }
 
@@ -730,7 +732,17 @@ final class AuthInstallCommand extends Command
             if (! is_dir($directory)) {
                 @mkdir($directory, 0755, true);
             }
-            file_put_contents($path, $this->seederWiring->stub($seeders));
+
+            $written = is_dir($directory)
+                && @file_put_contents($path, $this->seederWiring->stub($seeders)) !== false;
+
+            if (! $written) {
+                $this->warn('  Could not create '.$this->relativeToBase($path).'.');
+                $this->displaySeederWiringInstructions($seeders);
+
+                return;
+            }
+
             $this->line('  - created '.$this->relativeToBase($path));
 
             return;
@@ -773,7 +785,7 @@ final class AuthInstallCommand extends Command
         $this->line('  Add these to run() in database/seeders/DatabaseSeeder.php by hand:');
         $this->newLine();
         foreach ($seeders as $fqcn) {
-            $this->line('      $this->call(\\'.$fqcn.'::class);');
+            $this->line('      '.DatabaseSeederWiring::callLine($fqcn));
         }
     }
 
@@ -1126,6 +1138,12 @@ final class AuthInstallCommand extends Command
             if ($wiring->fileExists && ! $wiring->isModifiable()) {
                 $this->line('  ! Package seeders wired into DatabaseSeeder (could not read it: '
                     .($wiring->unusualReason ?? 'unusual structure').')');
+            } elseif (! $wiring->fileExists) {
+                // Creation failed (or was never possible) on the consumer's
+                // filesystem — same advisory posture as the unmodifiable case:
+                // install already printed the lines to add by hand.
+                $this->line('  ! Package seeders wired into DatabaseSeeder (the file is absent'
+                    .' and could not be created)');
             } else {
                 $check(
                     'Package seeders wired into DatabaseSeeder',

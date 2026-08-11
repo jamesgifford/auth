@@ -215,7 +215,7 @@ final class AuthSetupCommand extends Command
             $this->warn('  Could not add DevDataSeeder to database/seeders/DatabaseSeeder.php'
                 .' ('.($analysis->unusualReason ?? 'unusual structure').').');
             $this->line('  Add it by hand:');
-            $this->line('      $this->call(\\'.DatabaseSeederWiring::DEV_DATA.'::class);');
+            $this->line('      '.DatabaseSeederWiring::callLine(DatabaseSeederWiring::DEV_DATA));
 
             return;
         }
@@ -236,9 +236,12 @@ final class AuthSetupCommand extends Command
     }
 
     /**
-     * Post-setup pointers. The seeders are now wired automatically, so this
-     * reports what was done and names the rebuild command — `migrate:refresh`
-     * seeds only with `--seed`, so naming the bare command would mislead.
+     * Post-setup pointers. The wiring steps are advisory (they warn and
+     * continue on a file they cannot edit), so this block re-checks the file
+     * rather than assuming success: it only claims the seeders are wired when
+     * they actually are, and otherwise gives the paste-in instructions. It
+     * names the rebuild command as `migrate:refresh --seed` — `migrate:refresh`
+     * alone would mislead, since it seeds only with `--seed`.
      */
     private function displayNextSteps(): void
     {
@@ -252,16 +255,34 @@ final class AuthSetupCommand extends Command
             $this->line('    database/seeders/DatabaseSeeder.php yourself:');
             $this->newLine();
             foreach (DatabaseSeederWiring::CANONICAL_ORDER as $fqcn) {
-                $this->line('        $this->call(\\'.$fqcn.'::class);');
+                $this->line('        '.DatabaseSeederWiring::callLine($fqcn));
             }
         } else {
-            $this->line('  • The package seeders are wired into');
-            $this->line('    database/seeders/DatabaseSeeder.php, so you can rebuild the');
-            $this->line('    database at any time with:');
-            $this->newLine();
-            $this->line('        php artisan migrate:refresh --seed');
-            $this->newLine();
-            $this->line('    (`migrate:refresh` alone re-runs migrations without seeding.)');
+            $expected = [DatabaseSeederWiring::ROLES, DatabaseSeederWiring::ID_OFFSETS];
+            if ((bool) $this->option('with-dev-data')) {
+                $expected[] = DatabaseSeederWiring::DEV_DATA;
+            }
+
+            $missing = $this->seederWiring->analyze()->missing($expected);
+
+            if ($missing === []) {
+                $this->line('  • The package seeders are wired into');
+                $this->line('    database/seeders/DatabaseSeeder.php, so you can rebuild the');
+                $this->line('    database at any time with:');
+                $this->newLine();
+                $this->line('        php artisan migrate:refresh --seed');
+                $this->newLine();
+                $this->line('    (`migrate:refresh` alone re-runs migrations without seeding.)');
+            } else {
+                $this->line('  • Some package seeders could not be added to');
+                $this->line('    database/seeders/DatabaseSeeder.php automatically (see the warnings');
+                $this->line('    above). For `migrate:refresh --seed` rebuilds to work, add these');
+                $this->line('    to its run() method yourself:');
+                $this->newLine();
+                foreach ($missing as $fqcn) {
+                    $this->line('        '.DatabaseSeederWiring::callLine($fqcn));
+                }
+            }
         }
 
         $this->newLine();
