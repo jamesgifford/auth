@@ -314,7 +314,7 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
     {
         // Overriding the config value (which reads env) changes the seeded
         // password — proving it isn't hardcoded in the seeder.
-        $this->configureDevData(['password' => 'a-completely-different-pw']);
+        $this->configureDevData(['users_password' => 'a-completely-different-pw']);
 
         $this->artisan('jamesgifford:auth:seed-dev-data')->assertSuccessful();
 
@@ -524,7 +524,7 @@ class AuthSeedDevDataCommandTest extends AccountsTestCase
     {
         config(['jamesgifford.auth-dev' => array_merge([
             'environments' => ['local', 'testing'],
-            'password' => 'dev-secret-pw',
+            'users_password' => 'dev-secret-pw',
             'accounts' => [
                 ['name' => 'Dev Workspace', 'owner' => 'owner@example.test'],
             ],

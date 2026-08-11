@@ -132,7 +132,7 @@ final class DevDataSeeder extends Seeder
         // Hash once. Models that cast password to 'hashed' won't re-hash an
         // already-hashed value (Hash::isHashed guard), so this is safe whether
         // or not the User model has that cast — and never stores plaintext.
-        $password = Hash::make((string) ($config['password'] ?? 'password'));
+        $password = Hash::make((string) ($config['users_password'] ?? 'password'));
 
         $userClass = PackageModels::user();
         $accountClass = PackageModels::account();

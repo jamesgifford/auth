@@ -51,11 +51,11 @@ return [
     'environments' => ['local', 'staging'],
 
     // Shared password for EVERY seeded dev user. Sourced from the environment
-    // (JAMESGIFFORD_AUTH_DEV_PASSWORD in your .env) so no credential is committed
-    // here; it is hashed at seed time and never stored in plaintext.
+    // (JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD in your .env) so no credential is
+    // committed here; it is hashed at seed time and never stored in plaintext.
     //
     // The password is NOT set per-user in this file — change it in .env.
-    'password' => env('JAMESGIFFORD_AUTH_DEV_PASSWORD', 'password'),
+    'users_password' => env('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD', 'password'),
 
     // ---- Accounts -----------------------------------------------------------
     //

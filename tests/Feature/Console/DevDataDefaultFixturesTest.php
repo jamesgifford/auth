@@ -58,9 +58,12 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
 
         $contents = (string) file_get_contents(config_path(self::PUBLISHED));
 
-        // Password comes from the environment, never a stored literal.
-        $this->assertStringContainsString("env('JAMESGIFFORD_AUTH_DEV_PASSWORD'", $contents);
-        $this->assertStringNotContainsString("'password' => '", $contents);
+        // Password comes from the environment, never a stored literal. The
+        // second needle must track the key name: 'users_password' => ' has no
+        // quote before "password", so the old needle would silently stop
+        // matching and this assertion would guard nothing.
+        $this->assertStringContainsString("env('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD'", $contents);
+        $this->assertStringNotContainsString("'users_password' => '", $contents);
     }
 
     public function test_default_config_seeds_the_whole_cast_with_invariants_intact(): void
@@ -127,7 +130,7 @@ class DevDataDefaultFixturesTest extends AccountsTestCase
 
         $owner = User::query()->where('email', 'owner@dev.test')->firstOrFail();
 
-        // Default fallback for JAMESGIFFORD_AUTH_DEV_PASSWORD is 'password'; hashed at seed time.
+        // Default fallback for JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD is 'password'; hashed at seed time.
         $this->assertTrue(Hash::check('password', $owner->password));
         $this->assertNotSame('password', $owner->password);
         $this->assertTrue(Hash::isHashed($owner->password));

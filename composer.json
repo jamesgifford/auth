@@ -46,6 +46,11 @@
         "check": [
             "@format:check",
             "@analyse",
+            "@test:sqlite"
+        ],
+        "check:full": [
+            "@format:check",
+            "@analyse",
             "@test"
         ]
     },
@@ -59,6 +64,7 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "process-timeout": 0
     }
 }

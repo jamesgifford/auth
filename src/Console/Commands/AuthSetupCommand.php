@@ -136,7 +136,7 @@ final class AuthSetupCommand extends Command
         $this->publishConfig();
 
         if (! $force && $this->input->isInteractive()) {
-            $this->educationalPause();
+            $this->educationalPause($withDevData);
         }
 
         // install is always invoked non-interactively: the pause above is this
@@ -376,9 +376,13 @@ final class AuthSetupCommand extends Command
      * Interactive-only pause shown after the config is published and BEFORE the
      * public_id lock. It explains the irreversible lock and shows copy/paste
      * snippets for declaring ID offsets two ways — a config literal and an
-     * environment variable — then waits for the user to continue.
+     * environment variable — plus, when a dev cast will be seeded, the .env
+     * line for the shared dev-user password. All of it belongs here rather than
+     * in the closing next-steps block: the lock and the seeding both happen
+     * after this point, so this is the last moment any of it is actionable
+     * without a re-run.
      */
-    private function educationalPause(): void
+    private function educationalPause(bool $withDevData): void
     {
         $usersEnv = IdOffsetManager::envKeyFor('users');
         $accountsEnv = IdOffsetManager::envKeyFor('accounts');
@@ -394,6 +398,20 @@ final class AuthSetupCommand extends Command
         $this->newLine();
 
         $this->displayPrefixSection();
+
+        // Only when a cast will actually be seeded. Kept clear of the ID-offset
+        // section below, whose two bullets are an either/or pair that must stay
+        // contiguous. The password is hashed at seed time in Step 3, so this
+        // pause is the last point at which setting it still changes the
+        // outcome — after that it takes a re-seed.
+        if ($withDevData) {
+            $this->line('Dev users all share one password, read from your .env. Add this line');
+            $this->line('before Step 3 seeds the cast — the value is hashed at seed time, and');
+            $this->line('"password" is what the seeder uses if you skip it:');
+            $this->newLine();
+            $this->line('        JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password');
+            $this->newLine();
+        }
 
         $this->line('ID offsets make real records start above a chosen number (reserving the');
         $this->line('low id range for seeded dev data). Set them EITHER way — config reads');

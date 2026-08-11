@@ -177,8 +177,8 @@ sensible account instead of redirecting.
 All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read ONLY in
 config files (don't call `env()` in app code):
 
-- `JAMESGIFFORD_AUTH_DEV_PASSWORD` — shared password for seeded dev users
-  (`config/jamesgifford/auth-dev.php`); hashed at seed time.
+- `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` — shared password for seeded dev users
+  (`config/jamesgifford/auth-dev.php`, key `users_password`); hashed at seed time.
 - `JAMESGIFFORD_AUTH_USERS_ID_OFFSET` — auto-increment start for the users table.
 - `JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET` — auto-increment start for accounts.
 

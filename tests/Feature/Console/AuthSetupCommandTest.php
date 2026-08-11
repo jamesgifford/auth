@@ -369,6 +369,28 @@ class AuthSetupCommandTest extends TestCase
         $this->assertTrue(DB::table('users')->where('email', 'owner@dev.test')->exists());
     }
 
+    public function test_pause_names_the_dev_password_env_var_under_with_dev_data(): void
+    {
+        $this->app['env'] = 'local'; // dev-data allowlisted
+
+        // One substring per output line — see the note on expectsOutputToContain
+        // in test_interactive_run_pauses_with_educational_guidance_before_the_lock.
+        $this->artisan('jamesgifford:auth:setup', ['--with-dev-data' => true])
+            ->expectsOutputToContain('Dev users all share one password, read from your .env. Add this line')
+            ->expectsOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password')
+            ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
+            ->assertExitCode(0);
+    }
+
+    public function test_pause_omits_the_dev_password_env_var_without_dev_data(): void
+    {
+        // No cast will be seeded, so the reminder would be noise.
+        $this->artisan('jamesgifford:auth:setup')
+            ->doesntExpectOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD')
+            ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
+            ->assertExitCode(0);
+    }
+
     public function test_prefix_section_renders_default_user_and_account_prefixes_with_samples(): void
     {
         // Default resolution: a config-mapped user model (no override) => 'user',

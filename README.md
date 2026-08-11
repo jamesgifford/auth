@@ -324,7 +324,7 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read only in co
 
 | Variable | Used by |
 | --- | --- |
-| `JAMESGIFFORD_AUTH_DEV_PASSWORD` | Shared password for seeded dev users (`config/jamesgifford/auth-dev.php`); hashed at seed time. |
+| `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` | Shared password for seeded dev users (`config/jamesgifford/auth-dev.php`, key `users_password`); hashed at seed time. |
 | `JAMESGIFFORD_AUTH_USERS_ID_OFFSET` | Auto-increment start for the users table. |
 | `JAMESGIFFORD_AUTH_ACCOUNTS_ID_OFFSET` | Auto-increment start for the accounts table. |
 
@@ -332,7 +332,7 @@ All package env vars use the `JAMESGIFFORD_AUTH_` prefix and are read only in co
 
 ### Dev-data seeding
 
-`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/jamesgifford/auth-dev.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_PASSWORD` and hashed at seed time — no credential is committed. The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
+`jamesgifford:auth:seed-dev-data` seeds a deterministic local cast (owners, admins, members, a multi-account user, and a floating user) defined in `config/jamesgifford/auth-dev.php`. It **fails closed**: it refuses in production and outside the configured `environments` (default `local`, `staging`). The shared password is sourced from `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` and hashed at seed time — no credential is committed. The cast ships pre-populated, so a fresh install is immediately seedable (or via `setup --with-dev-data`).
 
 The config declares accounts explicitly and each user's memberships from that user's own perspective, so multi-account membership, roles, and the active account are all expressed in one place per entity:
 
@@ -439,15 +439,19 @@ The package ships with a comprehensive test suite covering both subsystems, the 
 The suite runs against **MariaDB by default** — the package's actual target — so driver-real behavior (`AUTO_INCREMENT` offsets, DDL against populated tables, constraint names) is genuinely exercised, not simulated. It expects a local MariaDB with a `jamesgifford_auth_test` database reachable via the settings in `phpunit.xml`'s `<php>` block (override any of them with environment variables; CI does exactly that to point at a service container).
 
 ```bash
-# Full suite against MariaDB (the integrity gate; slower — real DDL per test)
-composer test
-
-# Fast in-memory SQLite loop for day-to-day development
-composer test:sqlite
-
-# Pint + PHPStan + the MariaDB suite
+# Pint + PHPStan + the fast SQLite suite — the day-to-day gate
 composer check
+
+# Pint + PHPStan + the full MariaDB suite — before a release, or when a
+# change touches schema, DDL, or driver-specific behavior
+composer check:full
+
+# The suites on their own
+composer test          # MariaDB (the integrity gate; slower — real DDL per test)
+composer test:sqlite   # fast in-memory SQLite
 ```
+
+`composer check` runs against SQLite because it is the loop you run dozens of times a day — seconds rather than minutes. It does **not** replace the MariaDB run: CI always executes the full MariaDB suite (`vendor/bin/phpunit`) on every push, so driver-real behavior is still gated before anything merges.
 
 Driver-specific tests guard themselves: sqlite-only assertions (the offset no-op messaging) skip on MariaDB and vice versa, so both commands run green with a couple of expected skips.
 
