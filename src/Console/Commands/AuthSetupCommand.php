@@ -454,20 +454,17 @@ final class AuthSetupCommand extends Command
 
     /**
      * Interactive-only pause shown after the config is published and BEFORE the
-     * public_id lock. It explains the irreversible lock and shows copy/paste
-     * snippets for declaring ID offsets two ways — a config literal and an
-     * environment variable — plus, when a dev cast will actually be seeded, the
-     * .env line for the shared dev-user password. Env-sourced values are
-     * resolved when the app BOOTS, so an .env edit made during the pause cannot
-     * reach this run: everything here teaches the Ctrl-C-and-re-run path, and
-     * it sits at the pause (not in the closing next-steps block) because this
-     * is the last moment to abort before the lock and the seeding happen.
+     * public_id lock. It explains the irreversible lock, then describes every
+     * value that can come from .env and prints them as ONE contiguous block
+     * (see {@see displayEnvBlock()}) so the whole thing is a single copy/paste.
+     * Env-sourced values are resolved when the app BOOTS, so an .env edit made
+     * during the pause cannot reach this run: everything here teaches the
+     * Ctrl-C-and-re-run path, and it sits at the pause (not in the closing
+     * next-steps block) because this is the last moment to abort before the
+     * lock and the seeding happen.
      */
     private function educationalPause(bool $withDevData): void
     {
-        $usersEnv = IdOffsetManager::envKeyFor('users');
-        $accountsEnv = IdOffsetManager::envKeyFor('accounts');
-
         $this->newLine();
         $this->line(str_repeat('─', 72));
         $this->line('  Before the public_id format is locked');
@@ -483,41 +480,70 @@ final class AuthSetupCommand extends Command
         // Only when a cast will ACTUALLY be seeded: the flag alone is not
         // enough — Step 3 is double-guarded by the seeder's environment
         // allowlist, and a password reminder for a cast the seeder will refuse
-        // would leave the user believing dev users exist. Kept clear of the
-        // ID-offset section below, whose two bullets are an either/or pair
-        // that must stay contiguous.
-        if ($withDevData && $this->laravel->make(DevDataSeeder::class)->environmentAllowed()) {
-            $this->line('Dev users will all share one password, read from your .env when the app');
-            $this->line('boots — so adding it during this pause cannot affect THIS run. To choose');
-            $this->line('it now, press Ctrl-C, add this line to .env, then re-run setup. If it is');
-            $this->line('not set, the cast is seeded with "password" (a warning after seeding');
-            $this->line('will say how to change it):');
-            $this->newLine();
-            $this->line('        JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password');
+        // would leave the user believing dev users exist.
+        $seedsDevCast = $withDevData && $this->laravel->make(DevDataSeeder::class)->environmentAllowed();
+
+        // Every explanation comes BEFORE the block, so nothing interrupts the
+        // variables themselves.
+        $this->line('These values are read from your .env when the app boots:');
+        $this->newLine();
+
+        if ($seedsDevCast) {
+            $this->line('  • The shared dev-user password. Every seeded dev user gets it. If it');
+            $this->line('    is not set, the cast is seeded with "password" (a warning after');
+            $this->line('    seeding will say how to change it).');
             $this->newLine();
         }
 
-        $this->line('ID offsets make real records start above a chosen number (reserving the');
-        $this->line('low id range for seeded dev data). Set them EITHER way — config reads');
-        $this->line('the env vars, and a literal you write in config takes precedence:');
+        // The offsets stand on their own — they are offered whether or not a
+        // dev cast is seeded — but only a run that IS seeding one may point at
+        // those fixtures as the reason the low ids are being reserved.
+        $this->line('  • The ID offsets, which make real records start above a chosen number,');
+        if ($seedsDevCast) {
+            $this->line('    reserving the low id range for the dev fixtures this run seeds. They');
+            $this->line('    are applied in the final step.');
+        } else {
+            $this->line('    keeping the low id range free — useful if you later seed dev data.');
+            $this->line('    They are applied in the final step.');
+        }
         $this->newLine();
-        $this->line('  • In your .env:');
+
+        $this->line('Copy this whole block into your .env:');
         $this->newLine();
-        $this->line("        {$usersEnv}=11");
-        $this->line("        {$accountsEnv}=1001");
+
+        $this->displayEnvBlock($seedsDevCast);
+
         $this->newLine();
-        $this->line('  • Or as a literal in config/jamesgifford/auth.php:');
+        $this->line('ID offsets can also be written as a literal in');
+        $this->line('config/jamesgifford/auth.php, which takes precedence over the env vars:');
         $this->newLine();
         $this->line("        'id_offsets' => [");
         $this->line("            'users' => 11,");
         $this->line("            'accounts' => 1001,");
         $this->line('        ],');
         $this->newLine();
-        $this->line('They are applied in the final step. To set them now, press Ctrl-C, edit');
-        $this->line('config or .env, then re-run; otherwise continue.');
+        $this->line('Because .env is read at BOOT, an edit made during this pause cannot reach');
+        $this->line('THIS run: to use these values, press Ctrl-C, edit .env (or config), then');
+        $this->line('re-run setup. Otherwise continue with the current values.');
         $this->newLine();
 
         $this->ask('Press ENTER to continue (locking public_id and finishing setup)');
+    }
+
+    /**
+     * The pause's .env lines, printed with NOTHING between them — no blank
+     * lines, no prose — so selecting the block once yields a valid .env
+     * fragment. Any explanation belongs above the block, in
+     * {@see educationalPause()}.
+     */
+    private function displayEnvBlock(bool $includeDevPassword): void
+    {
+        if ($includeDevPassword) {
+            $this->line('        JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password');
+        }
+
+        $this->line('        '.IdOffsetManager::envKeyFor('users').'=11');
+        $this->line('        '.IdOffsetManager::envKeyFor('accounts').'=1001');
     }
 
     /**

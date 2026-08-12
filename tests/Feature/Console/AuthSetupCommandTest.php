@@ -476,8 +476,8 @@ class AuthSetupCommandTest extends TestCase
         // resolved at boot, so an .env edit during the pause CANNOT reach this
         // run, and the pause must not claim otherwise.
         $this->artisan('jamesgifford:auth:setup', ['--with-dev-data' => true])
-            ->expectsOutputToContain('Dev users will all share one password, read from your .env when the app')
-            ->expectsOutputToContain('it now, press Ctrl-C, add this line to .env, then re-run setup.')
+            ->expectsOutputToContain('  • The shared dev-user password. Every seeded dev user gets it. If it')
+            ->expectsOutputToContain('THIS run: to use these values, press Ctrl-C, edit .env (or config), then')
             ->expectsOutputToContain('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password')
             ->expectsQuestion('Press ENTER to continue (locking public_id and finishing setup)', '')
             ->assertExitCode(0);
@@ -517,6 +517,56 @@ class AuthSetupCommandTest extends TestCase
         $this->assertSame(0, $exit, $output);
         $this->assertStringContainsString('default password', $output);
         $this->assertStringContainsString('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD', $output);
+    }
+
+    public function test_env_block_lists_every_variable_in_one_contiguous_copyable_run(): void
+    {
+        // The whole point of the block: one selection, one paste. Any blank or
+        // prose line BETWEEN the variables breaks that, so the newlines here
+        // are matched as [ ] (indentation only) rather than \s, which would
+        // also match the blank line this test exists to catch.
+        $output = $this->renderEnvBlock(includeDevPassword: true);
+
+        $this->assertMatchesRegularExpression(
+            '/JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD=password\n[ ]*'
+            .preg_quote(IdOffsetManager::envKeyFor('users'), '/').'=11\n[ ]*'
+            .preg_quote(IdOffsetManager::envKeyFor('accounts'), '/').'=1001\n/',
+            $output,
+        );
+    }
+
+    public function test_env_block_stays_contiguous_when_the_dev_password_is_omitted(): void
+    {
+        $output = $this->renderEnvBlock(includeDevPassword: false);
+
+        $this->assertStringNotContainsString('JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD', $output);
+        $this->assertMatchesRegularExpression(
+            '/'.preg_quote(IdOffsetManager::envKeyFor('users'), '/').'=11\n[ ]*'
+            .preg_quote(IdOffsetManager::envKeyFor('accounts'), '/').'=1001\n/',
+            $output,
+        );
+    }
+
+    public function test_offsets_are_offered_without_dev_data_but_not_justified_by_it(): void
+    {
+        // The offsets matter on their own — a run without --with-dev-data must
+        // still be offered them — but describing them as reserving room for
+        // fixtures would name seeding that is not going to happen.
+        $output = $this->renderPause(withDevData: false);
+
+        $this->assertStringContainsString(IdOffsetManager::envKeyFor('users').'=11', $output);
+        $this->assertStringContainsString(IdOffsetManager::envKeyFor('accounts').'=1001', $output);
+        $this->assertStringNotContainsString('this run seeds', $output);
+        $this->assertStringContainsString('if you later seed dev data', $output);
+    }
+
+    public function test_offsets_are_justified_by_the_fixtures_when_a_dev_cast_is_seeded(): void
+    {
+        $this->app['env'] = 'local'; // dev-data allowlisted
+
+        $output = $this->renderPause(withDevData: true);
+
+        $this->assertStringContainsString('the dev fixtures this run seeds', $output);
     }
 
     public function test_prefix_section_renders_default_user_and_account_prefixes_with_samples(): void
@@ -870,6 +920,41 @@ class AuthSetupCommandTest extends TestCase
     }
 
     // ---- Helpers ----
+
+    /**
+     * Render the whole pause deterministically. A non-interactive input makes
+     * its closing ask() return immediately instead of blocking.
+     */
+    private function renderPause(bool $withDevData): string
+    {
+        $command = $this->app->make(AuthSetupCommand::class);
+        $command->setLaravel($this->app);
+        $input = new ArrayInput([]);
+        $input->setInteractive(false);
+        $buffer = new BufferedOutput;
+
+        $reflection = new ReflectionClass($command);
+        $reflection->getProperty('input')->setValue($command, $input);
+        $reflection->getProperty('output')->setValue($command, new SymfonyStyle($input, $buffer));
+        $reflection->getMethod('educationalPause')->invoke($command, $withDevData);
+
+        return $buffer->fetch();
+    }
+
+    private function renderEnvBlock(bool $includeDevPassword): string
+    {
+        $command = $this->app->make(AuthSetupCommand::class);
+        $input = new ArrayInput([]);
+        $input->setInteractive(false);
+        $buffer = new BufferedOutput;
+
+        $reflection = new ReflectionClass($command);
+        $reflection->getProperty('input')->setValue($command, $input);
+        $reflection->getProperty('output')->setValue($command, new SymfonyStyle($input, $buffer));
+        $reflection->getMethod('displayEnvBlock')->invoke($command, $includeDevPassword);
+
+        return $buffer->fetch();
+    }
 
     private function renderPrefixSection(): string
     {

@@ -5,6 +5,12 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-08-11
+
+### Changed
+- `jamesgifford:auth:setup`'s interactive pause now prints every `.env` variable it offers — the dev-user password (when a cast will actually be seeded) and both ID offsets — as one contiguous block with no prose or blank lines between the lines, so the whole set can be copied and pasted into `.env` in a single selection. Previously the password line and the offset lines were separated by their explanations, forcing two copies. The explanations are unchanged in substance, just moved above the block, and the config-literal alternative for offsets still follows it.
+- The pause's ID-offset explanation now matches the run: a run seeding a dev cast describes the offsets as reserving the low id range for the fixtures it is about to seed, while a run without `--with-dev-data` (where the offsets are just as relevant, and are still offered) says they keep the low range free for dev data seeded later, rather than citing seeding that is not going to happen.
+
 ## [1.2.3] - 2026-08-11
 
 ### Added
