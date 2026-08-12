@@ -139,6 +139,48 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('ApplyIdOffsetsSeeder::class', $contents);
     }
 
+    public function test_dev_data_wiring_warns_about_without_model_events(): void
+    {
+        $this->app['env'] = 'local';
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use WithoutModelEvents;
+
+            public function run(): void
+            {
+                $this->call(ProductSeeder::class);
+            }
+        }
+
+        PHP);
+
+        $exit = Artisan::call('jamesgifford:auth:setup', [
+            '--force' => true,
+            '--with-dev-data' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+
+        // Scoped to Step 3 so this proves the DEV-DATA wiring warned — install's
+        // own wiring step (Step 2) prints the same advisory.
+        $afterDevStep = (string) strstr($output, 'Step 3/4');
+        $this->assertStringContainsString(
+            '! database/seeders/DatabaseSeeder.php uses WithoutModelEvents',
+            $afterDevStep,
+        );
+        $this->assertStringContainsString('public_id generation is unaffected.', $afterDevStep);
+        $this->assertStringContainsString('use WithoutModelEvents;', $this->readDatabaseSeeder());
+    }
+
     public function test_setup_without_dev_data_does_not_wire_dev_data(): void
     {
         $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());

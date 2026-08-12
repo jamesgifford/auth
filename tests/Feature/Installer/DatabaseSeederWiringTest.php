@@ -120,6 +120,153 @@ class DatabaseSeederWiringTest extends TestCase
         );
     }
 
+    public function test_it_detects_an_imported_without_model_events_trait(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use WithoutModelEvents;
+
+            public function run(): void
+            {
+                $this->call(ProductSeeder::class);
+            }
+        }
+        PHP);
+
+        $this->assertTrue($this->wiring()->analyze()->usesWithoutModelEvents);
+    }
+
+    public function test_it_detects_a_fully_qualified_without_model_events_trait(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use \Illuminate\Database\Console\Seeds\WithoutModelEvents;
+
+            public function run(): void
+            {
+                $this->call(ProductSeeder::class);
+            }
+        }
+        PHP);
+
+        $this->assertTrue($this->wiring()->analyze()->usesWithoutModelEvents);
+    }
+
+    public function test_it_detects_an_aliased_without_model_events_trait(): void
+    {
+        // Resolution goes through the same NameResolver as the call detection,
+        // so an alias counts exactly as the plain import does. The second trait
+        // in the same `use` statement proves every name in the node is read.
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents as WME;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use ResetsTenants;
+            use SharesConnections, WME;
+
+            public function run(): void
+            {
+                $this->call(ProductSeeder::class);
+            }
+        }
+        PHP);
+
+        $this->assertTrue($this->wiring()->analyze()->usesWithoutModelEvents);
+    }
+
+    public function test_it_reports_no_without_model_events_trait_when_absent(): void
+    {
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        $this->assertFalse($this->wiring()->analyze()->usesWithoutModelEvents);
+    }
+
+    public function test_without_model_events_does_not_change_what_wiring_writes(): void
+    {
+        // Detection is advisory: wiring must neither be affected by the trait
+        // nor disturb it. Wire the same seeder twice — once carrying the trait,
+        // once not — and the two results must differ ONLY by the trait lines.
+        $quiet = <<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use WithoutModelEvents;
+
+            public function run(): void
+            {
+                // The app's own seeding.
+                $this->call(ProductSeeder::class);
+            }
+        }
+
+        PHP;
+
+        $stripTrait = static fn (string $code): string => str_replace(
+            [
+                'use Illuminate\\Database\\Console\\Seeds\\WithoutModelEvents;'."\n",
+                '    use WithoutModelEvents;'."\n\n",
+            ],
+            '',
+            $code,
+        );
+
+        $wiring = $this->wiring();
+
+        $this->stageDatabaseSeeder($stripTrait($quiet));
+        $plainChange = $wiring->wire($wiring->analyze(), DatabaseSeederWiring::CANONICAL_ORDER);
+
+        $this->stageDatabaseSeeder($quiet);
+        $analysis = $wiring->analyze();
+        $this->assertTrue($analysis->usesWithoutModelEvents);
+
+        $quietChange = $wiring->wire($analysis, DatabaseSeederWiring::CANONICAL_ORDER);
+
+        $this->assertSame(DatabaseSeederWiring::CANONICAL_ORDER, $plainChange->addedSeeders);
+        $this->assertSame($plainChange->addedSeeders, $quietChange->addedSeeders);
+        $this->assertSame(
+            $plainChange->modifiedCode,
+            $stripTrait($quietChange->modifiedCode),
+            'Wiring must write the identical code whether or not WithoutModelEvents is present.',
+        );
+
+        // And the trait itself survives the committed edit, byte for byte.
+        $wiring->commit($quietChange);
+        $contents = $this->readDatabaseSeeder();
+
+        $this->assertStringContainsString("{\n    use WithoutModelEvents;\n", $contents);
+        $this->assertStringContainsString(
+            'use Illuminate\\Database\\Console\\Seeds\\WithoutModelEvents;',
+            $contents,
+        );
+    }
+
     public function test_it_detects_a_call_nested_in_an_environment_guard(): void
     {
         // The form README documented before this release. It must count as

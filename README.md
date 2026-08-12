@@ -124,7 +124,7 @@ class Invoice extends Model
 
 The prefix may instead be registered in the `public_id.prefixes` config map. Resolution order is: the model's `publicIdPrefix()` override, then the config map, otherwise an `UnregisteredModelException`.
 
-The trait generates `public_id` automatically on create, and overrides route-model binding so a public ID resolves the model out of the box:
+The trait generates `public_id` off Eloquent's `setUniqueIds()` unique-id hook rather than a `creating` event, and overrides route-model binding so a public ID resolves the model out of the box:
 
 ```php
 // GET /invoices/inv_5n0p4kn48da58kdnzpkw resolves by public_id
@@ -135,11 +135,15 @@ Invoice::wherePublicId('inv_5n0p4kn48da58kdnzpkw')->first();
 Invoice::wherePublicIdIn([$idA, $idB])->get();
 ```
 
+`Model::performInsert()` calls `setUniqueIds()` directly, before it fires the `creating` event, so `public_id` is populated even when model events are suppressed — inside `Model::withoutEvents()`, via `saveQuietly()`, or under a `DatabaseSeeder` using `Illuminate\Database\Console\Seeds\WithoutModelEvents`. A model that also uses `HasUuids` or `HasUlids` still gets both keys populated: `HasPublicId` calls `parent::setUniqueIds()` first, then fills `public_id` if it's still empty.
+
 The model's table needs a `public_id` column sized with `PublicId::maxLength()`:
 
 ```php
 $table->string('public_id', PublicId::maxLength())->unique();
 ```
+
+> **Limitations:** `Model::upsert()` does not populate `public_id` — it reads unique IDs through a different code path (`Builder::addUniqueIdsToUpsertValues()`) that the trait doesn't hook. `replicate()` copies `public_id` onto the clone rather than clearing it, so saving a replicated model will violate the unique index unless you reassign it yourself.
 
 ### The `PublicId` facade
 

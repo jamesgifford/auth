@@ -149,13 +149,30 @@ final class DevDataSeeder extends Seeder
         $accountClass = PackageModels::account();
         $accountUserClass = PackageModels::accountUser();
 
-        // When the in-process User model lacks an ACTIVE HasPublicId trait — e.g.
-        // setup's install step just added it to the file, but the already-loaded
-        // class is stale and PHP can't reload it — its public_id won't
-        // auto-populate. Detect that so we can set it explicitly and seeding
-        // works in the SAME process as the model edit, instead of crashing with
-        // "Field 'public_id' doesn't have a default value".
-        $userAutoGeneratesPublicId = in_array(HasPublicId::class, class_uses_recursive($userClass), true);
+        // When the in-process User model's public_id mechanism isn't ACTIVE, its
+        // public_id won't auto-populate on save. The case this guards against:
+        // setup's install step just added the trait to the model file, but the
+        // already-loaded class is stale and PHP can't reload it mid-process.
+        // Left undetected, THAT case is what crashes with "Field 'public_id'
+        // doesn't have a default value" — a model that instead deliberately
+        // disables $usesUniqueIds (see the check below) is a different,
+        // intentional configuration, not a staleness bug, though it still needs
+        // an explicit value assigned here.
+        //
+        // The users table's public_id column is invariant across the loop below
+        // too, so resolve it once here rather than issuing a schema-introspection
+        // query (information_schema / PRAGMA) per declared user; the same probe
+        // instance doubles for the trait-activity check just below.
+        $probe = new $userClass;
+        $publicIdColumnExists = $probe->getConnection()
+            ->getSchemaBuilder()
+            ->hasColumn($probe->getTable(), 'public_id');
+
+        // Trait presence alone is not the question: a model can carry HasPublicId and
+        // still not populate it (a subclass turning $usesUniqueIds off). Ask the
+        // mechanism that actually decides, so this fallback cannot go stale again.
+        $userAutoGeneratesPublicId = in_array(HasPublicId::class, class_uses_recursive($userClass), true)
+            && $probe->usesUniqueIds();
 
         /** @var list<array<string, mixed>> $userDeclarations */
         $userDeclarations = $config['users'] ?? [];
@@ -163,14 +180,6 @@ final class DevDataSeeder extends Seeder
         $accountDeclarations = $config['accounts'] ?? [];
 
         $counts = ['users' => 0, 'accounts' => 0, 'memberships' => 0];
-
-        // Whether the users table has a public_id column is invariant across the
-        // loop below, so resolve it once here rather than issuing a schema-
-        // introspection query (information_schema / PRAGMA) per declared user.
-        $probe = new $userClass;
-        $publicIdColumnExists = $probe->getConnection()
-            ->getSchemaBuilder()
-            ->hasColumn($probe->getTable(), 'public_id');
 
         // Pass 1: all users (idempotent on email) so accounts/memberships can
         // reference any of them regardless of declaration order.

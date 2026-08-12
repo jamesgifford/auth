@@ -7,6 +7,7 @@ namespace JamesGifford\Auth\Console\Commands;
 use Illuminate\Console\Command;
 use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Database\IdOffsetManager;
+use JamesGifford\Auth\Installer\DatabaseSeederAnalysis;
 use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
@@ -229,9 +230,33 @@ final class AuthSetupCommand extends Command
             $this->line($change->addedSeeders === []
                 ? '  - DevDataSeeder already wired into database/seeders/DatabaseSeeder.php'
                 : '  - wired DevDataSeeder into database/seeders/DatabaseSeeder.php');
+
+            // The wire succeeded; the file may still be seeding with events off.
+            $this->warnWithoutModelEvents($analysis);
         } catch (Throwable $e) {
             $this->newLine();
             $this->warn('  Could not add DevDataSeeder: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Advisory, never fatal: the package's public_id generation no longer needs
+     * model events, but WithoutModelEvents still silences every OTHER one for
+     * the whole seeding run — including guards the package relies on and any
+     * observers the application registers.
+     */
+    private function warnWithoutModelEvents(DatabaseSeederAnalysis $analysis): void
+    {
+        if (! $analysis->usesWithoutModelEvents) {
+            return;
+        }
+
+        $lines = DatabaseSeederWiring::withoutModelEventsWarning();
+
+        $this->newLine();
+        $this->warn('  ! '.array_shift($lines));
+        foreach ($lines as $line) {
+            $this->line('    '.$line);
         }
     }
 

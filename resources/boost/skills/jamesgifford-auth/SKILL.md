@@ -59,6 +59,15 @@ class Invoice extends Model
 Query scopes from the trait: `Invoice::wherePublicId($id)` and
 `Invoice::wherePublicIdIn($ids)`.
 
+`public_id` generation runs off Eloquent's `setUniqueIds()` unique-id hook, not
+a `creating` event — `performInsert()` calls it before firing `creating`, so it
+still populates `public_id` under `Model::withoutEvents()`, `saveQuietly()`,
+and a `DatabaseSeeder` using `WithoutModelEvents`. Composes with `HasUuids`/
+`HasUlids` on the same model (`HasPublicId` calls `parent::setUniqueIds()`
+first). **Not** covered: `upsert()` (different code path,
+`addUniqueIdsToUpsertValues()`) and `replicate()` (copies `public_id` onto the
+clone instead of clearing it — reassign it before saving).
+
 ## Accounts and registration
 
 Every user automatically gets a personal account they own, created at

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
+use JamesGifford\Auth\Installer\DatabaseSeederAnalysis;
 use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
@@ -763,16 +764,39 @@ final class AuthInstallCommand extends Command
 
             if ($change->addedSeeders === []) {
                 $this->line('  - already wired: '.$this->relativeToBase($path));
-
-                return;
+            } else {
+                foreach ($change->addedSeeders as $fqcn) {
+                    $this->line('  - added '.class_basename($fqcn).' to '.$this->relativeToBase($path));
+                }
             }
 
-            foreach ($change->addedSeeders as $fqcn) {
-                $this->line('  - added '.class_basename($fqcn).' to '.$this->relativeToBase($path));
-            }
+            // The wire succeeded; the file may still be seeding with events off.
+            $this->warnWithoutModelEvents($analysis);
         } catch (Throwable $e) {
             $this->warn('  Could not edit '.$this->relativeToBase($path).': '.$e->getMessage());
             $this->displaySeederWiringInstructions($seeders);
+        }
+    }
+
+    /**
+     * Advisory, never fatal: the package's public_id generation no longer needs
+     * model events, but WithoutModelEvents still silences every OTHER one for
+     * the whole seeding run — including guards the package relies on and any
+     * observers the application registers. Nothing is refused over it; a
+     * consumer may well want events off.
+     */
+    private function warnWithoutModelEvents(DatabaseSeederAnalysis $analysis): void
+    {
+        if (! $analysis->usesWithoutModelEvents) {
+            return;
+        }
+
+        $lines = DatabaseSeederWiring::withoutModelEventsWarning();
+
+        $this->newLine();
+        $this->warn('  ! '.array_shift($lines));
+        foreach ($lines as $line) {
+            $this->line('    '.$line);
         }
     }
 
@@ -1149,6 +1173,17 @@ final class AuthInstallCommand extends Command
                     'Package seeders wired into DatabaseSeeder',
                     $wiring->missing($this->installWiredSeeders()) === [],
                 );
+            }
+
+            // Same advisory posture, for the same reason: seeding with model
+            // events off is the consumer's deliberate choice, not a defect in
+            // the install. Surface it; never let it fail verification.
+            if ($wiring->usesWithoutModelEvents) {
+                $lines = DatabaseSeederWiring::withoutModelEventsWarning();
+                $this->line('  ! '.array_shift($lines));
+                foreach ($lines as $line) {
+                    $this->line('    '.$line);
+                }
             }
         }
 

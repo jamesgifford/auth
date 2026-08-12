@@ -34,6 +34,10 @@ use Throwable;
  * (imported short name, fully-qualified, inside an array argument, nested in a
  * control structure). That is what lets the package's edits coexist with
  * unrelated changes to the same file.
+ *
+ * analyze() also reports, advisory-only, whether the class uses Laravel's
+ * WithoutModelEvents trait. Nothing here acts on it — see
+ * {@see DatabaseSeederAnalysis} for what it means.
  */
 final class DatabaseSeederWiring
 {
@@ -61,6 +65,13 @@ final class DatabaseSeederWiring
      * are separate (anonymous) classes.
      */
     public const EMPTIED_GUARD = 'jamesgifford_auth_emptied_guard';
+
+    /**
+     * Laravel's opt-in trait that runs a seeder inside Model::withoutEvents().
+     * Detected — never touched — so commands can warn about the guards and
+     * observers it silences.
+     */
+    private const WITHOUT_MODEL_EVENTS = 'Illuminate\\Database\\Console\\Seeds\\WithoutModelEvents';
 
     /**
      * Human-readable note written above each inserted call. Cosmetic only:
@@ -94,6 +105,27 @@ final class DatabaseSeederWiring
     public static function callLine(string $fqcn): string
     {
         return '$this->call(\\'.$fqcn.'::class);';
+    }
+
+    /**
+     * The advisory for a DatabaseSeeder carrying WithoutModelEvents, as bare
+     * text lines (the first is the sentence, the rest continue it).
+     * Single-sourced so install, setup, and verification say exactly the same
+     * thing; each caller adds its own marker and indentation.
+     *
+     * Deliberately does NOT claim public_id is at risk — generation runs off
+     * Eloquent's unique-id hook, not a model event.
+     *
+     * @return list<string>
+     */
+    public static function withoutModelEventsWarning(): array
+    {
+        return [
+            'database/seeders/DatabaseSeeder.php uses WithoutModelEvents, which disables all',
+            'model events for the whole seeding run — including the guard against deleting a',
+            'system account role, and any observers your application registers.',
+            'public_id generation is unaffected.',
+        ];
     }
 
     public function path(): string
@@ -158,6 +190,7 @@ final class DatabaseSeederWiring
             extendsSeeder: $extendsSeeder,
             hasRunMethod: $runMethod !== null,
             wiredSeeders: $wired,
+            usesWithoutModelEvents: $this->usesWithoutModelEvents($classNode, $namespace, $importMap),
             unusualReason: match (true) {
                 ! $extendsSeeder => 'the class does not extend Illuminate\\Database\\Seeder',
                 $runMethod === null => 'the class has no run() method',
@@ -671,6 +704,36 @@ final class DatabaseSeederWiring
         return $statement;
     }
 
+    /**
+     * Whether the class applies Illuminate's WithoutModelEvents trait, which
+     * suppresses model events for the whole seeding run. Advisory only — it
+     * changes nothing the package does — so every `use` statement in the body
+     * is checked, and every name within each (`use A, B;` is one node), and
+     * each is resolved through the shared rules so an aliased or group import
+     * counts exactly as the plain one does.
+     *
+     * Single-file by construction: the trait applied on a PARENT seeder class,
+     * or on a nested seeder this file calls, is invisible here.
+     *
+     * @param  array<string, string>  $importMap
+     */
+    private function usesWithoutModelEvents(Stmt\Class_ $classNode, ?string $namespace, array $importMap): bool
+    {
+        foreach ($classNode->stmts as $stmt) {
+            if (! $stmt instanceof Stmt\TraitUse) {
+                continue;
+            }
+
+            foreach ($stmt->traits as $trait) {
+                if ($this->resolveName($trait, $namespace, $importMap) === self::WITHOUT_MODEL_EVENTS) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private function findRunMethod(Stmt\Class_ $classNode): ?Stmt\ClassMethod
     {
         foreach ($classNode->stmts as $stmt) {
@@ -802,6 +865,7 @@ final class DatabaseSeederWiring
             extendsSeeder: false,
             hasRunMethod: false,
             wiredSeeders: [],
+            usesWithoutModelEvents: false,
             unusualReason: $reason,
         );
     }

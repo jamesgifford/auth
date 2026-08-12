@@ -12,6 +12,12 @@ namespace JamesGifford\Auth\Installer;
  * is false and `unusualReason` carries a short human-readable explanation
  * suitable for surfacing in command output so consumers know what to wire by
  * hand.
+ *
+ * `usesWithoutModelEvents` is purely advisory: the package's public_id
+ * generation does not depend on model events, but the trait still suppresses
+ * every other model event for the seeding run (AccountRole's system-role
+ * deletion guard, and any observers the application registers), so commands
+ * surface it. It never affects isModifiable() or what wire() writes.
  */
 final readonly class DatabaseSeederAnalysis
 {
@@ -26,6 +32,7 @@ final readonly class DatabaseSeederAnalysis
         public bool $extendsSeeder,
         public bool $hasRunMethod,
         public array $wiredSeeders,
+        public bool $usesWithoutModelEvents,
         public ?string $unusualReason,
     ) {}
 

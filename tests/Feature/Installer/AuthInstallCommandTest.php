@@ -110,6 +110,45 @@ class AuthInstallCommandTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_verify_reports_without_model_events_as_an_advisory_not_a_failure(): void
+    {
+        $this->writeLockFile();
+        $this->copyPackageMigrationsToTestbenchPath();
+        $this->loadLaravelMigrations();
+        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
+        $this->app->make(AccountRoleSeeder::class)->run();
+
+        // Fully wired, but seeding with model events suppressed.
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use WithoutModelEvents;
+
+            public function run(): void
+            {
+                $this->call(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);
+                $this->call(\JamesGifford\Auth\Database\Seeders\ApplyIdOffsetsSeeder::class);
+            }
+        }
+
+        PHP);
+
+        Artisan::call('jamesgifford:auth:install', ['--verify' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('! database/seeders/DatabaseSeeder.php uses WithoutModelEvents', $output);
+        $this->assertStringContainsString('public_id generation is unaffected.', $output);
+        $this->assertStringContainsString('All checks passed.', $output);
+        $this->assertStringNotContainsString('✗', $output);
+    }
+
     /**
      * Regression test for the verification staleness bug: the User model trait
      * checks must read the file from disk (UserModelModifier::analyze) rather
@@ -735,6 +774,49 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString('AccountRoleSeeder::class', $contents);
         $this->assertStringContainsString('ApplyIdOffsetsSeeder::class', $contents);
         $this->assertStringNotContainsString('DevDataSeeder::class', $contents);
+    }
+
+    public function test_wiring_warns_about_without_model_events_without_failing(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            use WithoutModelEvents;
+
+            public function run(): void
+            {
+                $this->call(ProductSeeder::class);
+            }
+        }
+
+        PHP);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, 'The advisory must never fail an install.');
+        $this->assertStringContainsString('! database/seeders/DatabaseSeeder.php uses WithoutModelEvents', $output);
+        $this->assertStringContainsString('public_id generation is unaffected.', $output);
+        // The trait is reported, never edited away.
+        $this->assertStringContainsString('use WithoutModelEvents;', $this->readDatabaseSeeder());
+    }
+
+    public function test_wiring_stays_silent_when_the_seeder_does_not_suppress_events(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+
+        $this->assertStringNotContainsString('WithoutModelEvents', Artisan::output());
     }
 
     public function test_install_creates_the_database_seeder_when_absent(): void
