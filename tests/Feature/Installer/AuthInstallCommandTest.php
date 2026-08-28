@@ -573,6 +573,18 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString("don't use Boost, no action is needed", $output);
     }
 
+    public function test_completion_prints_testing_reminder(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('RefreshDatabase', $output);
+        $this->assertStringContainsString('account_roles', $output);
+        $this->assertStringContainsString('Testing in your application', $output);
+    }
+
     public function test_install_never_invokes_a_boost_command(): void
     {
         // Boost is not installed in the test environment. If install tried to

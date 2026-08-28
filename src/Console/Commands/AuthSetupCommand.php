@@ -314,6 +314,12 @@ final class AuthSetupCommand extends Command
         $this->line('  • Using Laravel Boost? Run `php artisan boost:update` to install this');
         $this->line("    package's AI skill (first-time Boost setup uses `boost:install`).");
         $this->line('    Not using Boost? No action needed.');
+
+        $this->newLine();
+        $this->line('  • Running tests? `RefreshDatabase` alone does not seed account_roles —');
+        $this->line('    see "Testing in your application" in the README (set $seed = true on');
+        $this->line('    your base TestCase, or call $this->seed(AccountRoleSeeder::class)');
+        $this->line('    explicitly).');
     }
 
     /**

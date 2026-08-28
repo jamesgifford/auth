@@ -120,6 +120,8 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('migrate:refresh --seed', $afterComplete);
         $this->assertStringContainsString('boost:update', $afterComplete);
         $this->assertStringContainsString('boost:install', $afterComplete);
+        $this->assertStringContainsString('RefreshDatabase', $afterComplete);
+        $this->assertStringContainsString('Testing in your application', $afterComplete);
     }
 
     public function test_setup_with_dev_data_wires_all_three_seeders(): void

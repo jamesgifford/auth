@@ -1348,6 +1348,7 @@ final class AuthInstallCommand extends Command
         $this->line('  stays consistent across your environments.');
 
         $this->displayBoostReminder();
+        $this->displayTestingReminder();
     }
 
     /**
@@ -1362,5 +1363,22 @@ final class AuthInstallCommand extends Command
         $this->line("  package's AI skill, which teaches coding agents its auth conventions.");
         $this->line('  (First-time Boost setup uses `php artisan boost:install`.) If you');
         $this->line("  don't use Boost, no action is needed.");
+    }
+
+    /**
+     * Always shown, unconditionally: there is no reliable way from here to
+     * detect whether a consumer's test suite already seeds. RefreshDatabase
+     * rebuilds the schema fresh per test but does not run seeders unless the
+     * test opts in, so a default Pest/PHPUnit suite hits InvalidRoleException
+     * on the first test that creates an account (e.g. via registration) —
+     * the role is validly configured but never makes it into account_roles.
+     */
+    private function displayTestingReminder(): void
+    {
+        $this->newLine();
+        $this->line('  Running tests? `RefreshDatabase` alone does not seed account_roles —');
+        $this->line('  see "Testing in your application" in the README (set $seed = true on');
+        $this->line('  your base TestCase, or call $this->seed(AccountRoleSeeder::class)');
+        $this->line('  explicitly).');
     }
 }
