@@ -142,6 +142,7 @@ class AccountServiceCreateTest extends AccountsTestCase
         $owner = User::factory()->create();
 
         $this->expectException(InvalidRoleException::class);
+        $this->expectExceptionMessage('AccountRoleSeeder');
 
         $this->service->create($owner);
     }

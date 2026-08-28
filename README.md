@@ -399,6 +399,31 @@ Your own seeders are never touched. The package's edits are made through PHP's A
 
 Pass `--skip-seeder-wiring` to `install` or `setup` to manage the file yourself; the commands then print the lines to add. If your application's root seeder is not at `database/seeders/DatabaseSeeder.php`, or that file cannot be safely parsed, the commands print the same instructions rather than editing anything.
 
+### Testing in your application
+
+`AccountRoleSeeder` is DDL-independent of your migrations: `RefreshDatabase` (or `migrate:fresh`) rebuilds the schema fresh for every test, but it does **not** run seeders unless the test opts in. Registering a user, or any code path that calls `AccountService::create()` (e.g. `CreateAccountOnRegistration`), requires the `owner` role to exist in `account_roles` — so a bare `RefreshDatabase` test suite will 500 on the first registration with `InvalidRoleException: ... has no matching row in the account_roles table`, even though `config('jamesgifford.auth.roles')` is perfectly valid.
+
+Seed roles once, in your base test case:
+
+```php
+// PHPUnit
+abstract class TestCase extends BaseTestCase
+{
+    protected $seed = true; // runs DatabaseSeeder, which the installer wired AccountRoleSeeder into
+}
+```
+
+```php
+// Pest — tests/Pest.php
+uses(RefreshDatabase::class)->beforeEach(fn () => $this->seed())->in('Feature');
+```
+
+If you'd rather not seed the whole `DatabaseSeeder` per test, seed just the roles:
+
+```php
+$this->seed(\JamesGifford\Auth\Database\Seeders\AccountRoleSeeder::class);
+```
+
 ### ID offsets
 
 `jamesgifford:auth:apply-id-offsets` sets the auto-increment starting values for the users and accounts tables (from the `id_offsets` config / env vars above), so real records begin above a chosen number and low IDs stay reserved for deterministic dev fixtures. Run it after migrating and after any seeding. Supported on MySQL/MariaDB and PostgreSQL; a no-op on SQLite. `setup` runs this as its final step.

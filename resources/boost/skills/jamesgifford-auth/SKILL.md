@@ -82,6 +82,13 @@ Users can belong to multiple accounts; the `current_account_id` column on the
 users table tracks the active one. The User model uses
 `JamesGifford\Auth\Concerns\HasAccounts`.
 
+Registration (and anything else that calls `AccountService::create()`) needs
+the `owner` role seeded into `account_roles`, not just configured. In a
+consumer's test suite, `RefreshDatabase` rebuilds the schema but does NOT run
+seeders on its own — set `$seed = true` on the base `TestCase` (or call
+`$this->seed(AccountRoleSeeder::class)`), or every registration test 500s with
+`InvalidRoleException`.
+
 ## Membership and roles API
 
 Query membership on the user (via `HasAccounts`):

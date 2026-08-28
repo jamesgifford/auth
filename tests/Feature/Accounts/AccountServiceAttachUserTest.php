@@ -96,10 +96,30 @@ class AccountServiceAttachUserTest extends AccountsTestCase
         ['account' => $account] = $this->createUserWithAccount();
         $newcomer = User::factory()->create();
 
-        $this->expectException(InvalidRoleException::class);
-        $this->expectExceptionMessage("'auditor'");
+        try {
+            $this->service->attachUser($account, $newcomer, 'auditor');
+            $this->fail('Expected InvalidRoleException.');
+        } catch (InvalidRoleException $e) {
+            $this->assertStringContainsString("'auditor'", $e->getMessage());
+            // Contrast with the "seeder not run" case: an unconfigured key
+            // never reaches the database, so there is nothing to seed.
+            $this->assertStringNotContainsString('AccountRoleSeeder', $e->getMessage());
+        }
+    }
 
-        $this->service->attachUser($account, $newcomer, 'auditor');
+    public function test_throws_invalid_role_when_key_is_configured_but_not_seeded(): void
+    {
+        ['account' => $account] = $this->createUserWithAccount();
+        $newcomer = User::factory()->create();
+
+        // 'member' is a valid configured role; wipe it to simulate the
+        // seeder never having run.
+        AccountRole::query()->where('key', 'member')->delete();
+
+        $this->expectException(InvalidRoleException::class);
+        $this->expectExceptionMessage('AccountRoleSeeder');
+
+        $this->service->attachUser($account, $newcomer, 'member');
     }
 
     public function test_throws_cannot_assign_owner_when_role_is_owner(): void

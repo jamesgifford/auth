@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6] - 2026-08-27
+
+### Fixed
+- `AccountService::requireRole()` threw the same `InvalidRoleException` message for two unrelated causes: a role key not declared in `config('jamesgifford.auth.roles')`, and a role key that IS declared but has no matching row in `account_roles` because `AccountRoleSeeder` hasn't run. The second case is the common one in a consumer's test suite — `RefreshDatabase` rebuilds the schema fresh per test but does not run seeders unless the test opts in, so a suite that registers a user (triggering `CreateAccountOnRegistration` → `AccountService::create()`) 500s on the very first test with a message that pointed at the config, which was fine, while the actual gap was an unseeded table. `InvalidRoleException` now has two named constructors — `forKey()` (unconfigured) and the new `notSeeded()` (configured but unseeded, naming `AccountRoleSeeder` and the `RefreshDatabase` gotcha directly in the message) — both still `InvalidRoleException`, so existing `catch (InvalidRoleException)` / `expectException(InvalidRoleException::class)` call sites are unaffected.
+
+### Development
+- README gains a "Testing in your application" section under "Seeding from your DatabaseSeeder" showing the `$seed = true` / Pest `beforeEach` snippet a consumer's base `TestCase` needs so `RefreshDatabase` alone doesn't leave `account_roles` empty. The Boost skill's "Accounts and registration" section gets the same warning.
+
 ## [1.2.5] - 2026-08-11
 
 ### Fixed

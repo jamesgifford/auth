@@ -461,9 +461,11 @@ final class AccountService
 
     /**
      * Resolve a role by key, throwing if it isn't present in the database.
-     * Pre-checks against RolesConfig so config-level missing keys produce
-     * the same exception as DB-level missing rows (consistent failure mode
-     * regardless of whether the seeder has run).
+     * Pre-checks against RolesConfig so a config-level missing key and a
+     * DB-level missing row raise distinct {@see InvalidRoleException}
+     * variants ({@see InvalidRoleException::forKey()} vs
+     * {@see InvalidRoleException::notSeeded()}) — the two have unrelated
+     * fixes and shouldn't read the same.
      */
     private function requireRole(string $key): AccountRole
     {
@@ -474,7 +476,7 @@ final class AccountService
         $role = PackageModels::accountRole()::findByKey($key);
 
         if ($role === null) {
-            throw InvalidRoleException::forKey($key);
+            throw InvalidRoleException::notSeeded($key);
         }
 
         return $role;
