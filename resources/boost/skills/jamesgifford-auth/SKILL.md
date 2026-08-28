@@ -85,9 +85,12 @@ users table tracks the active one. The User model uses
 Registration (and anything else that calls `AccountService::create()`) needs
 the `owner` role seeded into `account_roles`, not just configured. In a
 consumer's test suite, `RefreshDatabase` rebuilds the schema but does NOT run
-seeders on its own — set `$seed = true` on the base `TestCase` (or call
-`$this->seed(AccountRoleSeeder::class)`), or every registration test 500s with
-`InvalidRoleException`.
+seeders on its own, so `install`/`setup` already wire `protected $seed = true;`
+into `tests/TestCase.php` for you (skipped, never overwritten, if the class
+already seeds some other way). Only if that was skipped (`--skip-test-seeding`,
+or the file couldn't be safely edited) do you need `$seed = true` yourself, or
+`$this->seed(AccountRoleSeeder::class)` — otherwise every registration test
+500s with `InvalidRoleException`.
 
 ## Membership and roles API
 
@@ -168,12 +171,12 @@ sensible account instead of redirecting.
 - `jamesgifford:auth:setup` — primary entry point. Sequences migrate → install
   → (optional dev data) → apply ID offsets. Flags: `--fresh` (migrate:fresh,
   refuses in production), `--with-dev-data` (seed local dev cast, refuses in
-  production), `--skip-seeder-wiring`, `--force` (non-interactive; skips the
-  educational pause).
+  production), `--skip-seeder-wiring`, `--skip-test-seeding`, `--force`
+  (non-interactive; skips the educational pause).
 - `jamesgifford:auth:install` — install/configure the package. Flags include
   `--fresh`, `--without-http`, `--publish-models`, `--skip-public-id`,
   `--skip-migrations`, `--skip-roles`, `--skip-user-model`,
-  `--skip-seeder-wiring`, `--force`, `--verify`.
+  `--skip-seeder-wiring`, `--skip-test-seeding`, `--force`, `--verify`.
 - `jamesgifford:auth:uninstall` — destructive removal (drops tables, deletes
   data). Flags: `--keep-config`, `--remove-published-models`,
   `--force-production`, `--force`.
@@ -204,6 +207,14 @@ rebuild resets; it no-ops when none are configured and on SQLite. `uninstall`
 removes only the package's calls and preserves the app's own seeders. Edits are
 AST-based, so they never disturb unrelated content and never duplicate on
 re-run. `--skip-seeder-wiring` opts out on both commands.
+
+Separately, `install`/`setup` also wire `protected $seed = true;` into
+`tests/TestCase.php` (AST-based, same posture) so `RefreshDatabase` actually
+runs the `DatabaseSeeder` above during tests — without it the wiring exists but
+never fires in a default test suite. Skipped, never overwritten, if the class
+already seeds some other way. `--skip-test-seeding` opts out. This one is
+never unwired by `uninstall`: a bare boolean property has no reference to any
+package class, so leaving it is harmless.
 
 ## Environment variables
 

@@ -9,6 +9,7 @@ use JamesGifford\Auth\Database\DevDataSeeder;
 use JamesGifford\Auth\Database\IdOffsetManager;
 use JamesGifford\Auth\Installer\DatabaseSeederAnalysis;
 use JamesGifford\Auth\Installer\DatabaseSeederWiring;
+use JamesGifford\Auth\Installer\TestCaseSeedingWiring;
 use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\PublicId\PublicId;
 use Throwable;
@@ -60,12 +61,15 @@ final class AuthSetupCommand extends Command
         {--fresh : Reset the database first with migrate:fresh (drops ALL tables). Development only — the whole command refuses in production}
         {--with-dev-data : Also seed deterministic local dev data. Dev/local only — the seeder refuses in production even when this flag is passed}
         {--skip-seeder-wiring : Skip wiring the package seeders into database/seeders/DatabaseSeeder.php}
+        {--skip-test-seeding : Skip wiring `protected $seed = true;` into tests/TestCase.php}
         {--force : Run non-interactively: skip the educational pause and propagate --force to the migrate step}';
 
     protected $description = 'Run a complete auth setup: migrate (or migrate:fresh), install, optionally seed dev data, then apply ID offsets. Sequences the existing commands.';
 
-    public function __construct(private readonly DatabaseSeederWiring $seederWiring)
-    {
+    public function __construct(
+        private readonly DatabaseSeederWiring $seederWiring,
+        private readonly TestCaseSeedingWiring $testCaseSeedingWiring,
+    ) {
         parent::__construct();
     }
 
@@ -159,6 +163,7 @@ final class AuthSetupCommand extends Command
             '--publish-models' => true,
             '--skip-id-offsets' => true,
             '--skip-seeder-wiring' => (bool) $this->option('skip-seeder-wiring'),
+            '--skip-test-seeding' => (bool) $this->option('skip-test-seeding'),
         ]);
         if ($code !== self::SUCCESS) {
             return $this->abort('jamesgifford:auth:install', $code);
@@ -315,11 +320,16 @@ final class AuthSetupCommand extends Command
         $this->line("    package's AI skill (first-time Boost setup uses `boost:install`).");
         $this->line('    Not using Boost? No action needed.');
 
-        $this->newLine();
-        $this->line('  • Running tests? `RefreshDatabase` alone does not seed account_roles —');
-        $this->line('    see "Testing in your application" in the README (set $seed = true on');
-        $this->line('    your base TestCase, or call $this->seed(AccountRoleSeeder::class)');
-        $this->line('    explicitly).');
+        // Re-checks current state rather than trusting the plan, so a
+        // successful wire from the nested install call above never prints a
+        // stale reminder for something already handled.
+        if (! $this->testCaseSeedingWiring->analyze()->alreadySeeds) {
+            $this->newLine();
+            $this->line('  • Running tests? `RefreshDatabase` alone does not seed account_roles —');
+            $this->line('    see "Testing in your application" in the README (set $seed = true on');
+            $this->line('    your base TestCase, or call $this->seed(AccountRoleSeeder::class)');
+            $this->line('    explicitly).');
+        }
     }
 
     /**

@@ -62,6 +62,7 @@ php artisan jamesgifford:auth:setup --force
 | `--fresh` | Reset the database with `migrate:fresh` first. Development only — the command refuses in production. |
 | `--with-dev-data` | Also seed the deterministic local dev cast, and wire `DevDataSeeder` into `DatabaseSeeder`. The seeder refuses in production even with this flag. |
 | `--skip-seeder-wiring` | Don't touch `database/seeders/DatabaseSeeder.php`; print the calls to add instead. |
+| `--skip-test-seeding` | Don't touch `tests/TestCase.php`; print the property to add instead. |
 | `--force` | Run non-interactively: skip the educational pause and propagate `--force` to the migrate step. |
 
 The interactive flow pauses before the irreversible public_id lock to surface the format that's about to be locked. In production you run it non-interactively with `--force`; `--fresh` and `--with-dev-data` are refused there regardless.
@@ -401,20 +402,14 @@ Pass `--skip-seeder-wiring` to `install` or `setup` to manage the file yourself;
 
 ### Testing in your application
 
-`AccountRoleSeeder` is DDL-independent of your migrations: `RefreshDatabase` (or `migrate:fresh`) rebuilds the schema fresh for every test, but it does **not** run seeders unless the test opts in. Registering a user, or any code path that calls `AccountService::create()` (e.g. `CreateAccountOnRegistration`), requires the `owner` role to exist in `account_roles` — so a bare `RefreshDatabase` test suite will 500 on the first registration with `InvalidRoleException: ... has no matching row in the account_roles table`, even though `config('jamesgifford.auth.roles')` is perfectly valid.
+`AccountRoleSeeder` is DDL-independent of your migrations: `RefreshDatabase` (or `migrate:fresh`) rebuilds the schema fresh for every test, but it does **not** run seeders unless the test opts in. Registering a user, or any code path that calls `AccountService::create()` (e.g. `CreateAccountOnRegistration`), requires the `owner` role to exist in `account_roles` — so a bare `RefreshDatabase` test suite would 500 on the first registration with `InvalidRoleException: ... has no matching row in the account_roles table`, even though `config('jamesgifford.auth.roles')` is perfectly valid.
 
-Seed roles once, in your base test case:
+`install` and `setup` handle this for you: they add `protected $seed = true;` to `tests/TestCase.php` (this also covers a Pest suite, since Pest's `tests/Pest.php` still `uses(Tests\TestCase::class)`), so `RefreshDatabase` seeds `DatabaseSeeder` — and therefore `AccountRoleSeeder`, which the installer already wired in — on every test. Nothing to add yourself. It's skipped, never overwritten, when the class already seeds some other way (an existing `$seed` property of any value, a `#[Seed]` attribute, or an overridden `seeder()` method) — an explicit choice, including an explicit opt-out, is always respected.
 
-```php
-// PHPUnit
-abstract class TestCase extends BaseTestCase
-{
-    protected $seed = true; // runs DatabaseSeeder, which the installer wired AccountRoleSeeder into
-}
-```
+Pass `--skip-test-seeding` to manage this yourself; the commands then print the property to add. If your test suite has no `tests/TestCase.php`, or that file cannot be safely parsed, they print the same instructions rather than editing anything — for example, in a Pest suite:
 
 ```php
-// Pest — tests/Pest.php
+// tests/Pest.php
 uses(RefreshDatabase::class)->beforeEach(fn () => $this->seed())->in('Feature');
 ```
 
@@ -475,6 +470,7 @@ php artisan jamesgifford:auth:uninstall
 | `--publish-models` | Publish the editable `App\Models` subclasses without prompting. |
 | `--skip-public-id` / `--skip-migrations` / `--skip-roles` / `--skip-user-model` | Skip individual install steps (`--no-modify-user` is an alias for `--skip-user-model`). |
 | `--skip-seeder-wiring` | Don't touch `database/seeders/DatabaseSeeder.php`; print the calls to add instead. |
+| `--skip-test-seeding` | Don't touch `tests/TestCase.php`; print the property to add instead. |
 | `--skip-id-offsets` | Don't apply ID offsets here (the setup command passes this so it can apply them itself, after dev-data seeding). |
 
 ## Testing

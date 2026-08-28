@@ -18,11 +18,13 @@ use JamesGifford\Auth\PublicId\PublicId;
 use JamesGifford\Auth\SystemRole;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
+use JamesGifford\Auth\Tests\Support\StagesTestCase;
 use JamesGifford\Auth\Tests\TestCase;
 
 class AuthInstallCommandTest extends TestCase
 {
     use StagesDatabaseSeeder;
+    use StagesTestCase;
 
     private string $tmpDir;
 
@@ -50,6 +52,7 @@ class AuthInstallCommandTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeDatabaseSeeder();
+        $this->removeStagedTestCase();
         $this->rmTree($this->tmpDir);
         if (isset($this->userModelPath)) {
             @unlink($this->userModelPath);
@@ -890,6 +893,91 @@ class AuthInstallCommandTest extends TestCase
         $this->assertSame(0, $exit, 'Wiring problems are advisory, never fatal to install.');
         $this->assertSame($original, $this->readDatabaseSeeder());
         $this->assertStringContainsString('AccountRoleSeeder', $output);
+    }
+
+    public function test_install_wires_seed_true_into_test_case(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->stageTestCase($this->defaultTestCaseSource());
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('protected $seed = true;', $this->readStagedTestCase());
+        $this->assertStringContainsString('added `protected $seed = true;`', $output);
+        // Already handled this run, so the completion reminder should not repeat it.
+        $this->assertStringNotContainsString('Running tests?', $output);
+    }
+
+    public function test_install_leaves_an_already_seeding_test_case_untouched(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = $this->seedingTestCaseSource();
+        $this->stageTestCase($original);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit);
+        $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertStringContainsString('already configured', $output);
+    }
+
+    public function test_skip_test_seeding_leaves_the_test_case_untouched(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = $this->defaultTestCaseSource();
+        $this->stageTestCase($original);
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--skip-test-seeding' => true,
+        ]);
+
+        $this->assertSame($original, $this->readStagedTestCase());
+    }
+
+    public function test_an_unparseable_test_case_prints_instructions_without_failing(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = '<?php this will not parse {{{';
+        $this->stageTestCase($original);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, 'Wiring problems are advisory, never fatal to install.');
+        $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertStringContainsString('protected $seed = true;', $output);
+    }
+
+    public function test_verify_reports_test_seeding_advisory_when_no_test_case_exists(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->removeStagedTestCase();
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $exit = Artisan::call('jamesgifford:auth:install', ['--verify' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('! Test database seeding not configured', $output);
+        $this->assertStringContainsString('All checks passed.', $output);
+    }
+
+    public function test_verify_confirms_test_seeding_when_wired(): void
+    {
+        $this->loadLaravelMigrations();
+        $this->stageTestCase($this->defaultTestCaseSource());
+
+        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $exit = Artisan::call('jamesgifford:auth:install', ['--verify' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('✓ Test database seeding configured', $output);
     }
 
     protected function defineEnvironment($app): void

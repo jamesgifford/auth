@@ -16,6 +16,7 @@ use JamesGifford\Auth\PublicId\PrefixRegistry;
 use JamesGifford\Auth\Tests\Support\Fixtures\FixtureModelWithoutOverride;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
+use JamesGifford\Auth\Tests\Support\StagesTestCase;
 use JamesGifford\Auth\Tests\TestCase;
 use ReflectionClass;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -35,6 +36,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 class AuthSetupCommandTest extends TestCase
 {
     use StagesDatabaseSeeder;
+    use StagesTestCase;
 
     private string $tmpDir;
 
@@ -52,6 +54,7 @@ class AuthSetupCommandTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeDatabaseSeeder();
+        $this->removeStagedTestCase();
         if ($this->app !== null) {
             // Restore env before the parent's migrate rollback runs.
             $this->app['env'] = 'testing';
@@ -122,6 +125,30 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('boost:install', $afterComplete);
         $this->assertStringContainsString('RefreshDatabase', $afterComplete);
         $this->assertStringContainsString('Testing in your application', $afterComplete);
+    }
+
+    public function test_setup_wires_seed_true_into_test_case_and_omits_the_reminder(): void
+    {
+        $this->stageTestCase($this->defaultTestCaseSource());
+
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertStringContainsString('protected $seed = true;', $this->readStagedTestCase());
+
+        $afterComplete = (string) strstr($output, 'Setup complete.');
+        $this->assertStringNotContainsString('Running tests?', $afterComplete);
+    }
+
+    public function test_skip_test_seeding_is_forwarded_to_install(): void
+    {
+        $original = $this->defaultTestCaseSource();
+        $this->stageTestCase($original);
+
+        Artisan::call('jamesgifford:auth:setup', ['--force' => true, '--skip-test-seeding' => true]);
+
+        $this->assertSame($original, $this->readStagedTestCase());
     }
 
     public function test_setup_with_dev_data_wires_all_three_seeders(): void
