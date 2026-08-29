@@ -5,6 +5,12 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.8] - 2026-08-29
+
+### Changed
+- The test suite's real-driver target switched from MariaDB to **MySQL**, matching the package's actual production database (MariaDB was never that; the 1.2.1 choice assumed parity that didn't hold). `phpunit.xml`'s default `DB_CONNECTION` is now `mysql`, CI's service container is `mysql:8.4` (was `mariadb:12`, with `MYSQL_ROOT_PASSWORD`/`MYSQL_DATABASE` replacing the `MARIADB_*` env vars and `mysqladmin ping` replacing `mariadb`'s `healthcheck.sh` for the service health check), and the "package's actual target" comments/docs in `tests/TestCase.php`, the `IdOffsetManager`/`AuthApplyIdOffsetsCommand` test docblocks, and the README's Testing section now say MySQL. `IdOffsetManager` already treated `mysql` and `mariadb` as equivalent driver names for `AUTO_INCREMENT` DDL, and continues to support both — a consumer still running MariaDB in production is unaffected; only this package's own test-suite default changed. `composer test:sqlite` (the fast in-memory loop) is unaffected.
+- `phpunit.xml`'s local defaults now connect over **TCP** (`127.0.0.1:3306`, Laravel's own defaults) instead of a unix socket. A hardcoded `DB_SOCKET=/tmp/mysql.sock` broke the moment a local install used any other socket path (e.g. Laravel Herd's per-service UUID-named sockets) — TCP on the standard port is portable across Homebrew, Herd, Docker, and CI alike, and CI already connected this way. `DB_SOCKET` is still declared, set to `""`, so an inherited shell env var can never silently override host/port with a stale or nonexistent socket path.
+
 ## [1.2.7] - 2026-08-29
 
 ### Fixed

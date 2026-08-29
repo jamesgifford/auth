@@ -12,7 +12,7 @@ use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 /**
  * NOTE ON TEST SCOPE
  * ------------------
- * The suite's default database is MariaDB (the package's real target), where
+ * The suite's default database is MySQL (the package's real target), where
  * the offset ACTUALLY takes effect — asserted below by inserting rows and
  * checking their ids. Driver-specific branches are guarded: the sqlite
  * graceful-no-op test runs only under `composer test:sqlite`, and the

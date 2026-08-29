@@ -18,18 +18,18 @@ jobs:
                     - laravel: '13.*'
                       testbench: '11.*'
 
-        name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }} / MariaDB
+        name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }} / MySQL
 
         services:
-            mariadb:
-                image: mariadb:12
+            mysql:
+                image: mysql:8.4
                 env:
-                    MARIADB_ROOT_PASSWORD: root
-                    MARIADB_DATABASE: jamesgifford_auth_test
+                    MYSQL_ROOT_PASSWORD: root
+                    MYSQL_DATABASE: jamesgifford_auth_test
                 ports:
                     - 3306:3306
                 options: >-
-                    --health-cmd="healthcheck.sh --connect --innodb_initialized"
+                    --health-cmd="mysqladmin ping"
                     --health-interval=10s
                     --health-timeout=5s
                     --health-retries=5
@@ -38,7 +38,7 @@ jobs:
         # these take precedence over the local-machine socket defaults. Note
         # DB_SOCKET must be set (to empty) or the local socket path would leak in.
         env:
-            DB_CONNECTION: mariadb
+            DB_CONNECTION: mysql
             DB_HOST: 127.0.0.1
             DB_PORT: 3306
             DB_DATABASE: jamesgifford_auth_test
@@ -68,5 +68,5 @@ jobs:
                   composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
                   composer update --prefer-dist --no-interaction --no-progress
 
-            - name: Run tests (MariaDB)
+            - name: Run tests (MySQL)
               run: vendor/bin/phpunit

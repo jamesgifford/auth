@@ -16,7 +16,7 @@ abstract class TestCase extends OrchestraTestCase
         // Each test builds a fresh application and therefore fresh PDO
         // connections. On a real driver those linger until garbage collection,
         // and across the whole suite they accumulate faster than the server
-        // reaps them — tripping MariaDB's max_connections mid-run ("Too many
+        // reaps them — tripping MySQL's max_connections mid-run ("Too many
         // connections"). Disconnect explicitly AFTER the parent teardown so
         // every connection is covered, including any the migration-rollback
         // callbacks opened. (A beforeApplicationDestroyed hook is NOT safe
@@ -43,7 +43,7 @@ abstract class TestCase extends OrchestraTestCase
     /**
      * Every test starts from an EMPTY schema. sqlite :memory: provided that
      * for free (the connection IS the database); on a real driver — the
-     * suite's default is MariaDB, the package's actual target — the database
+     * suite's default is MySQL, the package's actual target — the database
      * persists between tests, so anything a crashed or partially-rolled-back
      * test left behind would cascade into later tests ("table already
      * exists", duplicate keys). Purging here, before each test's migrations

@@ -9,7 +9,7 @@ use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
 /**
- * On the suite's default MariaDB the command genuinely applies offsets (and
+ * On the suite's default MySQL the command genuinely applies offsets (and
  * the effect is asserted by inserting a row); on sqlite it is a documented,
  * cleanly-reported no-op. Each branch is guarded by the active driver.
  */

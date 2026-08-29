@@ -477,24 +477,24 @@ php artisan jamesgifford:auth:uninstall
 
 The package ships with a comprehensive test suite covering both subsystems, the service layer's transaction and event behavior, the invariant enforcement, the HTTP layer, and the installer.
 
-The suite runs against **MariaDB by default** — the package's actual target — so driver-real behavior (`AUTO_INCREMENT` offsets, DDL against populated tables, constraint names) is genuinely exercised, not simulated. It expects a local MariaDB with a `jamesgifford_auth_test` database reachable via the settings in `phpunit.xml`'s `<php>` block (override any of them with environment variables; CI does exactly that to point at a service container).
+The suite runs against **MySQL by default** — the package's actual target — so driver-real behavior (`AUTO_INCREMENT` offsets, DDL against populated tables, constraint names) is genuinely exercised, not simulated. It expects a local MySQL with a `jamesgifford_auth_test` database reachable via the settings in `phpunit.xml`'s `<php>` block (override any of them with environment variables; CI does exactly that to point at a service container).
 
 ```bash
 # Pint + PHPStan + the fast SQLite suite — the day-to-day gate
 composer check
 
-# Pint + PHPStan + the full MariaDB suite — before a release, or when a
+# Pint + PHPStan + the full MySQL suite — before a release, or when a
 # change touches schema, DDL, or driver-specific behavior
 composer check:full
 
 # The suites on their own
-composer test          # MariaDB (the integrity gate; slower — real DDL per test)
+composer test          # MySQL (the integrity gate; slower — real DDL per test)
 composer test:sqlite   # fast in-memory SQLite
 ```
 
-`composer check` runs against SQLite because it is the loop you run dozens of times a day — seconds rather than minutes. It does **not** replace the MariaDB run: CI always executes the full MariaDB suite (`vendor/bin/phpunit`) on every push, so driver-real behavior is still gated before anything merges.
+`composer check` runs against SQLite because it is the loop you run dozens of times a day — seconds rather than minutes. It does **not** replace the MySQL run: CI always executes the full MySQL suite (`vendor/bin/phpunit`) on every push, so driver-real behavior is still gated before anything merges.
 
-Driver-specific tests guard themselves: sqlite-only assertions (the offset no-op messaging) skip on MariaDB and vice versa, so both commands run green with a couple of expected skips.
+Driver-specific tests guard themselves: sqlite-only assertions (the offset no-op messaging) skip on MySQL and vice versa, so both commands run green with a couple of expected skips.
 
 ## License
 
