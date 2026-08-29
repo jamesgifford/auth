@@ -35,8 +35,9 @@ jobs:
                     --health-retries=5
 
         # phpunit.xml's <env> defaults only apply when a variable is UNSET, so
-        # these take precedence over the local-machine socket defaults. Note
-        # DB_SOCKET must be set (to empty) or the local socket path would leak in.
+        # these take precedence over its local-development defaults. DB_SOCKET
+        # is set (to empty) defensively, so a socket path set in the runner's
+        # own environment can never override DB_HOST/DB_PORT above.
         env:
             DB_CONNECTION: mysql
             DB_HOST: 127.0.0.1
