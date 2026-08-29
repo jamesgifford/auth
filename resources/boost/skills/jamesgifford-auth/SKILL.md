@@ -236,9 +236,9 @@ To customize a model, publish editable subclasses with
 `php artisan jamesgifford:auth:publish-models` (or `install --publish-models`).
 It writes `App\Models\Account`, `App\Models\AccountUser`, and
 `App\Models\AccountRole` extending the package base models, skipping any that
-already exist. Then point `config('jamesgifford.auth.models.*')` at them (the
-command prints the exact lines). Edit these published files — do NOT edit the
-package's base models in `vendor/`.
+already exist, and automatically points `config('jamesgifford.auth.models.*')`
+at each one it published — no manual config edit needed. Edit the published
+files — do NOT edit the package's base models in `vendor/`.
 
 The `models.*` overrides are honored everywhere: services, relationships,
 factories, seeders, and HTTP route-model binding all resolve model classes

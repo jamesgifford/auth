@@ -134,25 +134,143 @@ final class ModelPublisher
     }
 
     /**
-     * Ready-to-print lines telling the consumer how to wire the published
-     * models into config/jamesgifford/auth.php.
+     * Published model files that exist on disk AND are genuinely the
+     * package's subclasses (their source references the package base
+     * class) — so an unrelated App\Models\Account the consumer wrote
+     * themselves is never mistaken for ours and silently wired into config.
      *
-     * @return list<string>
+     * @return list<array{name: string, configKey: string, baseClass: string, appClass: string, path: string}>
      */
-    public function configInstructions(): array
+    public function genuinelyPublished(): array
     {
-        $lines = [
-            'To make the package use these models, point the model-resolution',
-            'config at them in config/jamesgifford/auth.php:',
-            '',
-            "  'models' => [",
-        ];
-        foreach ($this->configMap() as $key => $class) {
-            $lines[] = sprintf("      '%s' => \\%s::class,", $key, $class);
-        }
-        $lines[] = '  ],';
+        $present = [];
+        foreach ($this->candidatePaths() as $candidate) {
+            if (! is_file($candidate['path'])) {
+                continue;
+            }
 
-        return $lines;
+            $contents = (string) file_get_contents($candidate['path']);
+            if (! str_contains($contents, $candidate['baseClass'])) {
+                continue;
+            }
+
+            $present[] = [
+                'name' => $candidate['name'],
+                'configKey' => self::MODELS[$candidate['baseClass']],
+                'baseClass' => $candidate['baseClass'],
+                'appClass' => $this->modelNamespace().'\\'.$candidate['name'],
+                'path' => $candidate['path'],
+            ];
+        }
+
+        return $present;
+    }
+
+    /**
+     * Path to the published config file this class edits to wire published
+     * subclasses into model resolution.
+     */
+    public function publishedConfigPath(): string
+    {
+        return config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php');
+    }
+
+    /**
+     * Point every genuinely-published subclass's models.<key> value at its
+     * App\Models class in the published config file, so publishing a
+     * subclass never leaves the package silently resolving the base class
+     * instead.
+     *
+     * A targeted regex replace scoped to the 'models' => [...] block — not
+     * structural parsing — so the rest of the consumer's file (formatting,
+     * comments, other keys) is left untouched. Idempotent: rewriting an
+     * already-correct value reproduces the same text. Also mirrors each
+     * change into the live config repository so this same process resolves
+     * correctly without a config:clear round trip.
+     *
+     * @return array{registered: array<string, string>, failed: list<string>}
+     */
+    public function registerPublishedModels(): array
+    {
+        $path = $this->publishedConfigPath();
+        $published = $this->genuinelyPublished();
+
+        if (! is_file($path)) {
+            return [
+                'registered' => [],
+                'failed' => array_column($published, 'configKey'),
+            ];
+        }
+
+        $original = (string) file_get_contents($path);
+        $contents = $original;
+        $registered = [];
+        $failed = [];
+
+        foreach ($published as $model) {
+            $configKey = $model['configKey'];
+            $appClass = $model['appClass'];
+
+            $pattern = "/('models'\\s*=>\\s*\\[.*?'".preg_quote($configKey, '/')."'\\s*=>\\s*)[^,]+,/s";
+            $matched = false;
+            $updated = preg_replace_callback($pattern, function (array $m) use ($appClass, &$matched): string {
+                $matched = true;
+
+                return $m[1]."\\{$appClass}::class,";
+            }, $contents, 1);
+
+            if (! $matched || ! is_string($updated)) {
+                $failed[] = $configKey;
+
+                continue;
+            }
+
+            $contents = $updated;
+            $registered[$configKey] = $appClass;
+            config(["jamesgifford.auth.models.{$configKey}" => $appClass]);
+        }
+
+        if ($contents !== $original) {
+            file_put_contents($path, $contents);
+        }
+
+        return ['registered' => $registered, 'failed' => $failed];
+    }
+
+    /**
+     * Per published-subclass key, whether the LIVE model-resolution config
+     * actually matches its genuinely published subclass — the same value
+     * PackageModels would resolve right now, not merely what the file's
+     * text says.
+     *
+     * @return list<array{configKey: string, appClass: ?string, status: 'registered'|'unregistered'|'not_published'}>
+     */
+    public function configConsistency(): array
+    {
+        $publishedByKey = [];
+        foreach ($this->genuinelyPublished() as $model) {
+            $publishedByKey[$model['configKey']] = $model['appClass'];
+        }
+
+        $report = [];
+        foreach (self::MODELS as $configKey) {
+            if (! isset($publishedByKey[$configKey])) {
+                $report[] = ['configKey' => $configKey, 'appClass' => null, 'status' => 'not_published'];
+
+                continue;
+            }
+
+            $appClass = $publishedByKey[$configKey];
+            $resolved = ltrim((string) config("jamesgifford.auth.models.{$configKey}"), '\\');
+
+            $report[] = [
+                'configKey' => $configKey,
+                'appClass' => $appClass,
+                'status' => $resolved === $appClass ? 'registered' : 'unregistered',
+            ];
+        }
+
+        return $report;
     }
 
     private function stubFor(string $baseClass, string $short): string

@@ -10,12 +10,12 @@ use JamesGifford\Auth\Installer\ModelPublisher;
 /**
  * Publish the package's models into the app as editable subclasses
  * (App\Models\Account, App\Models\AccountUser, App\Models\AccountRole) that
- * extend the package base models.
+ * extend the package base models, and register each of them in the
+ * model-resolution config so the package actually uses them.
  *
  * Idempotent: existing target files are skipped (never overwritten), so a
- * consumer's customizations are preserved. The model-resolution config is not
- * rewritten automatically (preserving the consumer's config formatting/comments
- * is fragile); the exact config changes are printed instead.
+ * consumer's customizations are preserved. Re-running rewires an
+ * already-correct config value to the same value.
  */
 final class AuthPublishModelsCommand extends Command
 {
@@ -55,14 +55,78 @@ final class AuthPublishModelsCommand extends Command
         $this->line(sprintf('Created %d, skipped %d.', $created, $skipped));
 
         $this->newLine();
-        foreach ($this->publisher->configInstructions() as $line) {
-            $this->line($line === '' ? '' : '  '.$line);
-        }
+        $this->ensureConfigPublished();
+        $this->registerAndReport();
+
         $this->newLine();
         $this->line('  The account model is used throughout the package; account_user and');
         $this->line('  account_role are provided primarily for your own customization.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Publish the package config if the consumer hasn't already, so
+     * registerAndReport() has a file to edit. Never overwrites an existing
+     * file (the consumer may have edited it). Uses callSilent (not the
+     * Artisan facade) so the nested command's output doesn't clobber this
+     * command's own Artisan::output() buffer.
+     */
+    private function ensureConfigPublished(): void
+    {
+        if (is_file($this->publisher->publishedConfigPath())) {
+            return;
+        }
+
+        $this->callSilent('vendor:publish', ['--tag' => 'jamesgifford-auth-config']);
+    }
+
+    /**
+     * Wire every genuinely-published subclass into the models config,
+     * report what changed, and flag anything that still doesn't match.
+     */
+    private function registerAndReport(): void
+    {
+        $configPath = $this->displayPath($this->publisher->publishedConfigPath());
+        $outcome = $this->publisher->registerPublishedModels();
+
+        if ($outcome['registered'] !== []) {
+            $this->line("Registered in {$configPath}:");
+            $this->newLine();
+            $this->line("  'models' => [");
+            foreach ($outcome['registered'] as $key => $class) {
+                $this->line(sprintf("      '%s' => \\%s::class,", $key, $class));
+            }
+            $this->line('  ],');
+        }
+
+        if ($outcome['failed'] !== []) {
+            $this->newLine();
+            $this->warn("Could not automatically update {$configPath}. Add these by hand:");
+            $this->newLine();
+            $this->line("  'models' => [");
+            foreach ($this->publisher->configMap() as $key => $class) {
+                if (in_array($key, $outcome['failed'], true)) {
+                    $this->line(sprintf("      '%s' => \\%s::class,", $key, $class));
+                }
+            }
+            $this->line('  ],');
+        }
+
+        $mismatches = array_filter(
+            $this->publisher->configConsistency(),
+            static fn (array $row): bool => $row['status'] !== 'registered',
+        );
+
+        if ($mismatches !== []) {
+            $this->newLine();
+            $this->error('Model-map mismatch detected:');
+            foreach ($mismatches as $row) {
+                $this->line($row['status'] === 'not_published'
+                    ? "  ✗ models.{$row['configKey']} — no genuinely published subclass found"
+                    : "  ✗ models.{$row['configKey']} does not resolve to \\{$row['appClass']}::class");
+            }
+        }
     }
 
     private function displayPath(string $path): string

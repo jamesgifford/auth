@@ -97,8 +97,14 @@ return [
     | Model Resolution
     |--------------------------------------------------------------------------
     |
-    | The fully-qualified class names of models the package uses. Override
-    | any of these to use your own subclass.
+    | The fully-qualified class names of models the package uses. `user`
+    | defaults to your app's own User model. `account`, `account_role`, and
+    | `account_user` default to the package's own base classes below — until
+    | you run `php artisan jamesgifford:auth:publish-models` (or
+    | `install --publish-models`), which writes editable App\Models
+    | subclasses AND automatically points these three keys at them. You
+    | never need to edit this map by hand for that flow; only override a
+    | key manually if you're wiring in a subclass some other way.
     |
     */
 

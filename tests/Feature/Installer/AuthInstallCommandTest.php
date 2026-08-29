@@ -542,6 +542,29 @@ class AuthInstallCommandTest extends TestCase
         $this->assertFileExists($this->app->path('Models/AccountRole.php'));
     }
 
+    public function test_publish_models_flag_registers_them_in_the_config_map(): void
+    {
+        $this->loadLaravelMigrations();
+
+        Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--publish-models' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $output);
+        $this->assertStringContainsString("'account_user' => \\App\\Models\\AccountUser::class,", $output);
+        $this->assertStringContainsString("'account_role' => \\App\\Models\\AccountRole::class,", $output);
+
+        $this->assertSame('App\\Models\\Account', config('jamesgifford.auth.models.account'));
+        $this->assertSame('App\\Models\\AccountUser', config('jamesgifford.auth.models.account_user'));
+        $this->assertSame('App\\Models\\AccountRole', config('jamesgifford.auth.models.account_role'));
+
+        $configFile = (string) file_get_contents(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php'));
+        $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $configFile);
+    }
+
     public function test_install_with_force_but_no_flag_does_not_publish_models(): void
     {
         $this->loadLaravelMigrations();

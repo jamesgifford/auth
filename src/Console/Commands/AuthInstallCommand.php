@@ -1364,9 +1364,25 @@ final class AuthInstallCommand extends Command
             $this->line('  - '.$label.' '.$this->relativeToBase($result['path']));
         }
 
+        // The config file was already published (ensureConfigPublished() runs
+        // early in handle()), so there's always a file here to register into.
         $this->newLine();
-        foreach ($this->modelPublisher->configInstructions() as $line) {
-            $this->line($line === '' ? '' : '  '.$line);
+        $outcome = $this->modelPublisher->registerPublishedModels();
+
+        if ($outcome['registered'] !== []) {
+            $this->line('Registered in config/jamesgifford/auth.php:');
+            foreach ($outcome['registered'] as $key => $class) {
+                $this->line(sprintf("  '%s' => \\%s::class,", $key, $class));
+            }
+        }
+
+        if ($outcome['failed'] !== []) {
+            $this->warn('Could not automatically update config/jamesgifford/auth.php. Add these by hand:');
+            foreach ($this->modelPublisher->configMap() as $key => $class) {
+                if (in_array($key, $outcome['failed'], true)) {
+                    $this->line(sprintf("  '%s' => \\%s::class,", $key, $class));
+                }
+            }
         }
     }
 

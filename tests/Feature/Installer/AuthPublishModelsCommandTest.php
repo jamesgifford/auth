@@ -8,6 +8,10 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Installer\ModelPublisher;
+use JamesGifford\Auth\Models\Account as PackageAccount;
+use JamesGifford\Auth\Models\AccountRole as PackageAccountRole;
+use JamesGifford\Auth\Models\AccountUser as PackageAccountUser;
+use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\Tests\Feature\Accounts\AccountsTestCase;
 use JamesGifford\Auth\Tests\Support\Fixtures\User;
 
@@ -17,11 +21,13 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
     {
         parent::setUp();
         $this->cleanPublishedModels();
+        $this->cleanPublishedConfig();
     }
 
     protected function tearDown(): void
     {
         $this->cleanPublishedModels();
+        $this->cleanPublishedConfig();
         parent::tearDown();
     }
 
@@ -75,30 +81,98 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
         $this->assertFileExists($dir.DIRECTORY_SEPARATOR.'AccountRole.php');
     }
 
-    public function test_prints_config_wiring_instructions(): void
+    public function test_registers_all_published_subclasses_in_the_config_map(): void
     {
         Artisan::call('jamesgifford:auth:publish-models');
         $output = Artisan::output();
 
+        $this->assertStringContainsString('Registered in', $output);
         $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $output);
         $this->assertStringContainsString("'account_user' => \\App\\Models\\AccountUser::class,", $output);
         $this->assertStringContainsString("'account_role' => \\App\\Models\\AccountRole::class,", $output);
+
+        $this->assertSame('App\\Models\\Account', config('jamesgifford.auth.models.account'));
+        $this->assertSame('App\\Models\\AccountUser', config('jamesgifford.auth.models.account_user'));
+        $this->assertSame('App\\Models\\AccountRole', config('jamesgifford.auth.models.account_role'));
+
+        $configFile = (string) file_get_contents($this->app->make(ModelPublisher::class)->publishedConfigPath());
+        $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $configFile);
+        $this->assertStringContainsString("'account_user' => \\App\\Models\\AccountUser::class,", $configFile);
+        $this->assertStringContainsString("'account_role' => \\App\\Models\\AccountRole::class,", $configFile);
     }
 
-    public function test_package_uses_the_app_account_model_after_config_is_wired(): void
+    public function test_publishing_the_config_file_first_is_not_required(): void
+    {
+        $this->assertFileDoesNotExist($this->app->make(ModelPublisher::class)->publishedConfigPath());
+
+        Artisan::call('jamesgifford:auth:publish-models');
+
+        $this->assertFileExists($this->app->make(ModelPublisher::class)->publishedConfigPath());
+        $this->assertSame('App\\Models\\Account', config('jamesgifford.auth.models.account'));
+    }
+
+    public function test_rerunning_publish_models_is_idempotent(): void
+    {
+        Artisan::call('jamesgifford:auth:publish-models');
+        $publisher = $this->app->make(ModelPublisher::class);
+        $firstPass = (string) file_get_contents($publisher->publishedConfigPath());
+
+        Artisan::call('jamesgifford:auth:publish-models');
+        $secondPass = (string) file_get_contents($publisher->publishedConfigPath());
+
+        $this->assertSame($firstPass, $secondPass);
+        $this->assertSame(1, substr_count($secondPass, "'account' => \\App\\Models\\Account::class,"));
+    }
+
+    public function test_reports_no_mismatch_when_everything_is_registered(): void
+    {
+        Artisan::call('jamesgifford:auth:publish-models');
+        $output = Artisan::output();
+
+        $this->assertStringNotContainsString('Model-map mismatch detected', $output);
+    }
+
+    public function test_flags_a_published_but_unregistered_subclass(): void
+    {
+        Artisan::call('jamesgifford:auth:publish-models');
+
+        // Simulate the config drifting back to the base class after publishing.
+        config(['jamesgifford.auth.models.account' => PackageAccount::class]);
+
+        $publisher = $this->app->make(ModelPublisher::class);
+        $consistency = $publisher->configConsistency();
+
+        $accountRow = collect($consistency)->firstWhere('configKey', 'account');
+        $this->assertSame('unregistered', $accountRow['status']);
+
+        $accountUserRow = collect($consistency)->firstWhere('configKey', 'account_user');
+        $this->assertSame('registered', $accountUserRow['status']);
+    }
+
+    public function test_default_behavior_resolves_base_classes_without_publishing(): void
+    {
+        $this->assertSame(PackageAccount::class, PackageModels::account());
+        $this->assertSame(PackageAccountRole::class, PackageModels::accountRole());
+        $this->assertSame(PackageAccountUser::class, PackageModels::accountUser());
+    }
+
+    public function test_flags_a_key_with_no_published_subclass(): void
+    {
+        $publisher = $this->app->make(ModelPublisher::class);
+        $consistency = $publisher->configConsistency();
+
+        foreach ($consistency as $row) {
+            $this->assertSame('not_published', $row['status']);
+        }
+    }
+
+    public function test_package_uses_the_app_account_model_after_publishing(): void
     {
         $this->seedRoles();
         Artisan::call('jamesgifford:auth:publish-models');
+        $this->requirePublishedModels();
 
-        $accountFile = $this->app->path('Models/Account.php');
-        $this->assertFileExists($accountFile);
-        if (! class_exists('App\\Models\\Account', false)) {
-            require $accountFile;
-        }
-
-        // Wire the model-resolution config as the command instructs.
-        config(['jamesgifford.auth.models.account' => 'App\\Models\\Account']);
-
+        // No manual config wiring — publish-models registered it automatically.
         $account = $this->app->make(AccountService::class)->create(User::factory()->create());
 
         $this->assertInstanceOf('App\\Models\\Account', $account);
@@ -108,11 +182,7 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
     {
         $this->seedRoles();
         Artisan::call('jamesgifford:auth:publish-models');
-
-        $accountUserFile = $this->app->path('Models/AccountUser.php');
-        if (! class_exists('App\\Models\\AccountUser', false)) {
-            require $accountUserFile;
-        }
+        $this->requirePublishedModels();
 
         $user = User::factory()->create();
         $account = $this->app->make(AccountService::class)->create($user);
@@ -141,6 +211,28 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
         $dir = $this->app->path('Models');
         foreach (['Account', 'AccountUser', 'AccountRole'] as $name) {
             @unlink($dir.DIRECTORY_SEPARATOR.$name.'.php');
+        }
+    }
+
+    private function cleanPublishedConfig(): void
+    {
+        if ($this->app === null) {
+            return;
+        }
+        @unlink($this->app->make(ModelPublisher::class)->publishedConfigPath());
+    }
+
+    /**
+     * App\ is not autoloadable in the package test suite, and class
+     * definitions leak across the (randomized) run — require exactly once.
+     */
+    private function requirePublishedModels(): void
+    {
+        $dir = $this->app->path('Models');
+        foreach (['Account', 'AccountRole', 'AccountUser'] as $name) {
+            if (! class_exists("App\\Models\\{$name}", false)) {
+                require $dir.DIRECTORY_SEPARATOR.$name.'.php';
+            }
         }
     }
 }

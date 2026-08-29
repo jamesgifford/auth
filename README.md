@@ -451,7 +451,7 @@ php artisan jamesgifford:auth:uninstall
 | `jamesgifford:auth:uninstall` | Remove the package's footprint. Destructive. |
 | `jamesgifford:auth:seed-dev-data` | Seed the deterministic local dev cast (local/staging only). |
 | `jamesgifford:auth:apply-id-offsets` | Apply auto-increment ID offsets to the users and accounts tables. |
-| `jamesgifford:auth:publish-models` | Publish editable `App\Models` subclasses (Account, AccountUser, AccountRole). |
+| `jamesgifford:auth:publish-models` | Publish editable `App\Models` subclasses (Account, AccountUser, AccountRole) and register them in the models config. |
 | `jamesgifford:public-id:setup` | Lock the public_id configuration. |
 | `jamesgifford:public-id:status` | Display the current public_id configuration status. |
 | `jamesgifford:public-id:check` | Verify prefix registry integrity and detect config issues. |

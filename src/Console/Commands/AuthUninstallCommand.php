@@ -131,22 +131,11 @@ final class AuthUninstallCommand extends Command
      * the package's subclasses (they import the package base model) — so an
      * unrelated App\Models\Account is never mistaken for ours.
      *
-     * @return list<array{name: string, path: string, baseClass: string}>
+     * @return list<array{name: string, configKey: string, baseClass: string, appClass: string, path: string}>
      */
     private function detectPublishedModels(): array
     {
-        $present = [];
-        foreach ($this->modelPublisher->candidatePaths() as $candidate) {
-            if (! is_file($candidate['path'])) {
-                continue;
-            }
-            $contents = (string) file_get_contents($candidate['path']);
-            if (str_contains($contents, $candidate['baseClass'])) {
-                $present[] = $candidate;
-            }
-        }
-
-        return $present;
+        return $this->modelPublisher->genuinelyPublished();
     }
 
     /**

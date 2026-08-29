@@ -24,11 +24,13 @@ final class PublishedModelsPrefixCheckTest extends TestCase
         parent::setUp();
         Model::clearBootedModels();
         $this->cleanPublishedModels();
+        $this->cleanPublishedConfig();
     }
 
     protected function tearDown(): void
     {
         $this->cleanPublishedModels();
+        $this->cleanPublishedConfig();
         parent::tearDown();
     }
 
@@ -77,5 +79,20 @@ final class PublishedModelsPrefixCheckTest extends TestCase
         foreach (['Account', 'AccountUser', 'AccountRole'] as $model) {
             @unlink($this->app->path('Models').DIRECTORY_SEPARATOR.$model.'.php');
         }
+    }
+
+    /**
+     * publish-models now writes the published subclasses into the config
+     * file on disk; leaving it behind would leak App\Models\* class
+     * references (never require()'d in other tests) into every other test
+     * in this run, since config_path() is shared across the whole suite.
+     */
+    private function cleanPublishedConfig(): void
+    {
+        if ($this->app === null) {
+            return;
+        }
+
+        @unlink(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php'));
     }
 }

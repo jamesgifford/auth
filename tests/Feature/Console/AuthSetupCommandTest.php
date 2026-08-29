@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Tests\Feature\Console;
 
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -44,15 +45,43 @@ class AuthSetupCommandTest extends TestCase
 
     private string $migrationsDir;
 
+    /**
+     * Setup unconditionally passes --publish-models to install, which now
+     * (correctly) registers the published subclasses in config too — so
+     * dev-data seeding resolves PackageModels::account() etc. to App\Models\*
+     * classes. App\ isn't PSR-4 autoloadable in this Testbench skeleton (a
+     * real consuming app's Composer autoloader handles this for free), so
+     * this stands in for that: load a freshly-published file the first time
+     * something references its class.
+     */
+    private ?Closure $publishedModelAutoloader = null;
+
     protected function setUp(): void
     {
         parent::setUp();
         Model::clearBootedModels();
         $this->writeUsersMigration();
+
+        $this->publishedModelAutoloader = function (string $class): void {
+            if (! str_starts_with($class, 'App\\Models\\')) {
+                return;
+            }
+
+            $path = $this->app->path('Models'.DIRECTORY_SEPARATOR.substr($class, strlen('App\\Models\\')).'.php');
+            if (is_file($path)) {
+                require $path;
+            }
+        };
+        spl_autoload_register($this->publishedModelAutoloader);
     }
 
     protected function tearDown(): void
     {
+        if ($this->publishedModelAutoloader !== null) {
+            spl_autoload_unregister($this->publishedModelAutoloader);
+            $this->publishedModelAutoloader = null;
+        }
+
         $this->removeDatabaseSeeder();
         $this->removeStagedTestCase();
         if ($this->app !== null) {
