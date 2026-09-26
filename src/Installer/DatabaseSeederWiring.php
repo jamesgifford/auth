@@ -99,8 +99,9 @@ final class DatabaseSeederWiring
     ) {}
 
     /**
-     * The paste-in line for wiring a seeder by hand. Single-sourced so the
-     * stub and every command's instructions print the identical snippet.
+     * The paste-in line for wiring a seeder by hand. Single-sourced so every
+     * command's instructions print the identical snippet. Fully qualified, so
+     * it works pasted anywhere without an accompanying import.
      */
     public static function callLine(string $fqcn): string
     {
@@ -229,11 +230,23 @@ final class DatabaseSeederWiring
 
         $traverser = new NodeTraverser;
         $traverser->addVisitor(new CloningVisitor);
+        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
         $newStmts = $traverser->traverse($oldStmts);
 
-        [$namespace, $importMap, $scan] = $this->resolveContext($newStmts);
+        [$namespace, $importMap] = $this->resolveContext($newStmts);
 
-        foreach ($scan as $stmt) {
+        // The imports and class live in the namespace body when there is
+        // one, otherwise in the file's root statements.
+        $container = null;
+        foreach ($newStmts as $top) {
+            if ($top instanceof Stmt\Namespace_) {
+                $container = $top;
+                break;
+            }
+        }
+        $stmts = $container !== null ? $container->stmts : $newStmts;
+
+        foreach ($stmts as $stmt) {
             if (! $stmt instanceof Stmt\Class_) {
                 continue;
             }
@@ -245,14 +258,30 @@ final class DatabaseSeederWiring
 
             $body = $run->stmts ?? [];
             foreach ($toAdd as $fqcn) {
-                $body = $this->insertCall($body, $fqcn, $namespace, $importMap);
+                // Import and call by short name, as the consuming app's Pint
+                // (fully_qualified_strict_types) expects — unless that name
+                // is taken, where only the fully-qualified form is correct.
+                $alias = ImportList::aliasFor($fqcn, $stmts, $importMap);
+                if ($alias !== null && ! isset($importMap[$alias])) {
+                    $stmts = ImportList::insert($stmts, $fqcn);
+                    $importMap[$alias] = $fqcn;
+                }
+
+                $name = $alias !== null ? new Name($alias) : new Name\FullyQualified($fqcn);
+                $body = $this->insertCall($body, $fqcn, $name, $namespace, $importMap);
             }
             $run->stmts = $body;
         }
 
+        if ($container !== null) {
+            $container->stmts = $stmts;
+        } else {
+            $newStmts = $stmts;
+        }
+
         return new DatabaseSeederChange(
             originalCode: $originalCode,
-            modifiedCode: $this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens),
+            modifiedCode: BlankLine::render($this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens)),
             addedSeeders: $toAdd,
             removedSeeders: [],
         );
@@ -266,12 +295,16 @@ final class DatabaseSeederWiring
      */
     public function stub(array $seeders): string
     {
+        $imports = ['Illuminate\\Database\\Seeder', ...$seeders];
+        usort($imports, ImportList::compare(...));
+        $uses = implode("\n", array_map(static fn (string $fqcn): string => "use {$fqcn};", $imports));
+
         $lines = [];
         foreach ($seeders as $fqcn) {
             foreach (self::COMMENTS[$fqcn] ?? [] as $comment) {
                 $lines[] = '        '.$comment;
             }
-            $lines[] = '        '.self::callLine($fqcn);
+            $lines[] = '        $this->call('.class_basename($fqcn).'::class);';
             $lines[] = '';
         }
         $body = rtrim(implode("\n", $lines), "\n");
@@ -283,7 +316,7 @@ final class DatabaseSeederWiring
 
         namespace Database\\Seeders;
 
-        use Illuminate\\Database\\Seeder;
+        {$uses}
 
         class DatabaseSeeder extends Seeder
         {
@@ -375,16 +408,17 @@ final class DatabaseSeederWiring
     }
 
     /**
-     * Insert a `$this->call(\Fqcn::class);` statement at its canonical position
-     * within a run() body: immediately after the last already-present canonical
-     * predecessor, else immediately before the first canonical successor, else
-     * at the top (package calls precede app seeders that may depend on them).
+     * Insert a `$this->call(Name::class);` statement for $fqcn — written as
+     * $written — at its canonical position within a run() body: immediately
+     * after the last already-present canonical predecessor, else immediately
+     * before the first canonical successor, else at the top (package calls
+     * precede app seeders that may depend on them).
      *
      * @param  array<int, Stmt>  $body
      * @param  array<string, string>  $importMap
      * @return array<int, Stmt>
      */
-    private function insertCall(array $body, string $fqcn, ?string $namespace, array $importMap): array
+    private function insertCall(array $body, string $fqcn, Name $written, ?string $namespace, array $importMap): array
     {
         $rank = array_flip(self::CANONICAL_ORDER);
         $floor = 0;
@@ -409,7 +443,7 @@ final class DatabaseSeederWiring
         // goes after the statement carrying its predecessor.
         $position = ($ceiling !== null && $ceiling >= $floor) ? $ceiling : $floor;
 
-        array_splice($body, $position, 0, [$this->callStatement($fqcn)]);
+        array_splice($body, $position, 0, [$this->callStatement($fqcn, $written)]);
 
         return $body;
     }
@@ -602,8 +636,7 @@ final class DatabaseSeederWiring
     }
 
     /**
-     * Every FQCN the AST references OUTSIDE use statements — the survivors
-     * that decide whether a package import is still load-bearing.
+     * @see NameResolver::referencedNames()
      *
      * @param  array<int, Node>  $stmts
      * @param  array<string, string>  $importMap
@@ -611,45 +644,7 @@ final class DatabaseSeederWiring
      */
     private function referencedNamesIn(array $stmts, ?string $namespace, array $importMap): array
     {
-        $found = [];
-        $resolve = fn (Name $name): string => $this->resolveName($name, $namespace, $importMap);
-        $collect = function (string $fqcn) use (&$found): void {
-            $found[] = $fqcn;
-        };
-
-        $traverser = new NodeTraverser;
-        $traverser->addVisitor(new class($resolve, $collect) extends NodeVisitorAbstract
-        {
-            private int $useDepth = 0;
-
-            public function __construct(
-                private readonly Closure $resolve,
-                private readonly Closure $collect,
-            ) {}
-
-            public function enterNode(Node $node): ?Node
-            {
-                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
-                    $this->useDepth++;
-                } elseif ($node instanceof Name && $this->useDepth === 0) {
-                    ($this->collect)(($this->resolve)($node));
-                }
-
-                return null;
-            }
-
-            public function leaveNode(Node $node): ?int
-            {
-                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
-                    $this->useDepth--;
-                }
-
-                return null;
-            }
-        });
-        $traverser->traverse($stmts);
-
-        return array_values(array_unique($found));
+        return NameResolver::referencedNames($stmts, $namespace, $importMap);
     }
 
     /**
@@ -677,7 +672,7 @@ final class DatabaseSeederWiring
         ));
     }
 
-    private function callStatement(string $fqcn): Stmt\Expression
+    private function callStatement(string $fqcn, Name $name): Stmt\Expression
     {
         $statement = new Stmt\Expression(
             new Node\Expr\MethodCall(
@@ -685,7 +680,7 @@ final class DatabaseSeederWiring
                 new Node\Identifier('call'),
                 [new Node\Arg(
                     new Node\Expr\ClassConstFetch(
-                        new Name\FullyQualified($fqcn),
+                        $name,
                         new Node\Identifier('class'),
                     ),
                 )],

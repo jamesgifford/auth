@@ -5,6 +5,12 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Files the installer writes into a consuming app now pass that app's `pint --test` (the stock `laravel` preset) untouched; a fresh app's `composer lint:check` previously failed on every one of them. Published migrations had an extra blank line after the "published by this package" comment. The User model edit appended its imports unsorted, added a separate unsorted `use HasPublicId, HasAccounts;`, and appended `publicIdPrefix()` with no blank line before it. It now inserts imports alphabetically, merges the traits alphabetically into the model's existing trait use (`use HasAccounts, HasFactory, HasPublicId, Notifiable;`), and separates the method with a blank line. Uninstall still removes exactly those additions and restores a stock model byte-for-byte. DatabaseSeeder wiring (and the stub written when the app has none) called the seeders by fully-qualified name; it now imports them and calls them by short name, keeping the fully-qualified form only where the short name is already taken, so an import can never repoint an existing reference. `publish-models` wrote `\App\Models\...::class` into the non-namespaced config and left the `AccountRole`/`AccountUser` base-model imports unused. It now imports the subclasses whose short names are free, writes `App\Models\Account::class` relatively (its short name still belongs to the base model the prefixes map uses), and drops base-model imports nothing references. Re-running `publish-models` on a config written by an earlier version normalizes it the same way. The `$seed = true` property wired into `tests/TestCase.php` is now set off by blank lines from the members around it.
+- New `GeneratedCodeStyleTest` runs each installer edit against stock Laravel skeleton and starter-kit files, lets Pint (laravel preset) fix a copy, and fails on any difference, so a future edit can't regress this unnoticed. Already-published files in an existing app are not rewritten; running `vendor/bin/pint` there fixes them.
+
 ## [1.2.8] - 2026-08-29
 
 ### Changed

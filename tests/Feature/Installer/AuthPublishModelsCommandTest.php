@@ -95,10 +95,17 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
         $this->assertSame('App\\Models\\AccountUser', config('jamesgifford.auth.models.account_user'));
         $this->assertSame('App\\Models\\AccountRole', config('jamesgifford.auth.models.account_role'));
 
+        // Written as the consuming app's Pint would: imported where the short
+        // name is free; Account's belongs to the base model the prefixes map
+        // still imports, so it stays qualified (relative: the file has no
+        // namespace). The base imports the map no longer uses are gone.
         $configFile = (string) file_get_contents($this->app->make(ModelPublisher::class)->publishedConfigPath());
-        $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $configFile);
-        $this->assertStringContainsString("'account_user' => \\App\\Models\\AccountUser::class,", $configFile);
-        $this->assertStringContainsString("'account_role' => \\App\\Models\\AccountRole::class,", $configFile);
+        $this->assertStringContainsString("'account' => App\\Models\\Account::class,", $configFile);
+        $this->assertStringContainsString("'account_user' => AccountUser::class,", $configFile);
+        $this->assertStringContainsString("'account_role' => AccountRole::class,", $configFile);
+        $this->assertStringContainsString("use App\\Models\\AccountRole;\nuse App\\Models\\AccountUser;\nuse App\\Models\\User;\nuse JamesGifford\\Auth\\Models\\Account;\n", $configFile);
+        $this->assertStringNotContainsString('use JamesGifford\\Auth\\Models\\AccountRole;', $configFile);
+        $this->assertStringNotContainsString('use JamesGifford\\Auth\\Models\\AccountUser;', $configFile);
     }
 
     public function test_publishing_the_config_file_first_is_not_required(): void
@@ -121,7 +128,8 @@ class AuthPublishModelsCommandTest extends AccountsTestCase
         $secondPass = (string) file_get_contents($publisher->publishedConfigPath());
 
         $this->assertSame($firstPass, $secondPass);
-        $this->assertSame(1, substr_count($secondPass, "'account' => \\App\\Models\\Account::class,"));
+        $this->assertSame(1, substr_count($secondPass, "'account' => App\\Models\\Account::class,"));
+        $this->assertSame(1, substr_count($secondPass, 'use App\\Models\\AccountRole;'));
     }
 
     public function test_reports_no_mismatch_when_everything_is_registered(): void

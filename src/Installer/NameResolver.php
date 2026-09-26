@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace JamesGifford\Auth\Installer;
 
+use Closure;
 use PhpParser\Node;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitorAbstract;
 
 /**
  * PHP name-resolution rules shared by every AST editor in the package
- * ({@see DatabaseSeederWiring}, {@see UserModelModifier}), so detection and
+ * ({@see DatabaseSeederWiring}, {@see UserModelModifier},
+ * {@see ModelPublisher}), so detection and
  * removal always agree on what a written name MEANS. One implementation keeps
  * the editors from diverging on aliases, group imports, or qualified names —
  * the divergence that previously let an alias-form call go undetected and be
@@ -86,5 +90,56 @@ final class NameResolver
         }
 
         return $importMap[$first] ?? ($namespace !== null ? $namespace.'\\'.$first : $first);
+    }
+
+    /**
+     * Every FQCN the AST references OUTSIDE use statements — the survivors
+     * that decide whether an import is still load-bearing.
+     *
+     * @param  array<int, Node>  $stmts
+     * @param  array<string, string>  $importMap
+     * @return list<string>
+     */
+    public static function referencedNames(array $stmts, ?string $namespace, array $importMap): array
+    {
+        $found = [];
+        $resolve = static fn (Name $name): string => self::resolve($name, $namespace, $importMap);
+        $collect = function (string $fqcn) use (&$found): void {
+            $found[] = $fqcn;
+        };
+
+        $traverser = new NodeTraverser;
+        $traverser->addVisitor(new class($resolve, $collect) extends NodeVisitorAbstract
+        {
+            private int $useDepth = 0;
+
+            public function __construct(
+                private readonly Closure $resolve,
+                private readonly Closure $collect,
+            ) {}
+
+            public function enterNode(Node $node): ?Node
+            {
+                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
+                    $this->useDepth++;
+                } elseif ($node instanceof Name && $this->useDepth === 0) {
+                    ($this->collect)(($this->resolve)($node));
+                }
+
+                return null;
+            }
+
+            public function leaveNode(Node $node): ?int
+            {
+                if ($node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) {
+                    $this->useDepth--;
+                }
+
+                return null;
+            }
+        });
+        $traverser->traverse($stmts);
+
+        return array_values(array_unique($found));
     }
 }

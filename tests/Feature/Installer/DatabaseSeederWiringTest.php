@@ -514,6 +514,8 @@ class DatabaseSeederWiringTest extends TestCase
         $this->assertSame(DatabaseSeederWiring::CANONICAL_ORDER, $analysis->wiredSeeders);
         $this->assertStringContainsString('namespace Database\Seeders;', $stub);
         $this->assertStringContainsString('declare(strict_types=1);', $stub);
+        $this->assertStringContainsString('use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;', $stub);
+        $this->assertStringContainsString('$this->call(AccountRoleSeeder::class);', $stub);
     }
 
     public function test_a_failed_verification_restores_the_original_file(): void
@@ -556,6 +558,106 @@ class DatabaseSeederWiringTest extends TestCase
             $this->readDatabaseSeeder(),
             'Unwiring must return the file to its exact pre-wiring state.',
         );
+    }
+
+    public function test_it_imports_each_seeder_and_calls_it_by_short_name(): void
+    {
+        $this->stageDatabaseSeeder($this->defaultDatabaseSeederSource());
+        $wiring = $this->wiring();
+
+        $code = $wiring->wire($wiring->analyze(), DatabaseSeederWiring::CANONICAL_ORDER)->modifiedCode;
+
+        $this->assertStringContainsString(
+            "use Illuminate\\Database\\Seeder;\n"
+            ."use JamesGifford\\Auth\\Database\\DevDataSeeder;\n"
+            ."use JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder;\n"
+            ."use JamesGifford\\Auth\\Database\\Seeders\\ApplyIdOffsetsSeeder;\n",
+            $code,
+        );
+        $this->assertStringContainsString('$this->call(AccountRoleSeeder::class);', $code);
+        $this->assertStringContainsString('$this->call(DevDataSeeder::class);', $code);
+        $this->assertStringContainsString('$this->call(ApplyIdOffsetsSeeder::class);', $code);
+        $this->assertStringNotContainsString('\\JamesGifford', $code);
+    }
+
+    public function test_it_reuses_an_existing_import_alias(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+        use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder as Roles;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                //
+            }
+        }
+        PHP);
+        $wiring = $this->wiring();
+
+        $code = $wiring->wire($wiring->analyze(), [DatabaseSeederWiring::ROLES])->modifiedCode;
+
+        $this->assertStringContainsString('$this->call(Roles::class);', $code);
+        $this->assertSame(1, substr_count($code, 'AccountRoleSeeder'), 'No second import may be added.');
+    }
+
+    public function test_it_writes_the_fully_qualified_name_when_the_short_name_is_imported_as_another_class(): void
+    {
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use App\Legacy\AccountRoleSeeder;
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AccountRoleSeeder::class);
+            }
+        }
+        PHP);
+        $wiring = $this->wiring();
+
+        $code = $wiring->wire($wiring->analyze(), [DatabaseSeederWiring::ROLES])->modifiedCode;
+
+        $this->assertStringContainsString('$this->call(\\JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder::class);', $code);
+        $this->assertStringNotContainsString('use JamesGifford', $code);
+        $this->assertStringContainsString('$this->call(AccountRoleSeeder::class);', $code, 'The app call must keep meaning App\\Legacy\\AccountRoleSeeder.');
+    }
+
+    public function test_it_writes_the_fully_qualified_name_when_the_short_name_means_a_same_namespace_class(): void
+    {
+        // An unqualified AccountRoleSeeder here is Database\Seeders\AccountRoleSeeder;
+        // importing the package's class would silently repoint it.
+        $this->stageDatabaseSeeder(<<<'PHP'
+        <?php
+
+        namespace Database\Seeders;
+
+        use Illuminate\Database\Seeder;
+
+        class DatabaseSeeder extends Seeder
+        {
+            public function run(): void
+            {
+                $this->call(AccountRoleSeeder::class);
+            }
+        }
+        PHP);
+        $wiring = $this->wiring();
+
+        $code = $wiring->wire($wiring->analyze(), [DatabaseSeederWiring::ROLES])->modifiedCode;
+
+        $this->assertStringContainsString('$this->call(\\JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder::class);', $code);
+        $this->assertStringNotContainsString('use JamesGifford', $code);
     }
 
     public function test_unwire_keeps_the_apps_own_seeders(): void

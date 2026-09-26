@@ -216,9 +216,71 @@ class UserModelModifierTest extends TestCase
 
         $mod = $this->modifier->modify($file, $analysis);
 
-        $this->assertStringContainsString('use HasPublicId, HasAccounts;', $mod->modifiedCode);
+        // Merged alphabetically into the existing trait use, as Pint's
+        // ordered_traits rule expects.
+        $this->assertStringContainsString('use HasAccounts, HasFactory, HasPublicId, Notifiable;', $mod->modifiedCode);
         $this->assertContains('HasPublicId', $mod->addedTraits);
         $this->assertContains('HasAccounts', $mod->addedTraits);
+    }
+
+    public function test_modify_merges_each_trait_into_the_statement_where_it_sorts(): void
+    {
+        // `use HasFactory;` then `use Notifiable;`: HasAccounts sorts before
+        // everything (joins the first statement), HasPublicId between the two
+        // (joins the one whose leading trait precedes it) — so every statement
+        // stays ordered by its first trait.
+        $file = $this->copyFixtureToTmp('UserWithExistingTraits');
+
+        $mod = $this->modifier->modify($file, $this->modifier->analyze($file));
+
+        $this->assertStringContainsString("    use HasAccounts, HasFactory, HasPublicId;\n    use Notifiable;\n", $mod->modifiedCode);
+    }
+
+    public function test_modify_places_imports_in_alphabetical_order(): void
+    {
+        $file = $this->copyFixtureToTmp('StandardLaravelUser');
+
+        $mod = $this->modifier->modify($file, $this->modifier->analyze($file));
+
+        $this->assertStringContainsString(
+            "use Illuminate\\Notifications\\Notifiable;\n"
+            ."use JamesGifford\\Auth\\Concerns\\HasAccounts;\n"
+            ."use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;\n",
+            $mod->modifiedCode,
+        );
+    }
+
+    public function test_modify_separates_the_added_method_with_a_blank_line(): void
+    {
+        $file = $this->copyFixtureToTmp('StandardLaravelUser');
+
+        $mod = $this->modifier->modify($file, $this->modifier->analyze($file));
+
+        $this->assertStringContainsString("    }\n\n    public function publicIdPrefix(): string\n", $mod->modifiedCode);
+    }
+
+    public function test_modify_starts_a_trait_block_when_the_class_has_none(): void
+    {
+        $code = <<<'PHP'
+            <?php
+
+            namespace App\Models;
+
+            use Illuminate\Foundation\Auth\User as Authenticatable;
+
+            class User extends Authenticatable
+            {
+                protected $fillable = ['name'];
+            }
+
+            PHP;
+        $file = $this->tmpDir.DIRECTORY_SEPARATOR.'TraitlessUser.php';
+        file_put_contents($file, $code);
+        $this->createdFiles[] = $file;
+
+        $mod = $this->modifier->modify($file, $this->modifier->analyze($file));
+
+        $this->assertStringContainsString("{\n    use HasAccounts, HasPublicId;\n\n    protected \$fillable", $mod->modifiedCode);
     }
 
     public function test_modify_adds_public_id_prefix_method(): void
@@ -288,8 +350,8 @@ class UserModelModifierTest extends TestCase
         $this->assertStringContainsString('protected $fillable', $mod->modifiedCode);
         $this->assertStringContainsString('protected $hidden', $mod->modifiedCode);
         $this->assertStringContainsString('casts()', $mod->modifiedCode);
-        // Existing trait usage preserved.
-        $this->assertStringContainsString('use HasFactory, Notifiable;', $mod->modifiedCode);
+        // Existing traits preserved, with the package's merged in around them.
+        $this->assertStringContainsString('use HasAccounts, HasFactory, HasPublicId, Notifiable;', $mod->modifiedCode);
     }
 
     public function test_modify_produces_readable_diff(): void
@@ -302,7 +364,7 @@ class UserModelModifierTest extends TestCase
 
         $this->assertNotSame('', $diff);
         $this->assertStringContainsString('use JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId;', $diff);
-        $this->assertStringContainsString('use HasPublicId, HasAccounts;', $diff);
+        $this->assertStringContainsString('use HasAccounts, HasFactory, HasPublicId, Notifiable;', $diff);
     }
 
     public function test_modify_throws_for_unmodifiable_analysis(): void
@@ -426,8 +488,8 @@ class UserModelModifierTest extends TestCase
 
     public function test_forward_then_reverse_returns_user_model_to_a_clean_state(): void
     {
-        // Round-trip via the real combined `use HasPublicId, HasAccounts;` line
-        // that forward modification produces.
+        // Round-trip via the real merged trait use that forward modification
+        // produces.
         $file = $this->copyFixtureToTmp('StandardLaravelUser');
 
         $forward = $this->modifier->modify($file, $this->modifier->analyze($file));

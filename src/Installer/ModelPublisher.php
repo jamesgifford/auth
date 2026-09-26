@@ -8,6 +8,16 @@ use Illuminate\Contracts\Foundation\Application;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
 use JamesGifford\Auth\Models\AccountUser;
+use PhpParser\Node;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Name;
+use PhpParser\Node\Stmt;
+use PhpParser\Node\UseItem;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\CloningVisitor;
+use PhpParser\NodeVisitorAbstract;
+use PhpParser\Parser;
+use PhpParser\PrettyPrinter\Standard;
 use ReflectionClass;
 use Throwable;
 
@@ -36,7 +46,11 @@ final class ModelPublisher
         AccountRole::class => 'account_role',
     ];
 
-    public function __construct(private readonly Application $app) {}
+    public function __construct(
+        private readonly Application $app,
+        private readonly Parser $parser,
+        private readonly Standard $printer,
+    ) {}
 
     /**
      * The app's model namespace (e.g. App\Models), derived from the app's root
@@ -188,6 +202,9 @@ final class ModelPublisher
      * change into the live config repository so this same process resolves
      * correctly without a config:clear round trip.
      *
+     * The written file must also pass the consuming app's Pint, which
+     * {@see tidyReferences()} sees to.
+     *
      * @return array{registered: array<string, string>, failed: list<string>}
      */
     public function registerPublishedModels(): array
@@ -230,6 +247,8 @@ final class ModelPublisher
             config(["jamesgifford.auth.models.{$configKey}" => $appClass]);
         }
 
+        $contents = $this->tidyReferences($contents, array_values($registered));
+
         if ($contents !== $original) {
             file_put_contents($path, $contents);
         }
@@ -271,6 +290,135 @@ final class ModelPublisher
         }
 
         return $report;
+    }
+
+    /**
+     * Rewrite the config's class references the way the consuming app's Pint
+     * (laravel preset) would, so the edited file passes its lint check.
+     * Nothing else in the file is touched.
+     *
+     * - Imports of the package base models that nothing references any more
+     *   are dropped (no_unused_imports): once the models map points at the
+     *   published subclasses, e.g. AccountRole's import is otherwise left
+     *   unused. One still in use — Account, by the prefixes map — is kept.
+     * - Each fully-qualified reference to a published subclass is imported
+     *   and shortened when its short name is free, else written relative in
+     *   a file with no namespace, where the leading backslash is redundant
+     *   (fully_qualified_strict_types). App\Models\Account stays qualified:
+     *   its short name belongs to the base model's import.
+     *
+     * Idempotent, and a file that does not parse is returned as is.
+     *
+     * @param  list<string>  $appClasses
+     */
+    private function tidyReferences(string $contents, array $appClasses): string
+    {
+        try {
+            $oldStmts = $this->parser->parse($contents);
+        } catch (Throwable) {
+            return $contents;
+        }
+
+        if ($oldStmts === null) {
+            return $contents;
+        }
+
+        $oldTokens = $this->parser->getTokens();
+        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
+        $newStmts = (new NodeTraverser(new CloningVisitor))->traverse($oldStmts);
+
+        [$namespace, $importMap] = NameResolver::context($newStmts);
+        $unused = array_values(array_diff(
+            array_keys(self::MODELS),
+            NameResolver::referencedNames($newStmts, $namespace, $importMap),
+        ));
+
+        /** @var array<int, Stmt> $newStmts */
+        $newStmts = (new NodeTraverser(new class($unused) extends NodeVisitorAbstract
+        {
+            /** @param list<string> $unused */
+            public function __construct(private readonly array $unused) {}
+
+            public function leaveNode(Node $node): ?int
+            {
+                if (! $node instanceof Stmt\Use_) {
+                    return null;
+                }
+
+                $node->uses = array_values(array_filter(
+                    $node->uses,
+                    fn (UseItem $item): bool => ! in_array($item->name->toString(), $this->unused, true),
+                ));
+
+                return $node->uses === [] ? NodeTraverser::REMOVE_NODE : null;
+            }
+        }))->traverse($newStmts);
+
+        $container = null;
+        foreach ($newStmts as $top) {
+            if ($top instanceof Stmt\Namespace_) {
+                $container = $top;
+                break;
+            }
+        }
+        $stmts = $container !== null ? $container->stmts : $newStmts;
+        [, $importMap] = NameResolver::context($stmts);
+
+        $shortened = [];
+        foreach ($appClasses as $fqcn) {
+            $alias = ImportList::aliasFor($fqcn, $stmts, $importMap);
+
+            if ($alias !== null) {
+                if (! isset($importMap[$alias])) {
+                    $stmts = ImportList::insert($stmts, $fqcn);
+                    $importMap[$alias] = $fqcn;
+                }
+                $shortened[$fqcn] = $alias;
+            } elseif ($namespace === null && ! $this->importsAlias($importMap, explode('\\', $fqcn)[0])) {
+                $shortened[$fqcn] = $fqcn;
+            }
+        }
+
+        if ($container !== null) {
+            $container->stmts = $stmts;
+        } else {
+            $newStmts = $stmts;
+        }
+
+        $newStmts = (new NodeTraverser(new class($shortened) extends NodeVisitorAbstract
+        {
+            /** @param array<string, string> $shortened FQCN => name to write instead */
+            public function __construct(private readonly array $shortened) {}
+
+            public function leaveNode(Node $node): ?Node
+            {
+                if ($node instanceof Expr\ClassConstFetch
+                    && $node->class instanceof Name\FullyQualified
+                    && isset($this->shortened[$node->class->toString()])) {
+                    $node->class = new Name($this->shortened[$node->class->toString()]);
+
+                    return $node;
+                }
+
+                return null;
+            }
+        }))->traverse($newStmts);
+
+        return BlankLine::render($this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens));
+    }
+
+    /**
+     * @param  array<string, string>  $importMap
+     */
+    private function importsAlias(array $importMap, string $alias): bool
+    {
+        foreach (array_keys($importMap) as $imported) {
+            if (strcasecmp($imported, $alias) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function stubFor(string $baseClass, string $short): string

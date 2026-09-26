@@ -301,6 +301,11 @@ final class PackageMigrations
      * Insert the "published by this package" warning comment near the top of a
      * migration's source, just after the declare(strict_types=1); line (or the
      * opening tag if that line is absent). Idempotent — never doubles up.
+     *
+     * The comment opens with a blank line and ends at its closing delimiter,
+     * so the blank line that already follows the anchor line in the source
+     * ends up after the comment: exactly one blank line on each side, which
+     * is what the consuming app's Pint (no_extra_blank_lines) expects.
      */
     private function annotate(string $contents): string
     {
@@ -308,11 +313,11 @@ final class PackageMigrations
             return $contents;
         }
 
-        $comment = "\n/*\n"
+        $comment = "\n\n/*\n"
             .' * '.self::WARNING_MARKER." (jamesgifford:auth:install).\n"
             ." * This table structure is expected by the package's models and services.\n"
             ." * Modify with caution — prefer a separate migration over editing this file.\n"
-            ." */\n";
+            .' */';
 
         if (preg_match('/^declare\(strict_types=1\);$/m', $contents) === 1) {
             return preg_replace('/^(declare\(strict_types=1\);)$/m', '$1'.$comment, $contents, 1) ?? $contents;

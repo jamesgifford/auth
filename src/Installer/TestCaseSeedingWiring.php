@@ -136,7 +136,7 @@ final class TestCaseSeedingWiring
 
         return new TestCaseSeedingChange(
             originalCode: $originalCode,
-            modifiedCode: $this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens),
+            modifiedCode: BlankLine::render($this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens)),
             changed: true,
         );
     }
@@ -158,7 +158,9 @@ final class TestCaseSeedingWiring
     /**
      * Insert right after the last leading trait-use statement (matching
      * where a human would naturally place it — after `use CreatesApplication`
-     * and similar), or at the top of the class when there is none.
+     * and similar), or at the top of the class when there is none — set off
+     * by a blank line from whatever surrounds it, as the consuming app's Pint
+     * (class_attributes_separation) requires.
      *
      * @param  array<int, Stmt>  $body
      * @return array<int, Stmt>
@@ -172,7 +174,15 @@ final class TestCaseSeedingWiring
             }
         }
 
-        array_splice($body, $position, 0, [$this->seedProperty()]);
+        $insert = [$this->seedProperty()];
+        if ($position > 0) {
+            array_unshift($insert, BlankLine::node());
+        }
+        if ($position < count($body)) {
+            $insert[] = BlankLine::node();
+        }
+
+        array_splice($body, $position, 0, $insert);
 
         return $body;
     }

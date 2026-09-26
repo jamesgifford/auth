@@ -562,7 +562,7 @@ class AuthInstallCommandTest extends TestCase
         $this->assertSame('App\\Models\\AccountRole', config('jamesgifford.auth.models.account_role'));
 
         $configFile = (string) file_get_contents(config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php'));
-        $this->assertStringContainsString("'account' => \\App\\Models\\Account::class,", $configFile);
+        $this->assertStringContainsString("'account' => App\\Models\\Account::class,", $configFile);
     }
 
     public function test_install_with_force_but_no_flag_does_not_publish_models(): void

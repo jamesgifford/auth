@@ -171,130 +171,23 @@ final class UserModelModifier
         }
         $addPrefixMethod = ! $analysis->hasPublicIdPrefixMethod;
 
-        $visitor = new class($addedImports, $missingTraits, $addPrefixMethod) extends NodeVisitorAbstract
-        {
-            /**
-             * @param  list<string>  $importsToAdd
-             * @param  list<string>  $traitsToAdd
-             */
-            public function __construct(
-                private readonly array $importsToAdd,
-                private readonly array $traitsToAdd,
-                private readonly bool $addPrefixMethod,
-            ) {}
-
-            public function enterNode(Node $node): ?Node
-            {
-                // Container that holds the use statements + class. Could be
-                // a Namespace_ or the root statement list.
-                if ($node instanceof Stmt\Namespace_) {
-                    $node->stmts = $this->processContainer($node->stmts);
-                }
-
-                return null;
-            }
-
-            /**
-             * @param  array<int, Stmt>  $stmts
-             * @return array<int, Stmt>
-             */
-            private function processContainer(array $stmts): array
-            {
-                // Insert new use statements after the last existing one.
-                $lastUseIndex = -1;
-                foreach ($stmts as $i => $stmt) {
-                    if ($stmt instanceof Stmt\Use_) {
-                        $lastUseIndex = $i;
-                    }
-                }
-
-                $newUseStmts = [];
-                foreach ($this->importsToAdd as $fqcn) {
-                    $newUseStmts[] = new Stmt\Use_([
-                        new Node\UseItem(new Name($fqcn)),
-                    ]);
-                }
-
-                if ($newUseStmts !== []) {
-                    if ($lastUseIndex === -1) {
-                        $stmts = array_merge($newUseStmts, $stmts);
-                    } else {
-                        array_splice($stmts, $lastUseIndex + 1, 0, $newUseStmts);
-                    }
-                }
-
-                // Mutate the class node in place.
-                foreach ($stmts as $stmt) {
-                    if ($stmt instanceof Stmt\Class_) {
-                        $stmt->stmts = $this->processClassBody($stmt->stmts);
-                    }
-                }
-
-                return $stmts;
-            }
-
-            /**
-             * @param  array<int, Stmt>  $bodyStmts
-             * @return array<int, Stmt>
-             */
-            private function processClassBody(array $bodyStmts): array
-            {
-                // Insert a fresh `use TraitA, TraitB;` line below the last
-                // existing class-level trait use, or at the top of the body.
-                $lastTraitIndex = -1;
-                foreach ($bodyStmts as $i => $stmt) {
-                    if ($stmt instanceof Stmt\TraitUse) {
-                        $lastTraitIndex = $i;
-                    }
-                }
-
-                if ($this->traitsToAdd !== []) {
-                    $traitNames = array_map(
-                        fn (string $short): Name => new Name($short),
-                        $this->traitsToAdd
-                    );
-                    $newTraitUse = new Stmt\TraitUse($traitNames);
-
-                    if ($lastTraitIndex === -1) {
-                        array_unshift($bodyStmts, $newTraitUse);
-                    } else {
-                        array_splice($bodyStmts, $lastTraitIndex + 1, 0, [$newTraitUse]);
-                    }
-                }
-
-                if ($this->addPrefixMethod) {
-                    $factory = new BuilderFactory;
-                    $method = $factory->method('publicIdPrefix')
-                        ->makePublic()
-                        ->setReturnType('string')
-                        ->addStmt(new Stmt\Return_(new Node\Scalar\String_('user')))
-                        ->getNode();
-                    $bodyStmts[] = $method;
-                }
-
-                return $bodyStmts;
-            }
-        };
-
-        $modifyTraverser = new NodeTraverser;
-        $modifyTraverser->addVisitor($visitor);
-        /** @var array<int, Stmt> $newStmts top-level statements of a parsed file */
-        $newStmts = $modifyTraverser->traverse($newStmts);
-
-        // If the file had no namespace, the container we mutated lives at
-        // the root — process it directly here.
-        $hasNamespace = false;
+        // The imports and class live in the namespace body when there is
+        // one, otherwise in the file's root statements.
+        $namespace = null;
         foreach ($newStmts as $top) {
             if ($top instanceof Stmt\Namespace_) {
-                $hasNamespace = true;
+                $namespace = $top;
                 break;
             }
         }
-        if (! $hasNamespace) {
-            $newStmts = $this->processRootContainer($newStmts, $addedImports, $missingTraits, $addPrefixMethod);
+
+        if ($namespace !== null) {
+            $namespace->stmts = $this->editContainer($namespace->stmts, $addedImports, $missingTraits, $addPrefixMethod);
+        } else {
+            $newStmts = $this->editContainer($newStmts, $addedImports, $missingTraits, $addPrefixMethod);
         }
 
-        $modifiedCode = $this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens);
+        $modifiedCode = BlankLine::render($this->printer->printFormatPreserving($newStmts, $oldStmts, $oldTokens));
 
         return new UserModelModification(
             originalCode: $originalCode,
@@ -481,34 +374,20 @@ final class UserModelModifier
     }
 
     /**
-     * Mirror of the visitor's container processing for files without a
-     * namespace declaration. Modifies $stmts (top-level) in place via the
-     * same import/trait insertion rules.
+     * Apply the forward modification to the statement container holding the
+     * imports and the class (a namespace body, or the file's root). Every
+     * addition is placed where the consuming app's Pint (laravel preset)
+     * expects it, so installing never fails the app's lint check.
      *
      * @param  array<int, Stmt>  $stmts
      * @param  list<string>  $importsToAdd
      * @param  list<string>  $traitsToAdd
      * @return array<int, Stmt>
      */
-    private function processRootContainer(array $stmts, array $importsToAdd, array $traitsToAdd, bool $addPrefixMethod): array
+    private function editContainer(array $stmts, array $importsToAdd, array $traitsToAdd, bool $addPrefixMethod): array
     {
-        $lastUseIndex = -1;
-        foreach ($stmts as $i => $stmt) {
-            if ($stmt instanceof Stmt\Use_) {
-                $lastUseIndex = $i;
-            }
-        }
-
-        $newUseStmts = [];
         foreach ($importsToAdd as $fqcn) {
-            $newUseStmts[] = new Stmt\Use_([new Node\UseItem(new Name($fqcn))]);
-        }
-        if ($newUseStmts !== []) {
-            if ($lastUseIndex === -1) {
-                $stmts = array_merge($newUseStmts, $stmts);
-            } else {
-                array_splice($stmts, $lastUseIndex + 1, 0, $newUseStmts);
-            }
+            $stmts = ImportList::insert($stmts, $fqcn);
         }
 
         foreach ($stmts as $stmt) {
@@ -516,35 +395,84 @@ final class UserModelModifier
                 continue;
             }
 
-            $bodyStmts = $stmt->stmts;
-            $lastTraitIndex = -1;
-            foreach ($bodyStmts as $i => $bs) {
-                if ($bs instanceof Stmt\TraitUse) {
-                    $lastTraitIndex = $i;
-                }
-            }
-            if ($traitsToAdd !== []) {
-                $traitNames = array_map(fn (string $s): Name => new Name($s), $traitsToAdd);
-                $newTraitUse = new Stmt\TraitUse($traitNames);
-                if ($lastTraitIndex === -1) {
-                    array_unshift($bodyStmts, $newTraitUse);
-                } else {
-                    array_splice($bodyStmts, $lastTraitIndex + 1, 0, [$newTraitUse]);
-                }
-            }
+            $body = $this->addTraits($stmt->stmts, $traitsToAdd);
+
             if ($addPrefixMethod) {
-                $factory = new BuilderFactory;
-                $method = $factory->method('publicIdPrefix')
+                if ($body !== []) {
+                    $body[] = BlankLine::node();
+                }
+
+                $body[] = (new BuilderFactory)->method('publicIdPrefix')
                     ->makePublic()
                     ->setReturnType('string')
                     ->addStmt(new Stmt\Return_(new Node\Scalar\String_('user')))
                     ->getNode();
-                $bodyStmts[] = $method;
             }
-            $stmt->stmts = $bodyStmts;
+
+            $stmt->stmts = $body;
         }
 
         return $stmts;
+    }
+
+    /**
+     * Add traits in the order Pint's ordered_traits rule checks: each is
+     * merged alphabetically into the class's existing trait use — Laravel's
+     * own `use HasFactory, Notifiable;` style — choosing the last statement
+     * whose leading trait sorts at or before it, so the statements stay
+     * ordered by their first trait. A class with no mergeable trait use gets
+     * a new, sorted statement at the top of its body.
+     *
+     * Uninstall's {@see reverseModify()} removes the names from whichever
+     * statement holds them, so either shape reverses cleanly.
+     *
+     * @param  array<int, Stmt>  $body
+     * @param  list<string>  $traits  short names, already imported
+     * @return array<int, Stmt>
+     */
+    private function addTraits(array $body, array $traits): array
+    {
+        if ($traits === []) {
+            return $body;
+        }
+
+        // A statement with an adaptation block (`use A { ... }`) is left alone.
+        $uses = array_values(array_filter(
+            $body,
+            static fn (Stmt $stmt): bool => $stmt instanceof Stmt\TraitUse && $stmt->adaptations === [],
+        ));
+
+        if ($uses === []) {
+            usort($traits, strcasecmp(...));
+
+            $leading = [new Stmt\TraitUse(array_map(static fn (string $trait): Name => new Name($trait), $traits))];
+            if ($body !== []) {
+                $leading[] = BlankLine::node();
+            }
+
+            return [...$leading, ...$body];
+        }
+
+        foreach ($traits as $trait) {
+            $target = $uses[0];
+            foreach ($uses as $use) {
+                if (strcasecmp($use->traits[0]->toString(), $trait) <= 0) {
+                    $target = $use;
+                }
+            }
+
+            $position = count($target->traits);
+            foreach ($target->traits as $index => $existing) {
+                if (strcasecmp($existing->toString(), $trait) > 0) {
+                    $position = $index;
+                    break;
+                }
+            }
+
+            array_splice($target->traits, $position, 0, [new Name($trait)]);
+        }
+
+        return $body;
     }
 
     private function emptyAnalysis(
