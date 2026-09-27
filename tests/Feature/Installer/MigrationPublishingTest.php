@@ -31,7 +31,8 @@ class MigrationPublishingTest extends TestCase
     /**
      * The stable stems of the package's migrations, in dependency order:
      * users public_id alteration, roles, accounts, users current_account_id
-     * alteration, then the account_user pivot.
+     * alteration, the account_user pivot, then the role rows (after every
+     * table exists).
      *
      * @var list<string>
      */
@@ -41,6 +42,7 @@ class MigrationPublishingTest extends TestCase
         'create_accounts_table',
         'add_current_account_id_to_users_table',
         'create_account_user_table',
+        'insert_jamesgifford_auth_account_roles',
     ];
 
     protected function setUp(): void
@@ -135,7 +137,7 @@ class MigrationPublishingTest extends TestCase
             $times[] = $m[1];
         }
 
-        $this->assertSame(['000000', '000001', '000002', '000003', '000004'], $times);
+        $this->assertSame(['000000', '000001', '000002', '000003', '000004', '000005'], $times);
     }
 
     public function test_package_migrations_sort_before_a_realistic_same_day_project_migration(): void

@@ -83,14 +83,17 @@ users table tracks the active one. The User model uses
 `JamesGifford\Auth\Concerns\HasAccounts`.
 
 Registration (and anything else that calls `AccountService::create()`) needs
-the `owner` role seeded into `account_roles`, not just configured. In a
-consumer's test suite, `RefreshDatabase` rebuilds the schema but does NOT run
-seeders on its own, so `install`/`setup` already wire `protected $seed = true;`
-into `tests/TestCase.php` for you (skipped, never overwritten, if the class
-already seeds some other way). Only if that was skipped (`--skip-test-seeding`,
-or the file couldn't be safely edited) do you need `$seed = true` yourself, or
-`$this->seed(AccountRoleSeeder::class)` — otherwise every registration test
-500s with `InvalidRoleException`.
+the `owner` row in `account_roles`. A package migration
+(`*_insert_jamesgifford_auth_account_roles`, published by `install`) inserts
+every role configured in `jamesgifford.auth.roles` on migrate. It is
+idempotent, inserts only missing keys, and never rewrites existing rows. So
+`migrate:fresh`, `RefreshDatabase` test databases, and fresh deploys have the
+roles without seeding. Do NOT add role-seeding code to tests or deploys for
+this. If an app throws `InvalidRoleException` ("has no matching row") after
+upgrading, it hasn't published that migration yet: run
+`php artisan jamesgifford:auth:install`, then migrate. Never insert role rows
+with `create()`/`insert()` (they collide with the migration's rows on the
+unique `key`); use `AccountRoleSeeder` or `updateOrCreate`.
 
 ## Membership and roles API
 
@@ -145,10 +148,25 @@ Backend primitive (validates membership, then sets + persists
 
 ```php
 $user->switchToAccount($account); // throws NotAMemberException if not a member
+$user->currentAccount;            // already the new account — no refresh() needed
 ```
 
+To react to a change of current account (e.g. to lock account-scoped state),
+listen for `JamesGifford\Auth\Events\CurrentAccountChanged`. Do NOT hook the
+User model's `saving`/`updated` events for this. The event carries
+`$user` (`UserTransfer`), `$previousAccount`, and `$newAccount`
+(`?AccountTransfer`; null means no account). It fires after commit, only on a
+real change, from `switchToAccount()`, from `detachUser()` when the user is
+removed from their current account, once per affected user from
+`delete()`/`forceDelete()`, and when `EnsureCurrentAccount` clears or
+reassigns a missing current account.
+
 HTTP routes (registered when `jamesgifford.auth.http.enabled` is true;
-`{account}` is bound by public_id, behind the `auth` middleware):
+`{account}` is bound by public_id). They run in the `web` group behind `auth`
+by default: the session and CSRF apply, so POST with a CSRF token (`@csrf`, or
+axios/Inertia's automatic `X-XSRF-TOKEN`). Change the stack with
+`http.routes.middleware` (e.g. `['api', 'auth:sanctum']` for token clients).
+`{account}` binding is always applied.
 
 - `POST /account/switch/{account}` — route name `jamesgifford-auth.account.switch`.
   Returns a redirect (web) or JSON (API). Never a view.
@@ -171,12 +189,12 @@ sensible account instead of redirecting.
 - `jamesgifford:auth:setup` — primary entry point. Sequences migrate → install
   → (optional dev data) → apply ID offsets. Flags: `--fresh` (migrate:fresh,
   refuses in production), `--with-dev-data` (seed local dev cast, refuses in
-  production), `--skip-seeder-wiring`, `--skip-test-seeding`, `--force`
+  production), `--skip-seeder-wiring`, `--force`
   (non-interactive; skips the educational pause).
 - `jamesgifford:auth:install` — install/configure the package. Flags include
   `--fresh`, `--without-http`, `--publish-models`, `--skip-public-id`,
   `--skip-migrations`, `--skip-roles`, `--skip-user-model`,
-  `--skip-seeder-wiring`, `--skip-test-seeding`, `--force`, `--verify`.
+  `--skip-seeder-wiring`, `--force`, `--verify`.
 - `jamesgifford:auth:uninstall` — destructive removal (drops tables, deletes
   data). Flags: `--keep-config`, `--remove-published-models`,
   `--force-production`, `--force`.
@@ -208,13 +226,11 @@ removes only the package's calls and preserves the app's own seeders. Edits are
 AST-based, so they never disturb unrelated content and never duplicate on
 re-run. `--skip-seeder-wiring` opts out on both commands.
 
-Separately, `install`/`setup` also wire `protected $seed = true;` into
-`tests/TestCase.php` (AST-based, same posture) so `RefreshDatabase` actually
-runs the `DatabaseSeeder` above during tests — without it the wiring exists but
-never fires in a default test suite. Skipped, never overwritten, if the class
-already seeds some other way. `--skip-test-seeding` opts out. This one is
-never unwired by `uninstall`: a bare boolean property has no reference to any
-package class, so leaving it is harmless.
+Neither command edits `tests/TestCase.php`. Test databases get the roles from
+the roles migration, so do NOT add `protected $seed = true;` (or seed
+`AccountRoleSeeder`) to a test suite just so accounts can be created. Before
+1.3 `install` added that property. It no longer adds, checks, or removes it,
+and `--skip-test-seeding` is a deprecated no-op.
 
 ## Environment variables
 
@@ -253,5 +269,7 @@ models directly (a guard test enforces this) — resolve through `PackageModels`
 - Do NOT assign the `owner` role via `attachUser`/`changeRole` — use `transferOwnership`.
 - Do NOT reference models by integer `id` in external URLs — use public IDs.
 - Do NOT build account switching from scratch — use `switchToAccount()` or the switch route.
+- Do NOT detect account switches by hooking the User model's save — listen for `CurrentAccountChanged`.
+- Do NOT seed account roles just so accounts can be created — the roles migration inserts them.
 - Do NOT manipulate the `account_user` pivot directly — use `AccountService`.
 - Do NOT call `env()` for `JAMESGIFFORD_AUTH_*` vars in app code — read config.

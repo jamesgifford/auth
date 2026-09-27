@@ -13,7 +13,6 @@ use JamesGifford\Auth\Installer\DatabaseSeederAnalysis;
 use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
-use JamesGifford\Auth\Installer\TestCaseSeedingWiring;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\PackageModels;
 use JamesGifford\Auth\PublicId\AlphabetRegistry;
@@ -24,6 +23,7 @@ use JamesGifford\Auth\PublicId\Config\LockFile;
 use JamesGifford\Auth\PublicId\Config\PublicIdConfig;
 use JamesGifford\Auth\PublicId\Generator;
 use JamesGifford\Auth\PublicId\Validator;
+use JamesGifford\Auth\Roles\RolesConfig;
 use JamesGifford\Auth\SystemRole;
 use ReflectionClass;
 use RuntimeException;
@@ -37,12 +37,19 @@ use Throwable;
  */
 final class AuthInstallCommand extends Command
 {
+    /**
+     * Printed when the retired --skip-test-seeding flag is passed. The flag is
+     * still accepted so scripts that pass it keep working. Shared with the
+     * setup command.
+     */
+    public const SKIP_TEST_SEEDING_DEPRECATION = '--skip-test-seeding is deprecated and has no effect: account roles come from a migration, so tests/TestCase.php is no longer edited.';
+
     protected $signature = 'jamesgifford:auth:install
         {--skip-public-id : Skip public_id config setup}
         {--skip-migrations : Skip publishing and running migrations}
         {--skip-roles : Skip seeding system roles}
         {--skip-seeder-wiring : Skip wiring the package seeders into database/seeders/DatabaseSeeder.php}
-        {--skip-test-seeding : Skip wiring `protected $seed = true;` into tests/TestCase.php}
+        {--skip-test-seeding : Deprecated, no effect: account roles come from a migration, so tests/TestCase.php is no longer edited}
         {--skip-user-model : Skip User model modification; print instructions instead}
         {--no-modify-user : Alias for --skip-user-model}
         {--force : Bypass interactive prompts}
@@ -61,7 +68,6 @@ final class AuthInstallCommand extends Command
         private readonly ModelPublisher $modelPublisher,
         private readonly IdOffsetManager $idOffsetManager,
         private readonly DatabaseSeederWiring $seederWiring,
-        private readonly TestCaseSeedingWiring $testCaseSeedingWiring,
     ) {
         parent::__construct();
     }
@@ -70,6 +76,11 @@ final class AuthInstallCommand extends Command
     {
         $this->info('JamesGifford Auth Installer');
         $this->newLine();
+
+        if ($this->option('skip-test-seeding')) {
+            $this->warn(self::SKIP_TEST_SEEDING_DEPRECATION);
+            $this->newLine();
+        }
 
         if ($this->option('verify')) {
             return $this->runVerification() ? self::SUCCESS : self::FAILURE;
@@ -213,13 +224,18 @@ final class AuthInstallCommand extends Command
     {
         // Cheap flag checks come first so a skipped step never pays for its
         // probe (file reads and parses, schema queries).
+        $publishMigrations = ! $this->option('skip-migrations') && $this->needsMigrationsPublished();
+
         return [
             'public_id_setup' => ! $this->option('skip-public-id') && $this->needsPublicIdSetup(),
-            'publish_migrations' => ! $this->option('skip-migrations') && $this->needsMigrationsPublished(),
-            'run_migrations' => ! $this->option('skip-migrations') && $this->needsMigrationsRun(),
+            'publish_migrations' => $publishMigrations,
+            // A migration this run publishes is pending by definition — even
+            // when the schema checks find nothing missing (e.g. the roles
+            // migration, which adds rows rather than tables).
+            'run_migrations' => $publishMigrations
+                || (! $this->option('skip-migrations') && $this->needsMigrationsRun()),
             'seed_roles' => ! $this->option('skip-roles') && $this->needsRolesSeeded(),
             'wire_database_seeder' => ! $this->option('skip-seeder-wiring') && $this->needsSeederWiring(),
-            'wire_test_seeding' => ! $this->option('skip-test-seeding') && $this->needsTestSeedingWiring(),
             'modify_user_model' => ! $this->shouldSkipUserModel() && $this->needsUserModelModification(),
         ];
     }
@@ -238,11 +254,6 @@ final class AuthInstallCommand extends Command
         }
 
         return $analysis->missing($this->installWiredSeeders()) !== [];
-    }
-
-    private function needsTestSeedingWiring(): bool
-    {
-        return $this->testCaseSeedingWiring->analyze()->needsWiring();
     }
 
     /**
@@ -269,9 +280,11 @@ final class AuthInstallCommand extends Command
 
     private function needsMigrationsPublished(): bool
     {
-        $glob = database_path('migrations'.DIRECTORY_SEPARATOR.'*_create_accounts_table.php');
-
-        return glob($glob) === [];
+        // ANY package migration missing, not just the accounts table: an app
+        // installed before a newer package migration existed (e.g. the roles
+        // migration) picks it up on its next install run. Publishing skips the
+        // ones already there.
+        return $this->packageMigrations->publishedFileCount() < count($this->packageMigrations->names());
     }
 
     private function needsMigrationsRun(): bool
@@ -341,7 +354,6 @@ final class AuthInstallCommand extends Command
             'run_migrations' => 'Run pending migrations',
             'seed_roles' => 'Seed system roles into account_roles',
             'wire_database_seeder' => 'Wire package seeders into database/seeders/DatabaseSeeder.php',
-            'wire_test_seeding' => 'Wire `protected $seed = true;` into tests/TestCase.php',
             'modify_user_model' => 'Modify your User model to add HasPublicId and HasAccounts traits',
         ];
 
@@ -372,31 +384,8 @@ final class AuthInstallCommand extends Command
             'run_migrations' => $this->option('skip-migrations') ? 'skipped via flag' : 'already run',
             'seed_roles' => $this->option('skip-roles') ? 'skipped via flag' : 'already seeded',
             'wire_database_seeder' => $this->option('skip-seeder-wiring') ? 'skipped via flag' : 'already wired',
-            'wire_test_seeding' => $this->testSeedingSkipReason(),
             'modify_user_model' => $this->shouldSkipUserModel() ? 'skipped via flag' : 'already configured',
             default => 'skipped',
-        };
-    }
-
-    /**
-     * A step-specific reason, unlike the single-string cases above: "already
-     * configured" would be misleading when tests/TestCase.php simply wasn't
-     * found or couldn't be parsed — those cases get their own wording so the
-     * plan display matches what actually happened.
-     */
-    private function testSeedingSkipReason(): string
-    {
-        if ($this->option('skip-test-seeding')) {
-            return 'skipped via flag';
-        }
-
-        $analysis = $this->testCaseSeedingWiring->analyze();
-
-        return match (true) {
-            ! $analysis->fileExists => 'tests/TestCase.php not found',
-            ! $analysis->parseable => 'tests/TestCase.php is not parseable PHP',
-            $analysis->unusualReason !== null => $analysis->unusualReason,
-            default => 'already configured',
         };
     }
 
@@ -608,12 +597,6 @@ final class AuthInstallCommand extends Command
             // otherwise-good install. Same posture as model publishing.
             $this->executeWireDatabaseSeeder($this->installWiredSeeders());
         }
-        if ($plan['wire_test_seeding']) {
-            // Same advisory posture: a tests/TestCase.php we cannot safely
-            // edit (or that does not exist) must not fail an otherwise-good
-            // install.
-            $this->executeWireTestSeeding();
-        }
         if ($plan['modify_user_model']) {
             if (! $this->executeModifyUserModel()) {
                 return false;
@@ -696,9 +679,9 @@ final class AuthInstallCommand extends Command
         // never runs against an empty roles map. Mirrors the staleness remedy
         // already applied to verification and the config display.
         $this->callSilent('config:clear');
-        $this->ensureRolesConfigLoaded();
 
         try {
+            $this->ensureRolesConfigLoaded();
             $this->laravel->make(AccountRoleSeeder::class)->run();
         } catch (Throwable $e) {
             $this->error('Role seeding failed: '.$e->getMessage());
@@ -728,6 +711,7 @@ final class AuthInstallCommand extends Command
      * seeding. When the live config is empty (cached/stale in-process config),
      * re-read the roles straight from the published config on disk — or the
      * package default — so seeding uses the actual values, not stale defaults.
+     * RolesConfig::current() owns that fallback; the roles migration uses it too.
      */
     private function ensureRolesConfigLoaded(): void
     {
@@ -736,20 +720,7 @@ final class AuthInstallCommand extends Command
             return;
         }
 
-        foreach ([$this->publishedConfigPath(), __DIR__.'/../../../config/auth.php'] as $path) {
-            if (! is_file($path)) {
-                continue;
-            }
-
-            // require (not require_once) re-evaluates and returns the config
-            // array each call, so this is immune to the boot-time include cache.
-            $loaded = require $path;
-            if (is_array($loaded) && isset($loaded['roles']) && is_array($loaded['roles']) && $loaded['roles'] !== []) {
-                config(['jamesgifford.auth.roles' => $loaded['roles']]);
-
-                return;
-            }
-        }
+        config(['jamesgifford.auth.roles' => RolesConfig::current()->roles()]);
     }
 
     /**
@@ -850,53 +821,6 @@ final class AuthInstallCommand extends Command
         foreach ($seeders as $fqcn) {
             $this->line('      '.DatabaseSeederWiring::callLine($fqcn));
         }
-    }
-
-    /**
-     * Advisory, never fatal: RefreshDatabase alone does not seed
-     * account_roles, so without this a consumer's default test suite 500s on
-     * the first test that creates an account. tests/TestCase.php has no
-     * single conventional shape the way DatabaseSeeder.php does, so a file
-     * this cannot safely edit — or that does not exist — falls back to
-     * printed instructions rather than failing the install.
-     */
-    private function executeWireTestSeeding(): void
-    {
-        $this->newLine();
-        $this->info('→ Wiring test database seeding...');
-
-        $analysis = $this->testCaseSeedingWiring->analyze();
-        $path = $this->testCaseSeedingWiring->path();
-
-        if (! $analysis->isModifiable()) {
-            $this->warn('  Could not edit '.$this->relativeToBase($path).': '.($analysis->unusualReason ?? 'unusual structure').'.');
-            $this->displayTestSeedingInstructions();
-
-            return;
-        }
-
-        try {
-            $change = $this->testCaseSeedingWiring->wire($analysis);
-            $this->testCaseSeedingWiring->commit($change);
-
-            if (! $change->changed) {
-                $this->line('  - already configured: '.$this->relativeToBase($path));
-            } else {
-                $this->line('  - added `protected $seed = true;` to '.$this->relativeToBase($path));
-            }
-        } catch (Throwable $e) {
-            $this->warn('  Could not edit '.$this->relativeToBase($path).': '.$e->getMessage());
-            $this->displayTestSeedingInstructions();
-        }
-    }
-
-    private function displayTestSeedingInstructions(): void
-    {
-        $this->newLine();
-        $this->line('  Add this to your base TestCase (or an equivalent Pest setup) so');
-        $this->line('  RefreshDatabase seeds account_roles automatically:');
-        $this->newLine();
-        $this->line('      protected $seed = true;');
     }
 
     private function executeModifyUserModel(): bool
@@ -1273,23 +1197,6 @@ final class AuthInstallCommand extends Command
             }
         }
 
-        // Same advisory posture: a tests/TestCase.php that doesn't exist, or
-        // has a shape this cannot safely edit, is not a defect in an
-        // otherwise-complete install — plenty of valid apps have no tests
-        // directory yet, or a Pest-only setup with no TestCase class.
-        if (! $this->option('skip-test-seeding')) {
-            $seeding = $this->testCaseSeedingWiring->analyze();
-
-            if ($seeding->isModifiable()) {
-                $check('Test database seeding configured (tests/TestCase.php)', $seeding->alreadySeeds);
-            } else {
-                $this->line('  ! Test database seeding not configured ('
-                    .($seeding->unusualReason ?? 'unusual structure').')');
-                $this->line('    RefreshDatabase alone does not seed account_roles — see "Testing');
-                $this->line('    in your application" in the README.');
-            }
-        }
-
         if (! $this->shouldSkipUserModel()) {
             $file = $this->resolveUserModelFile();
             if ($file === null) {
@@ -1467,7 +1374,6 @@ final class AuthInstallCommand extends Command
         $this->line('  stays consistent across your environments.');
 
         $this->displayBoostReminder();
-        $this->displayTestingReminder();
     }
 
     /**
@@ -1482,25 +1388,5 @@ final class AuthInstallCommand extends Command
         $this->line("  package's AI skill, which teaches coding agents its auth conventions.");
         $this->line('  (First-time Boost setup uses `php artisan boost:install`.) If you');
         $this->line("  don't use Boost, no action is needed.");
-    }
-
-    /**
-     * Shown only when tests/TestCase.php still doesn't seed after this run —
-     * either wiring was skipped via flag, or the file could not be safely
-     * edited (see executeWireTestSeeding()). Re-checks current state rather
-     * than trusting the plan, so a successful wire earlier in this same run
-     * never prints a stale reminder for something already handled.
-     */
-    private function displayTestingReminder(): void
-    {
-        if ($this->testCaseSeedingWiring->analyze()->alreadySeeds) {
-            return;
-        }
-
-        $this->newLine();
-        $this->line('  Running tests? `RefreshDatabase` alone does not seed account_roles —');
-        $this->line('  see "Testing in your application" in the README (set $seed = true on');
-        $this->line('  your base TestCase, or call $this->seed(AccountRoleSeeder::class)');
-        $this->line('  explicitly).');
     }
 }

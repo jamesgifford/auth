@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use JamesGifford\Auth\Accounts\Services\AccountIntegrityService;
 use JamesGifford\Auth\Accounts\Services\AccountService;
+use JamesGifford\Auth\Accounts\Services\CurrentAccountService;
 use JamesGifford\Auth\Console\Commands\AuthApplyIdOffsetsCommand;
 use JamesGifford\Auth\Console\Commands\AuthInstallCommand;
 use JamesGifford\Auth\Console\Commands\AuthPublishModelsCommand;
@@ -104,6 +105,8 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(AccountService::class);
+
+        $this->app->singleton(CurrentAccountService::class);
 
         $this->app->singleton(AccountIntegrityService::class);
 

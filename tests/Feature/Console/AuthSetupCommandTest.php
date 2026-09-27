@@ -152,32 +152,34 @@ class AuthSetupCommandTest extends TestCase
         $this->assertStringContainsString('migrate:refresh --seed', $afterComplete);
         $this->assertStringContainsString('boost:update', $afterComplete);
         $this->assertStringContainsString('boost:install', $afterComplete);
-        $this->assertStringContainsString('RefreshDatabase', $afterComplete);
-        $this->assertStringContainsString('Testing in your application', $afterComplete);
+        // Roles come from the roles migration, so there is no test-seeding reminder.
+        $this->assertStringNotContainsString('Running tests?', $afterComplete);
     }
 
-    public function test_setup_wires_seed_true_into_test_case_and_omits_the_reminder(): void
+    public function test_setup_leaves_the_test_case_untouched(): void
     {
-        $this->stageTestCase($this->defaultTestCaseSource());
+        $original = $this->defaultTestCaseSource();
+        $this->stageTestCase($original);
 
         $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true]);
         $output = Artisan::output();
 
         $this->assertSame(0, $exit, $output);
-        $this->assertStringContainsString('protected $seed = true;', $this->readStagedTestCase());
-
-        $afterComplete = (string) strstr($output, 'Setup complete.');
-        $this->assertStringNotContainsString('Running tests?', $afterComplete);
+        $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertStringNotContainsString('$seed = true', $output);
     }
 
-    public function test_skip_test_seeding_is_forwarded_to_install(): void
+    public function test_skip_test_seeding_is_still_accepted_as_a_deprecated_no_op(): void
     {
         $original = $this->defaultTestCaseSource();
         $this->stageTestCase($original);
 
-        Artisan::call('jamesgifford:auth:setup', ['--force' => true, '--skip-test-seeding' => true]);
+        $exit = Artisan::call('jamesgifford:auth:setup', ['--force' => true, '--skip-test-seeding' => true]);
+        $output = Artisan::output();
 
+        $this->assertSame(0, $exit, $output);
         $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertSame(1, substr_count($output, '--skip-test-seeding is deprecated'), 'The notice should print once, not again from the nested install.');
     }
 
     public function test_setup_with_dev_data_wires_all_three_seeders(): void

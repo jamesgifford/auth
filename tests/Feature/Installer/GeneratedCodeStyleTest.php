@@ -9,10 +9,8 @@ use Illuminate\Support\Facades\Artisan;
 use JamesGifford\Auth\Installer\DatabaseSeederWiring;
 use JamesGifford\Auth\Installer\ModelPublisher;
 use JamesGifford\Auth\Installer\PackageMigrations;
-use JamesGifford\Auth\Installer\TestCaseSeedingWiring;
 use JamesGifford\Auth\Installer\UserModelModifier;
 use JamesGifford\Auth\Tests\Support\StagesDatabaseSeeder;
-use JamesGifford\Auth\Tests\Support\StagesTestCase;
 use JamesGifford\Auth\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Process\Process;
@@ -30,7 +28,6 @@ use Symfony\Component\Process\Process;
 class GeneratedCodeStyleTest extends TestCase
 {
     use StagesDatabaseSeeder;
-    use StagesTestCase;
 
     /** Laravel 13's app/Models/User.php. */
     private const SKELETON_USER = <<<'PHP'
@@ -171,57 +168,6 @@ class GeneratedCodeStyleTest extends TestCase
 
     PHP;
 
-    /** Laravel 11+'s tests/TestCase.php. */
-    private const SKELETON_TEST_CASE = <<<'PHP'
-    <?php
-
-    namespace Tests;
-
-    use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-
-    abstract class TestCase extends BaseTestCase
-    {
-        //
-    }
-
-    PHP;
-
-    /** The starter kits' tests/TestCase.php: a method, no trait. */
-    private const STARTER_KIT_TEST_CASE = <<<'PHP'
-    <?php
-
-    namespace Tests;
-
-    use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-    use Laravel\Fortify\Features;
-
-    abstract class TestCase extends BaseTestCase
-    {
-        protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void
-        {
-            if (! Features::enabled($feature)) {
-                $this->markTestSkipped($message ?? "Fortify feature [{$feature}] is not enabled.");
-            }
-        }
-    }
-
-    PHP;
-
-    /** Laravel 10's tests/TestCase.php: a trait use, nothing else. */
-    private const LEGACY_TEST_CASE = <<<'PHP'
-    <?php
-
-    namespace Tests;
-
-    use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-
-    abstract class TestCase extends BaseTestCase
-    {
-        use CreatesApplication;
-    }
-
-    PHP;
-
     private string $tmpDir;
 
     protected function setUp(): void
@@ -236,7 +182,6 @@ class GeneratedCodeStyleTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeDatabaseSeeder();
-        $this->removeStagedTestCase();
 
         $this->app->make(PackageMigrations::class)->deletePublishedFiles(static function (): void {});
 
@@ -322,33 +267,6 @@ class GeneratedCodeStyleTest extends TestCase
 
         $this->assertPassesPint([
             'database/seeders/DatabaseSeeder.php' => $wiring->stub(DatabaseSeederWiring::CANONICAL_ORDER),
-        ]);
-    }
-
-    /**
-     * @return array<string, array{string}>
-     */
-    public static function stockTestCases(): array
-    {
-        return [
-            'laravel skeleton' => [self::SKELETON_TEST_CASE],
-            'starter kit' => [self::STARTER_KIT_TEST_CASE],
-            'laravel 10' => [self::LEGACY_TEST_CASE],
-        ];
-    }
-
-    #[DataProvider('stockTestCases')]
-    public function test_test_case_seeding_wiring_passes_pint(string $stock): void
-    {
-        $this->stageTestCase($stock);
-        $wiring = $this->app->make(TestCaseSeedingWiring::class);
-
-        $change = $wiring->wire($wiring->analyze());
-
-        $this->assertTrue($change->changed);
-        $this->assertPassesPint([
-            'tests/TestCase.php (stock)' => $stock,
-            'tests/TestCase.php (wired)' => $change->modifiedCode,
         ]);
     }
 

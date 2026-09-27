@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Tests\Feature\Http;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use JamesGifford\Auth\Accounts\Services\AccountService;
 use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Models\Account;
@@ -28,6 +29,10 @@ abstract class HttpTestCase extends TestCase
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('jamesgifford.auth.models.user', User::class);
+
+        // The account routes run in the web group, whose cookie encryption
+        // needs an application key — every real app has one; Testbench doesn't.
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
 
         $connection = $app['config']->get('database.default');
         $app['config']->set("database.connections.{$connection}.foreign_key_constraints", true);
@@ -58,5 +63,22 @@ abstract class HttpTestCase extends TestCase
     protected function makeAccountFor(User $user): Account
     {
         return app(AccountService::class)->create($user);
+    }
+
+    /**
+     * Laravel's CSRF middleware waves every request through while unit tests
+     * run (runningUnitTests()), which would let a CSRF assertion pass whether
+     * or not the route is protected. Swap in a subclass that never takes that
+     * shortcut, so the token check genuinely runs for the rest of the test.
+     */
+    protected function enforceCsrfProtection(): void
+    {
+        $this->app->bind(PreventRequestForgery::class, fn ($app) => new class($app, $app['encrypter']) extends PreventRequestForgery
+        {
+            protected function runningUnitTests(): bool
+            {
+                return false;
+            }
+        });
     }
 }

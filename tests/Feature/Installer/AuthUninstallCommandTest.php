@@ -211,7 +211,7 @@ class AuthUninstallCommandTest extends TestCase
         $this->assertStringContainsString('3 memberships', $output);
         $this->assertStringContainsString('1 custom role (auditor)', $output);
         $this->assertStringContainsString('public_id and current_account_id columns from 2 users', $output);
-        $this->assertStringContainsString('5 published migration files', $output);
+        $this->assertStringContainsString('6 published migration files', $output);
     }
 
     public function test_data_loss_summary_handles_partial_install_gracefully(): void
@@ -332,7 +332,7 @@ class AuthUninstallCommandTest extends TestCase
         Schema::dropIfExists('account_roles');
 
         $this->assertTrue(Schema::hasColumn('users', 'public_id'), 'precondition: public_id present');
-        $this->assertSame(5, $this->packageMigrationRecordCount(), 'precondition: all package migrations recorded');
+        $this->assertSame(6, $this->packageMigrationRecordCount(), 'precondition: all package migrations recorded');
 
         $exitCode = Artisan::call('jamesgifford:auth:uninstall', ['--force' => true]);
         $output = Artisan::output();

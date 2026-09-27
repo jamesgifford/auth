@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JamesGifford\Auth\Roles;
 
 use InvalidArgumentException;
+use JamesGifford\Auth\Database\Seeders\AccountRoleSeeder;
 use JamesGifford\Auth\Exceptions\InvalidRolesConfigException;
 use JamesGifford\Auth\SystemRole;
 
@@ -89,6 +90,29 @@ final class RolesConfig
     }
 
     /**
+     * The roles as currently configured — the single source of role
+     * definitions for the roles migration, {@see AccountRoleSeeder}, and
+     * install's seeding step.
+     *
+     * Reads config('jamesgifford.auth.roles'). When that is empty — the app's
+     * config was cached before the package was installed, so mergeConfigFrom
+     * never ran — it falls back to the published config file, then the
+     * package default, rather than seeing no roles at all.
+     *
+     * @throws InvalidRolesConfigException on any validation failure
+     */
+    public static function current(): self
+    {
+        $roles = config('jamesgifford.auth.roles');
+
+        if (! is_array($roles) || $roles === []) {
+            $roles = self::rolesFromConfigFiles();
+        }
+
+        return new self($roles);
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public function roles(): array
@@ -127,5 +151,35 @@ final class RolesConfig
     public function customRoles(): array
     {
         return array_filter($this->roles, fn (array $role): bool => ($role['system'] ?? false) !== true);
+    }
+
+    /**
+     * The `roles` array from the published config file, else the package
+     * default; empty when neither provides one.
+     *
+     * @return array<mixed, mixed>
+     */
+    private static function rolesFromConfigFiles(): array
+    {
+        $paths = [
+            config_path('jamesgifford'.DIRECTORY_SEPARATOR.'auth.php'),
+            dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'auth.php',
+        ];
+
+        foreach ($paths as $path) {
+            if (! is_file($path)) {
+                continue;
+            }
+
+            // require (not require_once) re-evaluates and returns the config
+            // array each call, so this is immune to the boot-time include cache.
+            $config = require $path;
+
+            if (is_array($config) && isset($config['roles']) && is_array($config['roles']) && $config['roles'] !== []) {
+                return $config['roles'];
+            }
+        }
+
+        return [];
     }
 }

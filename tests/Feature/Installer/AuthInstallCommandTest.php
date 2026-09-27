@@ -406,6 +406,7 @@ class AuthInstallCommandTest extends TestCase
             '2026_05_06_100002_create_accounts_table',
             '2026_05_06_100003_add_current_account_id_to_users_table',
             '2026_05_06_100004_create_account_user_table',
+            '2026_05_06_100005_insert_jamesgifford_auth_account_roles',
         ] as $migration) {
             DB::table('migrations')->insert(['migration' => $migration, 'batch' => 1]);
         }
@@ -460,6 +461,36 @@ class AuthInstallCommandTest extends TestCase
         $this->assertNotNull($auditor, 'The custom role from the published config should be seeded.');
         $this->assertFalse((bool) $auditor->system);
         $this->assertNotNull(AccountRole::findByKey(SystemRole::OWNER));
+    }
+
+    public function test_install_publishes_and_runs_the_roles_migration_for_an_app_installed_before_it_existed(): void
+    {
+        // An app installed before the roles migration shipped: the original
+        // package migrations are published and run, its roles came from the
+        // seeder, and it has since renamed one of them.
+        $this->writeLockFile();
+        $this->loadLaravelMigrations();
+        $this->copyPackageMigrationsToTestbenchPath();
+        foreach ((array) glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_insert_jamesgifford_auth_account_roles.php') as $file) {
+            @unlink((string) $file);
+        }
+        $this->artisan('migrate', ['--force' => true])->run();
+        $this->app->make(AccountRoleSeeder::class)->run();
+        DB::table('account_roles')->where('key', SystemRole::OWNER)->update(['name' => 'Chief']);
+
+        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $published = glob($this->migrationsDir.DIRECTORY_SEPARATOR.'*_insert_jamesgifford_auth_account_roles.php') ?: [];
+        $this->assertCount(1, $published, 'install should publish the migration the app is missing.');
+        $this->assertTrue(
+            DB::table('migrations')->where('migration', basename($published[0], '.php'))->exists(),
+            'install should run the newly published migration.',
+        );
+        // The app's existing roles are left alone.
+        $this->assertSame(4, DB::table('account_roles')->count());
+        $this->assertSame('Chief', AccountRole::findByKey(SystemRole::OWNER)?->name);
     }
 
     public function test_running_install_twice_does_not_duplicate_roles(): void
@@ -599,16 +630,18 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString("don't use Boost, no action is needed", $output);
     }
 
-    public function test_completion_prints_testing_reminder(): void
+    public function test_completion_prints_no_testing_reminder_even_without_a_test_case(): void
     {
+        // Roles come from the roles migration, so a test suite needs nothing
+        // from the app — with or without a tests/TestCase.php.
         $this->loadLaravelMigrations();
+        $this->removeStagedTestCase();
 
         Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
         $output = Artisan::output();
 
-        $this->assertStringContainsString('RefreshDatabase', $output);
-        $this->assertStringContainsString('account_roles', $output);
-        $this->assertStringContainsString('Testing in your application', $output);
+        $this->assertStringNotContainsString('Running tests?', $output);
+        $this->assertStringNotContainsString('RefreshDatabase', $output);
     }
 
     public function test_install_never_invokes_a_boost_command(): void
@@ -918,79 +951,41 @@ class AuthInstallCommandTest extends TestCase
         $this->assertStringContainsString('AccountRoleSeeder', $output);
     }
 
-    public function test_install_wires_seed_true_into_test_case(): void
+    // ---- tests/TestCase.php ----
+    //
+    // Roles come from the package's roles migration, so install no longer adds
+    // `protected $seed = true;` to tests/TestCase.php, checks for it, or
+    // reminds about it. A property already there is the app's to keep.
+
+    public function test_install_leaves_the_test_case_untouched(): void
     {
         $this->loadLaravelMigrations();
-        $this->stageTestCase($this->defaultTestCaseSource());
+        $original = $this->defaultTestCaseSource();
+        $this->stageTestCase($original);
 
         $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
         $output = Artisan::output();
 
-        $this->assertSame(0, $exit);
-        $this->assertStringContainsString('protected $seed = true;', $this->readStagedTestCase());
-        $this->assertStringContainsString('added `protected $seed = true;`', $output);
-        // Already handled this run, so the completion reminder should not repeat it.
+        $this->assertSame(0, $exit, $output);
+        $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertStringNotContainsString('tests/TestCase.php', $output);
+        $this->assertStringNotContainsString('$seed = true', $output);
         $this->assertStringNotContainsString('Running tests?', $output);
     }
 
-    public function test_install_leaves_an_already_seeding_test_case_untouched(): void
+    public function test_install_keeps_an_existing_seed_property(): void
     {
         $this->loadLaravelMigrations();
         $original = $this->seedingTestCaseSource();
         $this->stageTestCase($original);
 
         $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
-        $output = Artisan::output();
 
         $this->assertSame(0, $exit);
         $this->assertSame($original, $this->readStagedTestCase());
-        $this->assertStringContainsString('already configured', $output);
     }
 
-    public function test_skip_test_seeding_leaves_the_test_case_untouched(): void
-    {
-        $this->loadLaravelMigrations();
-        $original = $this->defaultTestCaseSource();
-        $this->stageTestCase($original);
-
-        Artisan::call('jamesgifford:auth:install', [
-            '--force' => true,
-            '--skip-user-model' => true,
-            '--skip-test-seeding' => true,
-        ]);
-
-        $this->assertSame($original, $this->readStagedTestCase());
-    }
-
-    public function test_an_unparseable_test_case_prints_instructions_without_failing(): void
-    {
-        $this->loadLaravelMigrations();
-        $original = '<?php this will not parse {{{';
-        $this->stageTestCase($original);
-
-        $exit = Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
-        $output = Artisan::output();
-
-        $this->assertSame(0, $exit, 'Wiring problems are advisory, never fatal to install.');
-        $this->assertSame($original, $this->readStagedTestCase());
-        $this->assertStringContainsString('protected $seed = true;', $output);
-    }
-
-    public function test_verify_reports_test_seeding_advisory_when_no_test_case_exists(): void
-    {
-        $this->loadLaravelMigrations();
-        $this->removeStagedTestCase();
-
-        Artisan::call('jamesgifford:auth:install', ['--force' => true, '--skip-user-model' => true]);
-        $exit = Artisan::call('jamesgifford:auth:install', ['--verify' => true]);
-        $output = Artisan::output();
-
-        $this->assertSame(0, $exit, $output);
-        $this->assertStringContainsString('! Test database seeding not configured', $output);
-        $this->assertStringContainsString('All checks passed.', $output);
-    }
-
-    public function test_verify_confirms_test_seeding_when_wired(): void
+    public function test_verify_does_not_check_test_seeding(): void
     {
         $this->loadLaravelMigrations();
         $this->stageTestCase($this->defaultTestCaseSource());
@@ -1000,7 +995,26 @@ class AuthInstallCommandTest extends TestCase
         $output = Artisan::output();
 
         $this->assertSame(0, $exit, $output);
-        $this->assertStringContainsString('✓ Test database seeding configured', $output);
+        $this->assertStringContainsString('All checks passed.', $output);
+        $this->assertStringNotContainsString('Test database seeding', $output);
+    }
+
+    public function test_skip_test_seeding_is_still_accepted_as_a_deprecated_no_op(): void
+    {
+        $this->loadLaravelMigrations();
+        $original = $this->defaultTestCaseSource();
+        $this->stageTestCase($original);
+
+        $exit = Artisan::call('jamesgifford:auth:install', [
+            '--force' => true,
+            '--skip-user-model' => true,
+            '--skip-test-seeding' => true,
+        ]);
+        $output = Artisan::output();
+
+        $this->assertSame(0, $exit, $output);
+        $this->assertSame($original, $this->readStagedTestCase());
+        $this->assertStringContainsString('--skip-test-seeding is deprecated', $output);
     }
 
     protected function defineEnvironment($app): void

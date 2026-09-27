@@ -229,6 +229,16 @@ return [
         // no routes and no middleware alias — useful if you wire your own.
         'enabled' => true,
 
+        'routes' => [
+            // Middleware for the account switch/list routes. The default runs
+            // them in the `web` group (session, cookies, CSRF) behind `auth`, so
+            // a session-authenticated user is recognised and the switch POST is
+            // CSRF-protected. Replace it to serve the routes some other way,
+            // e.g. ['api', 'auth:sanctum']. Route-model binding for {account}
+            // is always applied, whatever you list here.
+            'middleware' => ['web', 'auth'],
+        ],
+
         'middleware' => [
             // EnsureCurrentAccount: route name to send a "floating" user
             // (authenticated, but with no current account) to. null means

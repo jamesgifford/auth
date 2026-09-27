@@ -8,6 +8,10 @@ namespace JamesGifford\Auth\Tests\Support;
  * Stages a temporary tests/TestCase.php in the testbench skeleton's base
  * path — the path base_path() resolves to — and guarantees removal.
  *
+ * Used to prove install and setup leave the file alone: they stopped editing
+ * it (the old `protected $seed = true;` wiring) once account roles moved into
+ * a migration.
+ *
  * The skeleton directory is shared across the suite, so a test that leaves a
  * file behind poisons every later one. Always call removeStagedTestCase() from
  * tearDown, unconditionally.
@@ -66,8 +70,8 @@ trait StagesTestCase
     }
 
     /**
-     * A TestCase already seeding, for tests that stage an already-wired state
-     * by hand rather than running install.
+     * A TestCase that already seeds — e.g. one an earlier install wired — so
+     * tests can check an existing `$seed` property is left in place.
      */
     protected function seedingTestCaseSource(): string
     {

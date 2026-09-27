@@ -59,6 +59,8 @@ class SkillFileTest extends TestCase
             'transferOwnership',
             'isAdminOf',
             'auth.current-account',
+            'JamesGifford\\Auth\\Events\\CurrentAccountChanged',
+            'http.routes.middleware',
             'JamesGifford\\Auth\\PublicId\\Concerns\\HasPublicId',
         ] as $needle) {
             $this->assertStringContainsString($needle, $contents, "Skill should reference {$needle}");

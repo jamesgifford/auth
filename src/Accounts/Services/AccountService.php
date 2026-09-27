@@ -12,6 +12,7 @@ use JamesGifford\Auth\Events\AccountForceDeleted;
 use JamesGifford\Auth\Events\AccountOwnershipTransferred;
 use JamesGifford\Auth\Events\AccountRestored;
 use JamesGifford\Auth\Events\AccountRoleChanged;
+use JamesGifford\Auth\Events\CurrentAccountChanged;
 use JamesGifford\Auth\Events\UserAttachedToAccount;
 use JamesGifford\Auth\Events\UserDetachedFromAccount;
 use JamesGifford\Auth\Exceptions\AlreadyAMemberException;
@@ -50,6 +51,7 @@ final class AccountService
 {
     public function __construct(
         private readonly RolesConfig $rolesConfig,
+        private readonly CurrentAccountService $currentAccounts = new CurrentAccountService,
     ) {}
 
     /**
@@ -160,10 +162,12 @@ final class AccountService
      *
      * Side effects:
      *  - Deletes the `account_user` row.
-     *  - Nulls the user's `current_account_id` when it points at the
-     *    account they're being detached from (so the user doesn't end up
-     *    pointing at an inaccessible account).
-     *  - Dispatches {@see UserDetachedFromAccount} after commit.
+     *  - Nulls the user's `current_account_id` (and the cached currentAccount
+     *    relation on $user) when it points at the account they're being
+     *    detached from, so the user doesn't end up pointing at an
+     *    inaccessible account.
+     *  - Dispatches {@see UserDetachedFromAccount} after commit, followed by
+     *    {@see CurrentAccountChanged} when the current account was cleared.
      *
      * @throws NotAMemberException When the user has no membership in the account.
      * @throws CannotDetachOwnerException When the user is the account's Owner.
@@ -196,11 +200,6 @@ final class AccountService
         DB::transaction(function () use ($account, $user, $membership, $previousRole): void {
             $membership->delete();
 
-            if ($user->getAttribute('current_account_id') === $account->id) {
-                $user->setAttribute('current_account_id', null);
-                $user->save();
-            }
-
             DB::afterCommit(function () use ($account, $user, $previousRole): void {
                 UserDetachedFromAccount::dispatch(
                     AccountTransfer::fromModel($account),
@@ -208,6 +207,10 @@ final class AccountService
                     AccountRoleTransfer::fromModel($previousRole),
                 );
             });
+
+            if ((int) $user->getAttribute('current_account_id') === $account->id) {
+                $this->currentAccounts->set($user, null);
+            }
         });
     }
 
@@ -376,7 +379,8 @@ final class AccountService
      *  - Sets accounts.deleted_at.
      *  - Nulls current_account_id on every user pointing at this account
      *    (bulk update, no per-user model events).
-     *  - Dispatches {@see AccountDeleted} after commit.
+     *  - Dispatches {@see AccountDeleted} after commit, followed by one
+     *    {@see CurrentAccountChanged} per user whose current account it was.
      */
     public function delete(Account $account): void
     {
@@ -385,13 +389,11 @@ final class AccountService
         DB::transaction(function () use ($account, $transfer): void {
             $account->delete();
 
-            PackageModels::user()::query()
-                ->where('current_account_id', $account->id)
-                ->update(['current_account_id' => null]);
-
             DB::afterCommit(function () use ($transfer): void {
                 AccountDeleted::dispatch($transfer);
             });
+
+            $this->currentAccounts->clearForAccount($account);
         });
     }
 
@@ -430,9 +432,12 @@ final class AccountService
      * Side effects:
      *  - Removes the accounts row.
      *  - FK cascadeOnDelete removes all account_user rows for this account.
-     *  - FK nullOnDelete clears current_account_id on users that pointed here.
+     *  - Nulls current_account_id on users that pointed here (bulk update,
+     *    before the delete; the FK's nullOnDelete would do the same, but
+     *    clearing first is what lets each affected user be reported).
      *  - Dispatches {@see AccountForceDeleted} (with a pre-delete snapshot)
-     *    after commit.
+     *    after commit, followed by one {@see CurrentAccountChanged} per user
+     *    whose current account it was.
      *
      * AccountUser model events do NOT fire because the cleanup runs at the
      * FK layer, not through Eloquent.
@@ -444,11 +449,13 @@ final class AccountService
         $transfer = AccountTransfer::fromModel($account);
 
         DB::transaction(function () use ($account, $transfer): void {
-            $account->forceDelete();
-
             DB::afterCommit(function () use ($transfer): void {
                 AccountForceDeleted::dispatch($transfer);
             });
+
+            $this->currentAccounts->clearForAccount($account);
+
+            $account->forceDelete();
         });
     }
 

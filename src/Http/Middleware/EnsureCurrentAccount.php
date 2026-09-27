@@ -7,6 +7,8 @@ namespace JamesGifford\Auth\Http\Middleware;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use JamesGifford\Auth\Accounts\Services\CurrentAccountService;
+use JamesGifford\Auth\Events\CurrentAccountChanged;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -21,12 +23,23 @@ use Symfony\Component\HttpFoundation\Response;
  *  - Valid current account (set, still exists, still a member): continue.
  *  - Floating (no current account): auto-assign the first account, or redirect
  *    to `http.middleware.redirect_floating_to` when configured.
- *  - Current account gone (deleted or membership lost): clear it, then redirect
- *    to `http.middleware.redirect_missing_to` when configured, else fall back
- *    to the floating behavior.
+ *  - Current account gone (deleted or membership lost): redirect to
+ *    `http.middleware.redirect_missing_to` (after clearing it) when
+ *    configured, else fall back to the floating behavior — which moves the
+ *    user straight to their first remaining account, or clears it when they
+ *    have none.
+ *
+ * Every change goes through {@see CurrentAccountService}, so the request's
+ * user instance sees the new currentAccount immediately and
+ * {@see CurrentAccountChanged} fires once per real change — a replacement is
+ * reported as one change from the stale account to the new one.
  */
 final class EnsureCurrentAccount
 {
+    public function __construct(
+        private readonly CurrentAccountService $currentAccounts = new CurrentAccountService,
+    ) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -44,9 +57,6 @@ final class EnsureCurrentAccount
             }
 
             // The current account was deleted, or the user lost membership.
-            $user->setAttribute('current_account_id', null);
-            $user->save();
-
             return $this->resolveMissing($user) ?? $next($request);
         }
 
@@ -54,13 +64,16 @@ final class EnsureCurrentAccount
     }
 
     /**
-     * A floating user (no current account). Redirect when configured, else
-     * auto-assign their first account and continue. Returns null to continue.
+     * No usable current account. Redirect when configured (clearing a stale
+     * pointer first), else move the user to their first account — or clear
+     * the pointer when they have none — and continue. Returns null to continue.
      */
     private function resolveFloating(Model $user): ?Response
     {
         $route = config('jamesgifford.auth.http.middleware.redirect_floating_to');
         if (is_string($route) && $route !== '') {
+            $this->currentAccounts->set($user, null);
+
             return redirect()->route($route);
         }
 
@@ -69,19 +82,24 @@ final class EnsureCurrentAccount
         $first = $user->accounts()->first(); // @phpstan-ignore method.notFound
         if ($first !== null) {
             $user->switchToAccount($first); // @phpstan-ignore method.notFound
+        } else {
+            $this->currentAccounts->set($user, null);
         }
 
         return null;
     }
 
     /**
-     * The user's current account is gone. Redirect when configured, else fall
-     * back to the floating behavior. Returns null to continue.
+     * The user's current account is gone. Redirect when configured (after
+     * clearing it), else fall back to the floating behavior. Returns null to
+     * continue.
      */
     private function resolveMissing(Model $user): ?Response
     {
         $route = config('jamesgifford.auth.http.middleware.redirect_missing_to');
         if (is_string($route) && $route !== '') {
+            $this->currentAccounts->set($user, null);
+
             return redirect()->route($route);
         }
 

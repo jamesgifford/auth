@@ -16,12 +16,11 @@ use JamesGifford\Auth\Models\AccountRole;
  *  - The key isn't declared in config('jamesgifford.auth.roles') at all —
  *    use {@see forKey()}.
  *  - The key IS declared in config, but the `account_roles` table has no
- *    matching row — use {@see notSeeded()}. This happens when
- *    {@see AccountRoleSeeder} hasn't
- *    run yet, most commonly in a consumer's test suite: Laravel's
- *    RefreshDatabase trait migrates the schema fresh but does not run
- *    seeders unless the test opts in (`$seed = true` or an explicit
- *    `$this->seed(...)` call).
+ *    matching row — use {@see notSeeded()}. The package's roles migration
+ *    inserts every configured role on migrate, so this now mostly means an
+ *    app installed before that migration shipped hasn't published it yet
+ *    (re-running `jamesgifford:auth:install` does), or the row was deleted.
+ *    {@see AccountRoleSeeder} restores it too.
  */
 class InvalidRoleException extends InvalidArgumentException
 {
@@ -37,11 +36,12 @@ class InvalidRoleException extends InvalidArgumentException
     {
         return new self(
             "Role '{$roleKey}' is configured in config('jamesgifford.auth.roles') ".
-            'but has no matching row in the account_roles table. Run '.
-            'JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder '.
-            '(e.g. php artisan db:seed --class="JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder"). '.
-            'If this is a test, RefreshDatabase alone does not run seeders — '.
-            'seed explicitly or set $seed = true on your base TestCase.'
+            'but has no matching row in the account_roles table. The package\'s roles '.
+            'migration inserts it on migrate: if database/migrations has no '.
+            '*_insert_jamesgifford_auth_account_roles migration (apps installed before it '.
+            'shipped), run php artisan jamesgifford:auth:install to publish it, then migrate. '.
+            'Running JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder also restores it '.
+            '(php artisan db:seed --class="JamesGifford\\Auth\\Database\\Seeders\\AccountRoleSeeder").'
         );
     }
 }

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use JamesGifford\Auth\Accounts\Services\CurrentAccountService;
+use JamesGifford\Auth\Events\CurrentAccountChanged;
 use JamesGifford\Auth\Exceptions\NotAMemberException;
 use JamesGifford\Auth\Models\Account;
 use JamesGifford\Auth\Models\AccountRole;
@@ -24,7 +26,8 @@ use JamesGifford\Auth\SystemRole;
  * as "every user must belong to an account." That is the application's
  * concern (registration flow, middleware). The single mutating method here
  * is {@see switchToAccount()}, which updates the user's current_account_id
- * after verifying membership.
+ * after verifying membership (through {@see CurrentAccountService}, the one
+ * place the package writes it).
  *
  * Composes independently with {@see HasPublicId}:
  *
@@ -127,6 +130,11 @@ trait HasAccounts
      * Set the user's current account and persist. Throws if the user is not
      * a member of the target account; without that guard, callers could leave
      * the user pointing at an inaccessible account.
+     *
+     * The cached currentAccount relation is updated in place, so
+     * `$user->currentAccount` returns the new account straight away, and
+     * {@see CurrentAccountChanged} is dispatched when the account actually
+     * changes (not when switching to the account that is already current).
      */
     public function switchToAccount(Account $account): void
     {
@@ -137,8 +145,7 @@ trait HasAccounts
             );
         }
 
-        $this->current_account_id = $account->id;
-        $this->save();
+        app(CurrentAccountService::class)->set($this, $account);
     }
 
     public function scopeFloating(Builder $query): Builder
